@@ -16,7 +16,7 @@ import type {
   ManagerTask,
   ManagerTaskStatus,
   ManagerWorkspaceCard,
-} from "../../../src/studio/manager-types";
+} from "./runtime/index.js";
 import { WorkbenchPanel } from "./studio-primitives";
 
 export interface ManagerViewProps {

@@ -55,7 +55,7 @@ import {
   type StudioWorkArtifact,
   type StudioWorkArtifactKind,
 } from "./studio-api";
-import { type StudioTraceModel, type StudioTraceTask } from "../../../src/studio/view-model";
+import { type StudioTraceModel, type StudioTraceTask } from "./runtime/index.js";
 import { WorkbenchPanel } from "./studio-primitives";
 import {
   WORKBENCH_ACTIONS,

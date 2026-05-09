@@ -141,7 +141,7 @@ import {
   type StudioDownloadJob,
   type StudioWorkArtifact,
 } from "./studio-api";
-import { deriveStudioTrace, type StudioTraceModel } from "../../../src/studio/view-model";
+import { deriveStudioTrace, type StudioTraceModel } from "./runtime/index.js";
 import {
   CommandBar,
   TerminalBlock as TerminalBlockSurface,
