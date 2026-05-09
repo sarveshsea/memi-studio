@@ -1,16 +1,32 @@
 {
-  "name": "@sarveshsea/memoire-studio",
+  "name": "memi-studio",
   "version": "0.18.0",
   "private": true,
   "type": "module",
+  "license": "FSL-1.1-ALv2",
+  "author": "Humyn LLC",
+  "homepage": "https://github.com/sarveshsea/memi-studio",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sarveshsea/memi-studio.git"
+  },
+  "memoireRuntime": {
+    "version": "0.18.1",
+    "engineRepo": "sarveshsea/m-moire",
+    "releaseTag": "runtime-v0.18.1",
+    "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
+    "resourcesAsset": "memoire-runtime-resources-0.18.1.tar.gz"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 1421",
-    "tauri:build-runtime": "node ../../scripts/build-studio-runtime.mjs",
+    "fetch:runtime": "node scripts/fetch-runtime.mjs",
+    "license:check": "node scripts/apply-license-headers.mjs --check",
+    "license:apply": "node scripts/apply-license-headers.mjs",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "PATH=/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build"
+    "tauri:dev": "npm run fetch:runtime && tauri dev",
+    "tauri:build": "npm run fetch:runtime && PATH=/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build"
   },
   "dependencies": {
     "@fontsource/geist-sans": "5.2.5",
