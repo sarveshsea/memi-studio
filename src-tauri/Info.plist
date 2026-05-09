@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Memoire Studio uses Apple Events only when you ask agents to operate approved apps such as Figma, browsers, editors, and Terminal.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Memoire Studio needs access to selected Desktop workspaces so agents can read, edit, build, and verify local codebases.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Memoire Studio needs access to selected Documents workspaces so agents can read, edit, build, and verify local codebases.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Memoire Studio needs access to selected Downloads workspaces so agents can import artifacts and write generated project outputs.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Memoire Studio needs access to selected network workspaces when you choose to run agents against projects stored on shared volumes.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Memoire Studio needs access to selected removable workspaces when you choose to run agents against projects stored on external drives.</string>
+</dict>
+</plist>
