@@ -1,0 +1,69 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.yarn/
+.npm/
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Tauri / Rust
+target/
+**/target/
+*.rs.bk
+Cargo.lock.bak
+
+# macOS bundles
+*.app
+*.dmg
+*.pkg
+*.zip
+
+# Tauri sidecar binaries (fetched at build time, not committed)
+src-tauri/binaries/
+src-tauri/resources/memoire-runtime/
+
+# Vite
+.vite/
+dist-ssr/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.cer
+*.mobileprovision
+
+# Local Mémoire state
+.memoire/
+.memoire-cache/
+
+# Logs
+logs/
+*.log
+
+# Coverage / tests
+coverage/
+.nyc_output/
+
+# Tauri build artifacts staging
+src-tauri/.tauri/

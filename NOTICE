@@ -1,0 +1,63 @@
+Mémoire Studio
+==============
+
+Copyright 2026 Humyn LLC. All rights reserved.
+
+Mémoire Studio is licensed under the Functional Source License, Version 1.1,
+with an Apache License 2.0 future license (FSL-1.1-ALv2). The full license text
+is available in the LICENSE file at the root of this repository.
+
+The source is available today for internal use, non-commercial education,
+non-commercial research, and professional services as defined by the Permitted
+Purpose section of the FSL. On 2028-05-09 — the second anniversary of the date
+of first publication — this Software automatically becomes available under the
+Apache License, Version 2.0.
+
+This product is distinct from the Mémoire engine (https://github.com/sarveshsea/m-moire),
+which remains available under the MIT License. Mémoire Studio bundles a
+pre-built sidecar binary built from the Mémoire engine repository at release
+tag time; that binary is governed by the engine repository's MIT License.
+
+Adapted components and product references
+-----------------------------------------
+
+The following projects have informed Mémoire Studio's interaction patterns and
+runtime ideas. Where code or assets were directly adapted, the original
+license terms continue to apply to the adapted portions.
+
+- Hermes WebUI (MIT): https://github.com/nesquena/hermes-webui
+  Mémoire Studio adapts the transcript-first, calm-console interaction pattern
+  and the three-pane workbench organization from the public Hermes WebUI
+  project.
+
+- Hermes Agent (MIT): https://github.com/NousResearch/hermes-agent
+  Mémoire Studio adapts runtime ideas around agent sessions, normalized
+  events, approval-oriented supervision, and local execution boundaries from
+  the public Hermes Agent project.
+
+- Warp UI framework (MIT pieces only): https://github.com/warpdotdev/Warp
+  Mémoire Studio may reference or adapt MIT-licensed Warp UI framework ideas
+  from warpui_core and warpui. Warp's AGPL-licensed application/client code is
+  not copied.
+
+- t3code (MIT): https://github.com/pingdotgg/t3code
+  Mémoire Studio's harness contracts and event-sourcing patterns are inspired
+  by t3code's ProviderRuntime architecture. Pattern-level inspiration only —
+  no source is directly copied. The engine implementation lives in the
+  Mémoire engine repository.
+
+Product references (no source adapted)
+--------------------------------------
+
+- Warp terminal block behavior is used as a product reference for command
+  blocks.
+- Antigravity Manager view is referenced for the multi-workspace orchestration
+  pattern.
+- Claude Code, Codex, and OpenCode are referenced as harness targets and for
+  comparable feature surfaces (checkpoint/rewind, hooks, walkthrough, etc.).
+
+Trademarks
+----------
+
+Mémoire and Mémoire Studio are unregistered trademarks of Humyn LLC. All
+other marks belong to their respective owners.
