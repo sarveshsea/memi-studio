@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: FSL-1.1-ALv2
+// Copyright 2026 Humyn LLC
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{

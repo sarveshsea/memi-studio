@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: FSL-1.1-ALv2
+// Copyright 2026 Humyn LLC
+
 use std::{fs, path::PathBuf};
 
 use memoire_studio_lib::markdown_corpus::{

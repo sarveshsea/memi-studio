@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: FSL-1.1-ALv2
+// Copyright 2026 Humyn LLC
+
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "./fonts.css";

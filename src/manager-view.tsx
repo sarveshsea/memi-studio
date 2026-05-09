@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: FSL-1.1-ALv2
+// Copyright 2026 Humyn LLC
+
 /**
  * Manager view — three-column React surface for the Studio multi-workspace
  * operator pane. Workspaces (left) -> Tasks (middle) -> Detail (right).

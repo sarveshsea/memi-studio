@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: FSL-1.1-ALv2
+// Copyright 2026 Humyn LLC
+
 import { useEffect, useMemo, useState } from "react";
 import type { MermaidBoard, MermaidBoardExport, MermaidBoardNode, StudioEvent } from "./studio-api";
 import { IconButton, StudioControlIcon, trimText } from "./workbench-components";
