@@ -3,7 +3,7 @@
 
 [package]
 name = "memoire-studio"
-version = "0.18.0"
+version = "1.0.0"
 description = "Mémoire Studio desktop agent design shell"
 authors = ["Sarvesh Chidambaram"]
 edition = "2021"
