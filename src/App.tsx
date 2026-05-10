@@ -183,6 +183,7 @@ import type { IASurfaceProps } from "./ia-surface";
 import type { MermaidBoardSurfaceProps } from "./mermaid-board-surface";
 import { SLASH_COMMANDS, applySlashCommand, filterSlashCommands, slashCommandPreview, type SlashCommand } from "./slash-commands";
 import { WORKBENCH_COPY, workbenchAction, type WorkbenchIconName } from "./workbench-copy";
+import { CostHud } from "./cost-hud";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -3543,6 +3544,7 @@ export function App() {
             <span>Run {compactSessionStatusLabel(visibleSessionStatus)}</span>
             <span title={lastFailure?.message ?? "Clean"}>{lastFailure ? "Failure" : "Clean"}</span>
           </div>
+          <CostHud />
           <div className="topbar-actions" data-topbar-actions="right-aligned">
             <button className="topbar-icon-button" aria-label="Command" title="Command" data-action-id="command-palette.open" type="button" onClick={() => openCommandPalette()}>
               <StudioControlIcon name="command" />
