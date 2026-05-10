@@ -847,6 +847,7 @@ fn analyze_markdown_for_fig_jam(path: String) -> Result<markdown_corpus::Markdow
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .setup(|app| {
             match load_or_create_desktop_app_config(app.handle()) {

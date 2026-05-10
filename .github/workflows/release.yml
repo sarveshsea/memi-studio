@@ -86,6 +86,10 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Updater signing — Tauri picks these up automatically and produces
+          # the .app.tar.gz + .app.tar.gz.sig artifacts that latest.json points at.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
       - name: Notarize DMG
@@ -128,11 +132,24 @@ jobs:
           DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" -print -quit)
           spctl -a -vv --type install "$DMG" || (echo "spctl assessment failed for $DMG"; exit 1)
 
-      - name: Upload artifacts
+      - name: Collect updater artifacts
+        run: |
+          set -euo pipefail
+          # Tauri places .app.tar.gz + .app.tar.gz.sig under bundle/macos/
+          # when createUpdaterArtifacts is enabled in tauri.conf.json.
+          mkdir -p updater-staging
+          find src-tauri/target/${{ matrix.target }}/release/bundle/macos \
+            \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) \
+            -exec cp {} updater-staging/ \;
+          ls -la updater-staging/
+
+      - name: Upload artifacts (DMG + updater bundle)
         uses: actions/upload-artifact@v4
         with:
           name: memi-studio-${{ matrix.arch }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            updater-staging/*
           if-no-files-found: error
 
   publish-release:
@@ -151,13 +168,55 @@ jobs:
         with:
           path: dist
 
-      - name: Compute checksums
+      - name: Compute checksums + stage updater bundles
         run: |
           set -euo pipefail
           mkdir -p release
           find dist -name "*.dmg" -exec mv {} release/ \;
+          find dist -name "*.app.tar.gz" -exec mv {} release/ \;
+          find dist -name "*.app.tar.gz.sig" -exec mv {} release/ \;
           cd release
           shasum -a 256 *.dmg > SHA256SUMS
+          ls -la
+
+      - name: Generate latest.json updater manifest
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ARM_SIG_FILE=$(find release -name "*aarch64*.app.tar.gz.sig" -print -quit)
+          X64_SIG_FILE=$(find release -name "*x64*.app.tar.gz.sig" -print -quit)
+          ARM_TAR=$(find release -name "*aarch64*.app.tar.gz" -print -quit)
+          X64_TAR=$(find release -name "*x64*.app.tar.gz" -print -quit)
+          if [ -z "$ARM_SIG_FILE" ] || [ -z "$X64_SIG_FILE" ]; then
+            echo "missing updater signature(s) — Tauri build did not emit .sig files."
+            echo "verify: TAURI_SIGNING_PRIVATE_KEY secret is set + tauri.conf.json has createUpdaterArtifacts: true"
+            exit 1
+          fi
+          ARM_SIG=$(cat "$ARM_SIG_FILE")
+          X64_SIG=$(cat "$X64_SIG_FILE")
+          ARM_NAME=$(basename "$ARM_TAR")
+          X64_NAME=$(basename "$X64_TAR")
+          REPO="${{ github.repository }}"
+          cat > release/latest.json <<EOF
+          {
+            "version": "$VERSION",
+            "notes": "See https://github.com/$REPO/releases/tag/$TAG",
+            "pub_date": "$PUB_DATE",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$ARM_SIG",
+                "url": "https://github.com/$REPO/releases/download/$TAG/$ARM_NAME"
+              },
+              "darwin-x86_64": {
+                "signature": "$X64_SIG",
+                "url": "https://github.com/$REPO/releases/download/$TAG/$X64_NAME"
+              }
+            }
+          }
+          EOF
+          cat release/latest.json
 
       - name: Publish release
         env:
@@ -169,4 +228,4 @@ jobs:
             --repo "${{ github.repository }}" \
             --title "memi-studio $TAG" \
             --generate-notes \
-            release/*.dmg release/SHA256SUMS
+            release/*.dmg release/SHA256SUMS release/latest.json release/*.app.tar.gz release/*.app.tar.gz.sig
