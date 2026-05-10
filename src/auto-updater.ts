@@ -31,11 +31,14 @@ export interface AutoUpdateOptions {
   readonly onUpToDate?: () => void;
 }
 
+// Vite injects import.meta.env at build time; DEV is true when running
+// `npm run dev`, false in production builds. The env var override lets
+// CI / dev users opt out of the check explicitly.
 const SKIP_ENV = (() => {
-  if (typeof process === "undefined") return false;
-  const env = process.env ?? {};
-  return env["MEMI_STUDIO_SKIP_UPDATE_CHECK"] === "1"
-      || env["NODE_ENV"] === "development";
+  const env = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
+  if (env.DEV) return true;
+  if (env["MEMI_STUDIO_SKIP_UPDATE_CHECK"] === "1") return true;
+  return false;
 })();
 
 export async function checkForUpdates(opts: AutoUpdateOptions = {}): Promise<void> {
