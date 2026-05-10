@@ -88,6 +88,40 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" -print -quit)
+          if [ -z "$DMG" ]; then
+            echo "no DMG found under src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+            exit 1
+          fi
+          echo "submitting $DMG to notarytool (synchronous, will wait for verdict)..."
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --output-format json > notarize-result.json
+          cat notarize-result.json
+          STATUS=$(node -e "console.log(require('./notarize-result.json').status)")
+          if [ "$STATUS" != "Accepted" ]; then
+            SUBMISSION_ID=$(node -e "console.log(require('./notarize-result.json').id)")
+            echo "notarization failed (status=$STATUS) — fetching log for submission $SUBMISSION_ID"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" || true
+            exit 1
+          fi
+          echo "stapling notarization ticket to $DMG"
+          xcrun stapler staple "$DMG"
+          echo "stapled successfully"
+
       - name: Verify Gatekeeper assessment
         run: |
           set -euo pipefail
