@@ -135,12 +135,17 @@ jobs:
       - name: Collect updater artifacts
         run: |
           set -euo pipefail
-          # Tauri places .app.tar.gz + .app.tar.gz.sig under bundle/macos/
-          # when createUpdaterArtifacts is enabled in tauri.conf.json.
+          # Tauri emits "Mémoire Studio.app.tar.gz" with no arch in the name.
+          # Both matrix runs would collide once the publish job collapses them
+          # into release/, so rename per-arch here. Use the matrix.target
+          # value (aarch64 / x86_64) so the names line up with the DMG arch
+          # tokens and the latest.json find patterns.
           mkdir -p updater-staging
-          find src-tauri/target/${{ matrix.target }}/release/bundle/macos \
-            \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) \
-            -exec cp {} updater-staging/ \;
+          ARCH_TOKEN="${{ matrix.target }}"
+          ARCH_TOKEN="${ARCH_TOKEN%-apple-darwin}"
+          SRC="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          cp "$SRC/Mémoire Studio.app.tar.gz" "updater-staging/Memoire-Studio-${ARCH_TOKEN}.app.tar.gz"
+          cp "$SRC/Mémoire Studio.app.tar.gz.sig" "updater-staging/Memoire-Studio-${ARCH_TOKEN}.app.tar.gz.sig"
           ls -la updater-staging/
 
       - name: Upload artifacts (DMG + updater bundle)
@@ -185,10 +190,12 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Per "Collect updater artifacts" step: files are
+          # Memoire-Studio-aarch64.app.tar.gz / Memoire-Studio-x86_64.app.tar.gz
           ARM_SIG_FILE=$(find release -name "*aarch64*.app.tar.gz.sig" -print -quit)
-          X64_SIG_FILE=$(find release -name "*x64*.app.tar.gz.sig" -print -quit)
-          ARM_TAR=$(find release -name "*aarch64*.app.tar.gz" -print -quit)
-          X64_TAR=$(find release -name "*x64*.app.tar.gz" -print -quit)
+          X64_SIG_FILE=$(find release -name "*x86_64*.app.tar.gz.sig" -print -quit)
+          ARM_TAR=$(find release -name "*aarch64*.app.tar.gz" -not -name "*.sig" -print -quit)
+          X64_TAR=$(find release -name "*x86_64*.app.tar.gz" -not -name "*.sig" -print -quit)
           if [ -z "$ARM_SIG_FILE" ] || [ -z "$X64_SIG_FILE" ]; then
             echo "missing updater signature(s) — Tauri build did not emit .sig files."
             echo "verify: TAURI_SIGNING_PRIVATE_KEY secret is set + tauri.conf.json has createUpdaterArtifacts: true"
