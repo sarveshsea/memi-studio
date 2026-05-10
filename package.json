@@ -11,12 +11,11 @@
     "url": "git+https://github.com/sarveshsea/memi-studio.git"
   },
   "memoireRuntime": {
-    "version": "0.17.0",
+    "version": "0.18.0",
     "engineRepo": "sarveshsea/m-moire",
-    "releaseTag": "runtime-v0.18.1",
+    "releaseTag": "runtime-v0.18.2",
     "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
-    "resourcesAsset": "memoire-runtime-resources-0.17.0.tar.gz",
-    "_note": "Asset version reflects the engine package.json version at release time (engine is on 0.17.0 today). The releaseTag is independent — runtime-v0.18.1 was the first sidecar-publish tag. When the engine bumps to 0.18.0+, the resources asset name will catch up."
+    "resourcesAsset": "memoire-runtime-resources-0.18.0.tar.gz"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
