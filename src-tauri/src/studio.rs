@@ -10,7 +10,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const HARNESS_MANIFEST_JSON: &str = include_str!("../../../../src/studio/harness-manifest.json");
+// Vendored at carve-out time from the engine repo's src/studio/harness-manifest.json.
+// Refresh manually until a sync script lands; the runtime sidecar carries the
+// authoritative copy at runtime, this is just for compile-time defaults.
+const HARNESS_MANIFEST_JSON: &str = include_str!("../resources/harness-manifest.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
