@@ -237,6 +237,51 @@ pre {
   gap: var(--space-1);
   flex-wrap: nowrap;
 }
+
+/* Cost HUD — pinned topbar widget (token + cost + cache hit rate). */
+.cost-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-inline-start: var(--space-2);
+  padding: 2px var(--space-1-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  background: var(--surface);
+  font-size: var(--font-size-xs);
+  line-height: 1.1;
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+  min-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.cost-hud-segment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.cost-hud-segment-label {
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+.cost-hud-segment-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.cost-hud-cache-good .cost-hud-segment-value {
+  color: var(--success, #16a34a);
+}
+.cost-hud-cache-mid .cost-hud-segment-value {
+  color: var(--warning, #ca8a04);
+}
+.cost-hud-cache-poor .cost-hud-segment-value {
+  color: var(--danger, #dc2626);
+}
+.cost-hud-error {
+  opacity: 0.5;
+}
 .console-topbar .memoire-logo-mark,
 .console-topbar .control-icon {
   width: 12px;

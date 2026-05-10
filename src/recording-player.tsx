@@ -42,7 +42,7 @@ export interface RecordingPlayerProps {
   readonly title?: string;
 }
 
-export default function RecordingPlayer(props: RecordingPlayerProps): JSX.Element {
+export default function RecordingPlayer(props: RecordingPlayerProps) {
   const { chapters, onSeek, videoSrc, posterSrc, title } = props;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [activeChapter, setActiveChapter] = useState<number>(0);
