@@ -71,6 +71,13 @@ jobs:
         run: npm run fetch:runtime -- --all-archs
 
       - name: Build Tauri app
+        env:
+          # tauri.conf.json declares an updater pubkey + createUpdaterArtifacts.
+          # When pubkey is set Tauri also tries to sign the .app.tar.gz bundle
+          # at build time, which needs the matching private key. Provide it
+          # here so PR builds succeed end-to-end (no notarization in build.yml).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
       - name: Upload .app artifact
