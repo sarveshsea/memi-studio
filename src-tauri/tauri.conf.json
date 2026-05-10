@@ -32,6 +32,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["app", "dmg"],
     "externalBin": ["binaries/memi-studio-runtime"],
     "resources": ["resources/memoire-runtime"],
@@ -49,5 +50,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/sarveshsea/memi-studio/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMzMUE4N0Q4OUYxQTg5MApSV1NRcVBHSmZhZ3hEUHFSb0JKcTF0SjViR2srU2xrbkpCT1Z3eEhWV3BTVXhNUXRYY0h3WGJpMQo="
+    }
   }
 }

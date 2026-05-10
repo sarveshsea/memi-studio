@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default permissions for the Mémoire Studio desktop shell, agent tools, and workspace picker.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": ["core:default", "dialog:default", "updater:default"]
 }
