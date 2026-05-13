@@ -1253,20 +1253,11 @@ export function ProjectSidebar(props: {
               <SidebarIcon name="new-chat" />
               <span>New chat</span>
             </button>
-            <button data-action-id="command-palette.open.sidebar" type="button" onClick={props.onOpenCommand} title="Search">
-              <SidebarIcon name="search" />
-              <span>Search</span>
-            </button>
-            <button data-action-id="changelog.open.sidebar" type="button" onClick={props.onOpenChangelog} title="Changelog">
-              <SidebarIcon name="changelog" />
-              <span>Changelog</span>
-            </button>
           </nav>
         </div>
         <div className="project-sidebar-folders" data-sidebar-section="project-navigation" data-project-folder-list="true">
           <div className="project-sidebar-section-label">
             <span>Projects</span>
-            <small>{props.sessions.length}</small>
           </div>
           {projects.map((project) => {
             const isExpanded = expanded.has(project.id) || project.sessions.some((session) => session.id === props.currentSessionId);
@@ -1312,15 +1303,18 @@ export function ProjectSidebar(props: {
           })}
           {projects.length === 0 ? (
             <div className="project-sidebar-empty" data-project-sessions-empty="quiet">
-              <span>No project sessions.</span>
+              <span>No projects yet.</span>
               <small>Open a folder to start.</small>
+              <button className="sidebar-empty-primary" data-action-id="workspace.open-folder.empty" type="button" onClick={() => void props.onOpenWorkspace()} title="Open folder">
+                <SidebarIcon name="folder-open" />
+                <span>Open folder</span>
+              </button>
             </div>
           ) : null}
         </div>
         <div className="project-sidebar-folders" data-recent-workspaces="app-level" data-sidebar-section="recent-workspaces">
           <div className="project-sidebar-section-label">
             <span>Recent folders</span>
-            <small>{props.recentWorkspaces.length}</small>
           </div>
           {props.recentWorkspaces.slice(0, 8).map((workspace) => (
             <button

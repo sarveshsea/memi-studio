@@ -191,7 +191,6 @@ import {
   primaryHarnesses,
   type WorkbenchRightPaneTab,
 } from "./studio-workbench";
-import { CostHud } from "./cost-hud";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -204,8 +203,16 @@ const PERMISSION_MODES: Array<{ id: StudioPermissionMode; label: string }> = WOR
 
 type RightPaneTab = WorkbenchRightPaneTab;
 type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
+type TruthStripStatus = "ready" | "warn" | "missing" | "unknown";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
 type ComposerPetState = "idle" | "typing" | "ready" | "submitting" | "running" | "queued" | "success" | "error" | "limited";
+
+interface TruthStripItemModel {
+  id: string;
+  label: string;
+  status: TruthStripStatus;
+  title?: string;
+}
 
 interface PaneIntent {
   tab: RightPaneTab;
@@ -355,7 +362,6 @@ export function App() {
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
-  const [harnessPickerOpen, setHarnessPickerOpen] = useState(false);
   const [selectedAction, setSelectedAction] = useState<StudioAction>("app-build");
   const [chatMode, setChatMode] = useState<StudioChatMode>("ideate");
   const [permissionMode, setPermissionMode] = useState<StudioPermissionMode>("guarded");
@@ -484,10 +490,6 @@ export function App() {
         event.preventDefault();
         openCommandPalette();
       }
-      if (event.key.toLowerCase() === "h" && event.shiftKey && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        setHarnessPickerOpen((open) => !open);
-      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -612,6 +614,8 @@ export function App() {
     () => harnesses.find((harness) => harness.id === selectedHarness),
     [harnesses, selectedHarness],
   );
+  const codexHarness = useMemo(() => harnesses.find((harness) => harness.id === "codex"), [harnesses]);
+  const claudeHarness = useMemo(() => harnesses.find((harness) => harness.id === "claude-code"), [harnesses]);
   const visibleHarnesses = useMemo(() => primaryHarnesses(harnesses), [harnesses]);
 
   const harnessActions = useMemo(() => actionsForHarness(currentHarness), [currentHarness]);
@@ -684,6 +688,32 @@ export function App() {
   });
   const latestRun = session ?? recentSessions[0] ?? null;
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
+  const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
+    {
+      id: "runtime",
+      label: `Runtime ${runtimeHealthLabel(runtimeHealth)}`,
+      status: runtimeTruthStatus(runtimeHealth),
+      title: status?.projectRoot ?? runtimeRecoveryMessage ?? "Runtime status",
+    },
+    {
+      id: "codex",
+      label: truthHarnessLabel(codexHarness, "Codex"),
+      status: truthHarnessStatus(codexHarness),
+      title: codexHarness?.authMessage ?? "Codex harness status",
+    },
+    {
+      id: "claude",
+      label: truthHarnessLabel(claudeHarness, "Claude"),
+      status: truthHarnessStatus(claudeHarness),
+      title: claudeHarness?.authMessage ?? "Claude Code harness status",
+    },
+    {
+      id: "workspace",
+      label: worktreeTruthLabel(designTrace, lastFailure),
+      status: worktreeTruthStatus(designTrace, lastFailure),
+      title: worktreeTruthTitle(designTrace, lastFailure),
+    },
+  ], [claudeHarness, codexHarness, designTrace, lastFailure, runtimeHealth, runtimeRecoveryMessage, status?.projectRoot]);
   const visibleRecentSessions = recentSessions.length ? recentSessions : session ? [session] : [];
   const sessionInventory = session && !visibleRecentSessions.some((recent) => recent.id === session.id)
     ? [session, ...visibleRecentSessions]
@@ -2792,9 +2822,6 @@ export function App() {
         <header className="panel-head">
           <div>
             <h2>{runPanelTitle}</h2>
-            <section className="run-goal-banner" data-run-goal-banner="agent-objective" aria-label="Run goal">
-              <span>{currentHarness?.label ?? selectedHarness} · {effectiveActionLabel} · {compactSessionStatusLabel(visibleSessionStatus)}</span>
-            </section>
           </div>
           <div className="inline-actions">
             <IconButton actionId="right-pane.tab.run" ariaLabel="Run pane" title="Run" icon="details" onClick={() => chooseRightPane("run", "Run pane opened")} />
@@ -2802,14 +2829,7 @@ export function App() {
           </div>
         </header>
 
-        <section className="console-run-info" data-codex-power-strip="sandbox" data-harness-readiness-contract="status-rail" aria-label="Harness run configuration">
-          <HarnessChip
-            kind="harness"
-            icon="harness"
-            label="Harness"
-            value={currentHarness?.label ?? selectedHarness}
-            title={currentHarness?.authMessage ?? harnessStatusCopy}
-          />
+        <section className="console-run-info" data-codex-power-strip="sandbox" data-harness-readiness-contract="mode-rail" aria-label="Run mode">
           <HarnessChip
             kind="access"
             icon="access"
@@ -2829,12 +2849,6 @@ export function App() {
             icon="action"
             label="Action"
             value={effectiveActionLabel}
-          />
-          <HarnessChip
-            kind="status"
-            icon="mode"
-            label="Status"
-            value={compactSessionStatusLabel(visibleSessionStatus)}
           />
         </section>
 
@@ -3220,8 +3234,6 @@ export function App() {
           </div>
           <div className="workspace-status-row" data-workspace-status="local-branch">
             <span title={status?.projectRoot}>{workspaceLabel}</span>
-            <span>{currentHarness?.label ?? selectedHarness}</span>
-            <span title={currentHarness?.authMessage ?? harnessStatusCopy}>{harnessStatusCopy}</span>
             <IconButton
               {...workbenchAction("changeWorkspace")}
               actionId={workbenchAction("changeWorkspace").id}
@@ -3234,30 +3246,41 @@ export function App() {
   }
 
   function renderRunCockpitPane() {
+    const showRunStatusGrid = isSessionActive || isStartingSession || Boolean(lastFailure) || runtimeHealth !== "ready";
     return (
       <section className="agent-cockpit-pane" data-agent-cockpit="run" data-pane-intent-surface="run">
-        <section className="harness-detail-grid" data-harness-readiness="cockpit">
-          <article>
-            <span>Harness</span>
-            <strong>{currentHarness?.label ?? selectedHarness}</strong>
-            <small>{currentHarness?.installed ? currentHarness.authStatus : "missing"}</small>
-          </article>
-          <article>
-            <span>Runtime</span>
-            <strong>{status?.status ?? "offline"}</strong>
-            <small>{status?.projectRoot ?? "offline"}</small>
-          </article>
-          <article>
-            <span>Active run</span>
-            <strong>{visibleSessionStatus}</strong>
-            <small>{session?.id ?? "none"}</small>
-          </article>
-          <article>
-            <span>Last failure</span>
-            <strong>{lastFailure ? formatEventName(lastFailure.type) : "clean"}</strong>
-            <small>{lastFailure ? trimText(lastFailure.message, 80) : "clean"}</small>
-          </article>
-        </section>
+        {showRunStatusGrid ? (
+          <section className="harness-detail-grid" data-harness-readiness="cockpit">
+            <article>
+              <span>Harness</span>
+              <strong>{currentHarness?.label ?? selectedHarness}</strong>
+              <small>{currentHarness?.installed ? currentHarness.authStatus : "missing"}</small>
+            </article>
+            <article>
+              <span>Runtime</span>
+              <strong>{status?.status ?? "offline"}</strong>
+              <small>{status?.projectRoot ?? "offline"}</small>
+            </article>
+            <article>
+              <span>Active run</span>
+              <strong>{visibleSessionStatus}</strong>
+              <small>{session?.id ?? "none"}</small>
+            </article>
+            <article>
+              <span>Last failure</span>
+              <strong>{lastFailure ? formatEventName(lastFailure.type) : "clean"}</strong>
+              <small>{lastFailure ? trimText(lastFailure.message, 80) : "clean"}</small>
+            </article>
+          </section>
+        ) : (
+          <section className="cockpit-card quiet-run-summary" data-run-cockpit-empty="ready">
+            <div className="drawer-section-head">
+              <span>Workbench</span>
+              <small>{workspaceLabel}</small>
+            </div>
+            <p>Start a prompt to see trace, files, and receipts here.</p>
+          </section>
+        )}
 
         <section className="cockpit-card" data-recent-runs>
           <div className="drawer-section-head">
@@ -3544,22 +3567,11 @@ export function App() {
           <div className="wordmark-row" aria-label="Mémoire">
             <MemoireLogoMark />
           </div>
-          <div className="harness-readiness-row" data-harness-readiness="compact" data-harness-readiness-contract="compact" data-topbar-tags="left-compact" aria-label="Runtime and harness status">
-            <span><i className="status-dot" /> Runtime {runtimeHealthLabel(runtimeHealth)}</span>
-            <TopbarHarnessChip
-              harnesses={harnesses}
-              currentHarness={currentHarness}
-              selectedHarness={selectedHarness}
-              statusCopy={harnessStatusCopy}
-              isOpen={harnessPickerOpen}
-              onOpenChange={setHarnessPickerOpen}
-              onSelect={(id) => { chooseHarness(id); setHarnessPickerOpen(false); }}
-              onDiagnose={(id) => { void handleDiagnoseHarness(id); }}
-            />
-            <span>Run {compactSessionStatusLabel(visibleSessionStatus)}</span>
-            <span title={lastFailure?.message ?? "Clean"}>{lastFailure ? "Failure" : "Clean"}</span>
+          <div className="harness-readiness-row" data-harness-readiness="compact" data-harness-readiness-contract="truth-strip" data-topbar-tags="left-compact" aria-label="Runtime, agent, and workspace status">
+            {truthStripItems.map((item) => (
+              <TruthStripItem item={item} key={item.id} />
+            ))}
           </div>
-          <CostHud />
           <div className="topbar-actions" data-topbar-actions="right-aligned">
             <button className="topbar-icon-button" aria-label="Command" title="Command" data-action-id="command-palette.open" type="button" onClick={() => openCommandPalette()}>
               <StudioControlIcon name="command" />
@@ -4232,136 +4244,53 @@ function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: stri
   return harnessStatusCopy;
 }
 
-function TopbarHarnessChip(props: {
-  harnesses: Harness[];
-  currentHarness: Harness | undefined;
-  selectedHarness: HarnessId;
-  statusCopy: string;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelect: (id: HarnessId) => void;
-  onDiagnose: (id: HarnessId) => void;
-}) {
-  const { harnesses, currentHarness, selectedHarness, statusCopy, isOpen, onOpenChange, onSelect, onDiagnose } = props;
-  const containerRef = useRef<HTMLSpanElement | null>(null);
-  const [focusIndex, setFocusIndex] = useState(0);
-  const label = currentHarness?.label ?? selectedHarness;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (event: globalThis.MouseEvent) => {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(event.target as Node)) onOpenChange(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [isOpen, onOpenChange]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const idx = harnesses.findIndex((harness) => harness.id === selectedHarness);
-    setFocusIndex(idx >= 0 ? idx : 0);
-  }, [isOpen, harnesses, selectedHarness]);
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onOpenChange(false);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setFocusIndex((i) => Math.min(harnesses.length - 1, i + 1));
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setFocusIndex((i) => Math.max(0, i - 1));
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const harness = harnesses[focusIndex];
-      if (harness) onSelect(harness.id);
-    }
-  }
-
+function TruthStripItem({ item }: { item: TruthStripItemModel }) {
   return (
-    <span
-      ref={containerRef}
-      className="topbar-harness-chip"
-      data-topbar-harness-chip={isOpen ? "open" : "closed"}
-    >
-      <button
-        type="button"
-        className="topbar-harness-chip-button"
-        data-action-id="topbar.harness.open"
-        aria-label={`Harness: ${label}, ${statusCopy}. Open picker.`}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        title={`${label} · ${statusCopy} (⌘⇧H)`}
-        onClick={() => onOpenChange(!isOpen)}
-      >
-        <i className="status-dot" data-auth-status={harnessAuthDot(currentHarness)} aria-hidden="true" />
-        <strong>{label}</strong>
-        <span className="topbar-harness-chip-status">{statusCopy}</span>
-        {currentHarness?.installedPacks?.includes("everything-claude-code") ? (
-          <span className="topbar-harness-chip-pack" data-installed-pack="everything-claude-code" title="everything-claude-code installed">ECC</span>
-        ) : null}
-      </button>
-      {isOpen ? (
-        <div
-          className="topbar-harness-popover"
-          role="listbox"
-          aria-label="Pick a harness"
-          tabIndex={-1}
-          onKeyDown={onKeyDown}
-        >
-          {harnesses.length === 0 ? (
-            <div className="topbar-harness-popover-empty">Loading harnesses…</div>
-          ) : (
-            harnesses.map((harness, index) => {
-              const isActive = harness.id === selectedHarness;
-              const focused = index === focusIndex;
-              return (
-                <div
-                  key={harness.id}
-                  className="topbar-harness-row"
-                  data-active={isActive ? "true" : "false"}
-                  data-focused={focused ? "true" : "false"}
-                  role="option"
-                  aria-selected={isActive}
-                >
-                  <button
-                    type="button"
-                    className="topbar-harness-row-select"
-                    data-action-id={`topbar.harness.select.${harness.id}`}
-                    onClick={() => onSelect(harness.id)}
-                    onMouseEnter={() => setFocusIndex(index)}
-                    disabled={!harness.enabled}
-                  >
-                    <i className="status-dot" data-auth-status={harnessAuthDot(harness)} aria-hidden="true" />
-                    <span className="topbar-harness-row-label">{harness.label}</span>
-                    <span className="topbar-harness-row-meta">{harnessReadinessLabel(harness)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="topbar-harness-row-diagnose"
-                    data-action-id={`topbar.harness.diagnose.${harness.id}`}
-                    title={`Diagnose ${harness.label}`}
-                    aria-label={`Diagnose ${harness.label}`}
-                    onClick={() => onDiagnose(harness.id)}
-                  >
-                    <StudioControlIcon name="details" />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      ) : null}
+    <span className="truth-strip-item" data-truth-status={item.status} title={item.title ?? item.label}>
+      <i className="status-dot" data-auth-status={item.status} aria-hidden="true" />
+      {item.label}
     </span>
   );
+}
+
+function runtimeTruthStatus(health: RuntimeHealth): TruthStripStatus {
+  if (health === "ready") return "ready";
+  if (health === "starting") return "unknown";
+  if (health === "degraded") return "warn";
+  return "missing";
+}
+
+function truthHarnessLabel(harness: Harness | undefined, shortName: string): string {
+  if (!harness) return `${shortName} checking`;
+  if (!harness.enabled) return `${shortName} disabled`;
+  if (!harness.installed || harness.authStatus === "missing") return `${shortName} missing`;
+  if (harness.authStatus === "needs_login") return `${shortName} login`;
+  if (harness.authStatus === "signed_in" || harness.authStatus === "ready") return `${shortName} signed in`;
+  if (harness.authStatus === "not_required") return `${shortName} available`;
+  return `${shortName} checking`;
+}
+
+function truthHarnessStatus(harness: Harness | undefined): TruthStripStatus {
+  return harnessAuthDot(harness);
+}
+
+function worktreeTruthLabel(trace: StudioDesignSystemTrace | null, lastFailure: StudioEvent | null): string {
+  if (lastFailure) return "Failure";
+  const changed = trace?.filesChanged ?? trace?.files.length ?? 0;
+  return changed > 0 ? `${changed} changed` : "Clean";
+}
+
+function worktreeTruthStatus(trace: StudioDesignSystemTrace | null, lastFailure: StudioEvent | null): TruthStripStatus {
+  if (lastFailure) return "warn";
+  const changed = trace?.filesChanged ?? trace?.files.length ?? 0;
+  return changed > 0 ? "warn" : "ready";
+}
+
+function worktreeTruthTitle(trace: StudioDesignSystemTrace | null, lastFailure: StudioEvent | null): string {
+  if (lastFailure) return lastFailure.message;
+  if (trace?.error) return trace.error;
+  if (trace && trace.filesChanged > 0) return trace.reviewLabel;
+  return "No changed files";
 }
 
 function harnessAuthDot(harness: Harness | undefined): "ready" | "warn" | "missing" | "unknown" {

@@ -28,6 +28,11 @@ const STUDIO_RUNTIME_RESOURCE_DIR: &str = "resources/memoire-runtime";
 const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 40;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
 
+#[derive(Debug, serde::Deserialize)]
+struct RuntimeHarnessesPayload {
+    harnesses: Vec<studio::HarnessStatus>,
+}
+
 #[derive(Default)]
 struct AppState {
     runtime: Mutex<RuntimeProcessState>,
@@ -45,7 +50,13 @@ struct RuntimeProcessState {
 fn studio_status(app: AppHandle, state: State<AppState>) -> Result<studio::StudioStatus, String> {
     let workspace_root = workspace_root(&app)?;
     let mut status = studio::studio_status(&workspace_root);
-    status.runtime = Some(current_runtime_status(&state, &workspace_root));
+    let runtime = current_runtime_status(&state, &workspace_root);
+    if runtime.status == "running" {
+        if let Some(harnesses) = runtime_harnesses(runtime.api_token.as_deref()) {
+            status.harnesses = harnesses;
+        }
+    }
+    status.runtime = Some(runtime);
     Ok(status)
 }
 
@@ -787,13 +798,35 @@ fn runtime_has_mermaid_board_tools(port: u16) -> bool {
     .all(|required| tool_ids.contains(required))
 }
 
+fn runtime_harnesses(api_token: Option<&str>) -> Option<Vec<studio::HarnessStatus>> {
+    let Some((200, body)) =
+        local_http_get_with_token(STUDIO_RUNTIME_PORT, "/api/harnesses?refresh=1", api_token)
+    else {
+        return None;
+    };
+    serde_json::from_str::<RuntimeHarnessesPayload>(&body)
+        .ok()
+        .map(|payload| payload.harnesses)
+}
+
 fn local_http_get(port: u16, path: &str) -> Option<(u16, String)> {
+    local_http_get_with_token(port, path, None)
+}
+
+fn local_http_get_with_token(
+    port: u16,
+    path: &str,
+    api_token: Option<&str>,
+) -> Option<(u16, String)> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(200)).ok()?;
     stream.set_read_timeout(Some(Duration::from_millis(500))).ok()?;
     stream.set_write_timeout(Some(Duration::from_millis(500))).ok()?;
+    let token_header = api_token
+        .map(|token| format!("x-memoire-studio-token: {token}\r\n"))
+        .unwrap_or_default();
     let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{token_header}Connection: close\r\n\r\n"
     );
     stream.write_all(request.as_bytes()).ok()?;
     let mut response = String::new();

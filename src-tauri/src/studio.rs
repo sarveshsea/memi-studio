@@ -65,6 +65,10 @@ pub struct HarnessStatus {
     pub installed: bool,
     #[serde(rename = "resolvedPath")]
     pub resolved_path: Option<String>,
+    #[serde(rename = "authStatus", skip_serializing_if = "Option::is_none")]
+    pub auth_status: Option<String>,
+    #[serde(rename = "authMessage", skip_serializing_if = "Option::is_none")]
+    pub auth_message: Option<String>,
     #[serde(rename = "supportsCancel")]
     pub supports_cancel: bool,
     #[serde(rename = "outputParser")]
@@ -372,6 +376,8 @@ pub fn list_harnesses() -> Vec<HarnessStatus> {
                 visibility: harness.visibility,
                 installed,
                 resolved_path: resolved_path.map(|path| path.to_string_lossy().to_string()),
+                auth_status: None,
+                auth_message: None,
                 supports_cancel: harness.supports_cancel,
                 output_parser: harness.output_parser,
             }
