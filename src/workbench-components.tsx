@@ -399,6 +399,7 @@ export function CreationStrip(props: {
   const objective = props.packet?.objective || props.session?.prompt || "Draft agent work";
   const latestArtifact = cards[0] ?? null;
   const latestDesignArtifact = props.artifacts[0] ?? null;
+  const canOpenPacket = Boolean(props.packet || latestArtifact || latestDesignArtifact);
   const evidenceCount = props.packet?.evidence.length ?? props.events.filter((event) => /research|artifact|screenshot|snapshot|result/i.test(event.type)).length;
   const decisionCount = props.packet?.decisions.length ?? props.events.filter((event) => event.type === "design_decision").length;
   const visualCount = cards.filter((card) => card.kind === "visual").length || props.events.filter((event) => event.type === "screenshot" || event.type === "browser_snapshot" || event.type === "design_preview").length;
@@ -406,12 +407,14 @@ export function CreationStrip(props: {
     <section className="creation-strip" data-creation-strip="artifact-first" aria-label="Creation strip">
       <div className="creation-strip-head">
         <div>
-          <strong>Creation</strong>
+          <strong>Context</strong>
           <span title={objective}>{trimText(objective, 96)}</span>
         </div>
-        <button data-action-id="work-packet.open" data-creation-strip-action="open-packet" type="button" onClick={props.onOpenPacket}>
-          Open packet
-        </button>
+        {canOpenPacket ? (
+          <button data-action-id="work-packet.open" data-creation-strip-action="open-packet" type="button" onClick={props.onOpenPacket}>
+            Open packet
+          </button>
+        ) : null}
       </div>
       <div className="creation-strip-metrics">
         {latestDesignArtifact && props.onSelectArtifact ? (
@@ -512,26 +515,22 @@ export function WorkPacketPane(props: {
   const packet = props.packet;
   const sources = researchSourcesFromEvents(props.events);
   if (!packet) {
-    const harnessLabel = props.harnessLabel ?? "your agent";
     return (
       <section className="work-packet-pane" data-work-packet-pane="review-packet" aria-label="Work Packet">
         <header>
           <div>
             <span>Work Packet</span>
-            <h2>Start shaping your work</h2>
-            <p>Create or open a packet to generate content. Decisions, visuals, evidence, risks, and next moves will land here for quick access and review.</p>
+            <h2>No packet yet</h2>
+            <p>Packets appear after a run captures artifacts, decisions, evidence, visuals, or next moves.</p>
           </div>
           <button data-action-id="work-packet.refresh" type="button" onClick={props.onRefresh}>Refresh</button>
         </header>
         <ResearchSourceStrip sources={sources} />
         <section className="work-packet-empty" data-empty-state="work-packet">
-          <div className="work-packet-empty-illustration" aria-hidden="true">
-            <WorkPacketEmptyIllustration />
-          </div>
           <div className="work-packet-empty-body">
             <span className="work-packet-empty-pill">No packet captured yet</span>
-            <h3>Spin up a packet with {harnessLabel}</h3>
-            <p>Pick a starting point or open files from your desktop. Codex and Claude Code ship work into the same packet surface.</p>
+            <h3>Run first, packet second</h3>
+            <p>Use the composer to create work. Mémoire will collect the packet when the agent produces something reviewable.</p>
             <div className="work-packet-empty-actions">
               {props.onCreatePacket ? (
                 <button
@@ -540,7 +539,7 @@ export function WorkPacketPane(props: {
                   data-action-id="work-packet.create"
                   onClick={props.onCreatePacket}
                 >
-                  + Create new packet
+                  Start in composer
                 </button>
               ) : null}
               {props.onOpenWorkspace ? (
@@ -549,47 +548,10 @@ export function WorkPacketPane(props: {
                   data-action-id="work-packet.open-existing"
                   onClick={props.onOpenWorkspace}
                 >
-                  Open existing
-                </button>
-              ) : null}
-              {props.onBrowseTemplates ? (
-                <button
-                  type="button"
-                  data-action-id="work-packet.browse-templates"
-                  onClick={props.onBrowseTemplates}
-                >
-                  Browse templates
-                </button>
-              ) : null}
-              {props.onViewExamples ? (
-                <button
-                  type="button"
-                  data-action-id="work-packet.view-examples"
-                  onClick={props.onViewExamples}
-                >
-                  View examples
+                  Open folder
                 </button>
               ) : null}
             </div>
-            {props.starters?.length ? (
-              <div className="work-packet-empty-starters">
-                <span className="work-packet-empty-starters-label">Popular starting points</span>
-                <div className="work-packet-empty-starters-row">
-                  {props.starters.map((starter) => (
-                    <button
-                      key={starter.label}
-                      type="button"
-                      className="work-packet-empty-starter-chip"
-                      data-action-id={`work-packet.starter.${starter.label.replace(/\s+/g, "-").toLowerCase()}`}
-                      title={starter.description ?? starter.label}
-                      onClick={starter.onSelect}
-                    >
-                      {starter.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         </section>
       </section>
@@ -1230,6 +1192,7 @@ export function ProjectSidebar(props: {
 }) {
   const projects = groupSessionsByProject(props.sessions);
   const expanded = new Set(props.expandedProjectIds);
+  const hasNavigationContext = projects.length > 0 || props.recentWorkspaces.length > 0;
   return (
     <aside
       className="project-sidebar"
@@ -1245,25 +1208,27 @@ export function ProjectSidebar(props: {
             <span>Collapse</span>
           </button>
         </div>
-        <div className="project-sidebar-action-group" data-sidebar-section="page-actions">
-          <div className="project-sidebar-section-title">
-            <span>Actions</span>
+        {hasNavigationContext ? (
+          <div className="project-sidebar-action-group" data-sidebar-section="page-actions">
+            <div className="project-sidebar-section-title">
+              <span>Actions</span>
+            </div>
+            <nav className="project-sidebar-actions" aria-label="Studio actions">
+              <button data-action-id="workspace.new-folder.sidebar" data-workspace-action="new-folder" type="button" onClick={() => void props.onCreateWorkspace()} title="New folder">
+                <SidebarIcon name="new-chat" />
+                <span>New folder</span>
+              </button>
+              <button data-action-id="workspace.open-folder.sidebar" data-workspace-action="open-folder" type="button" onClick={() => void props.onOpenWorkspace()} title="Open folder">
+                <SidebarIcon name="folder-open" />
+                <span>Open folder</span>
+              </button>
+              <button data-action-id="sidebar.new-chat" type="button" onClick={props.onNewChat} title="New chat">
+                <SidebarIcon name="new-chat" />
+                <span>New chat</span>
+              </button>
+            </nav>
           </div>
-          <nav className="project-sidebar-actions" aria-label="Studio actions">
-            <button data-action-id="workspace.new-folder.sidebar" data-workspace-action="new-folder" type="button" onClick={() => void props.onCreateWorkspace()} title="New folder">
-              <SidebarIcon name="new-chat" />
-              <span>New folder</span>
-            </button>
-            <button data-action-id="workspace.open-folder.sidebar" data-workspace-action="open-folder" type="button" onClick={() => void props.onOpenWorkspace()} title="Open folder">
-              <SidebarIcon name="folder-open" />
-              <span>Open folder</span>
-            </button>
-            <button data-action-id="sidebar.new-chat" type="button" onClick={props.onNewChat} title="New chat">
-              <SidebarIcon name="new-chat" />
-              <span>New chat</span>
-            </button>
-          </nav>
-        </div>
+        ) : null}
         <div className="project-sidebar-folders" data-sidebar-section="project-navigation" data-project-folder-list="true">
           <div className="project-sidebar-section-label">
             <span>Projects</span>

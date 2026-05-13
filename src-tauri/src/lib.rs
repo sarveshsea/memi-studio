@@ -506,7 +506,7 @@ fn restart_studio_runtime_process(
     }
 
     if local_port_open(STUDIO_RUNTIME_PORT) {
-        if runtime_has_mermaid_board_tools(STUDIO_RUNTIME_PORT) {
+        if runtime_answers_status(STUDIO_RUNTIME_PORT) {
             let status = runtime_status(
                 "running",
                 None,
@@ -525,7 +525,7 @@ fn restart_studio_runtime_process(
             None,
             None,
             Some(format!(
-                "Port {STUDIO_RUNTIME_PORT} is already in use by a process that does not expose the Mémoire Mermaid Board runtime tools. Quit that process or free 127.0.0.1:{STUDIO_RUNTIME_PORT}."
+                "Port {STUDIO_RUNTIME_PORT} is already in use by a process that does not expose the Mémoire Studio runtime status API. Quit that process or free 127.0.0.1:{STUDIO_RUNTIME_PORT}."
             )),
         );
         set_runtime_status(state, status.clone(), None);
@@ -768,34 +768,6 @@ fn local_port_open(port: u16) -> bool {
 
 fn runtime_answers_status(port: u16) -> bool {
     matches!(local_http_get(port, "/api/status"), Some((200, _)))
-}
-
-fn runtime_has_mermaid_board_tools(port: u16) -> bool {
-    let Some((200, body)) = local_http_get(port, "/api/tools") else {
-        return false;
-    };
-    let Ok(payload) = serde_json::from_str::<Value>(&body) else {
-        return false;
-    };
-    let Some(tools) = payload.get("tools").and_then(Value::as_array) else {
-        return false;
-    };
-    let tool_ids: Vec<&str> = tools
-        .iter()
-        .filter_map(|tool| tool.get("id").and_then(Value::as_str))
-        .collect();
-    [
-        "board.create",
-        "board.apply_template",
-        "board.add_node",
-        "board.update_node",
-        "board.connect",
-        "board.layout",
-        "board.export_mermaid_jam",
-        "board.sync_figjam",
-    ]
-    .iter()
-    .all(|required| tool_ids.contains(required))
 }
 
 fn runtime_harnesses(api_token: Option<&str>) -> Option<Vec<studio::HarnessStatus>> {

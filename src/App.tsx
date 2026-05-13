@@ -196,6 +196,7 @@ const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
 
 const STARTER_PROMPTS = WORKBENCH_COPY.starterPrompts;
+const DEFAULT_COMPOSER_STARTERS = STARTER_PROMPTS.slice(0, 3);
 const MODE_PRESETS = WORKBENCH_COPY.modePresets;
 const ACTIONS: Array<{ id: StudioAction; label: string }> = WORKBENCH_COPY.actions.map((action) => ({ ...action }));
 const CHAT_MODES: Array<{ id: StudioChatMode; label: string }> = WORKBENCH_COPY.chatModes.map((mode) => ({ ...mode }));
@@ -333,9 +334,10 @@ type InspectorSelection =
   | { kind: "event"; id: string };
 
 const RIGHT_PANE_TAB_GROUPS = ["primary", "utility"] as const;
-const RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
-  WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }))
-    .filter((tab) => DEFAULT_RIGHT_PANE_TAB_IDS.includes(normalizeRightPaneTab(tab.id) as typeof DEFAULT_RIGHT_PANE_TAB_IDS[number]));
+type RightPaneTabDefinition = { id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean };
+const ALL_RIGHT_PANE_TABS: RightPaneTabDefinition[] = WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }));
+const DEFAULT_RIGHT_PANE_TABS = ALL_RIGHT_PANE_TABS
+  .filter((tab) => DEFAULT_RIGHT_PANE_TAB_IDS.includes(normalizeRightPaneTab(tab.id) as typeof DEFAULT_RIGHT_PANE_TAB_IDS[number]));
 
 const SCENARIO_TOOL_IDS = ["harness.study", "research.patterns.extract", "research.patterns.list", "simulation.models", "simulation.run_matrix", "simulation.transcript", "research.design_package", "mermaid_jam.export"] as const;
 const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.update_node", "board.connect", "board.layout", "board.capture_ia", "board.export_mermaid_jam"] as const;
@@ -695,6 +697,30 @@ export function App() {
       ?? null;
   }, [reviewPackets, session?.id]);
   const lastFailure = useMemo(() => findLatestFailureEvent(events), [events]);
+  const hasChangedFileContext = (designTrace?.files.length ?? 0) > 0 || Boolean(designTrace?.error);
+  const hasPacketContext = Boolean(activeReviewPacket || allDesignArtifacts.length);
+  const hasCreationEventContext = events.some((event) =>
+    /artifact|design|decision|acceptance|screenshot|snapshot|figma|research/i.test(event.type),
+  );
+  const showConversationGoalRow = Boolean(conversationGoal.trim() || conversationTurnCount > 0);
+  const showCreationStrip = Boolean(
+    hasPacketContext
+    || hasCreationEventContext
+    || chatSearchQuery.trim()
+    || chatMemoryPins.length
+    || lastFailure
+    || (session && events.length > 0),
+  );
+  const shouldShowPacketTab = rightPaneTab === "work-packet" || hasPacketContext;
+  const visibleRightPaneTabs = useMemo(() => {
+    if (!shouldShowPacketTab) return DEFAULT_RIGHT_PANE_TABS;
+    const packetTab = ALL_RIGHT_PANE_TABS.find((tab) => tab.id === "work-packet");
+    if (!packetTab || DEFAULT_RIGHT_PANE_TABS.some((tab) => tab.id === packetTab.id)) return DEFAULT_RIGHT_PANE_TABS;
+    const nextTabs = [...DEFAULT_RIGHT_PANE_TABS];
+    const insertAt = Math.max(1, nextTabs.findIndex((tab) => tab.id === "changes"));
+    nextTabs.splice(insertAt, 0, packetTab);
+    return nextTabs;
+  }, [shouldShowPacketTab]);
   const latestRun = session ?? recentSessions[0] ?? null;
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
@@ -938,13 +964,15 @@ export function App() {
         listRecentWorkspaces().catch(() => []),
         getWorkspacePermissions().catch(() => null),
       ]);
+      const nextRuntimeHealth = runtimeHealthFromStatus(nextStatus);
+      const nextResolvedHarnesses = nextHarnesses.length ? nextHarnesses : nextStatus.harnesses ?? [];
       setStatus(nextStatus);
       setRuntimeMetrics(nextRuntimeMetrics);
-      setRuntimeHealth(runtimeHealthFromStatus(nextStatus));
+      setRuntimeHealth(nextRuntimeHealth);
       setRuntimeRecoveryMessage(nextStatus.runtime?.error ?? null);
-      setHarnesses(nextHarnesses);
+      setHarnesses(nextResolvedHarnesses);
       setSettingsDraft(nextStatus.config);
-      setSelectedHarness(normalizePrimaryHarness(nextStatus.config.defaultHarness, nextHarnesses));
+      setSelectedHarness(normalizePrimaryHarness(nextStatus.config.defaultHarness, nextResolvedHarnesses));
       setInputMode(nextStatus.config.ui?.inputMode ?? "agent");
       if (!session && nextStatus.config.codex?.planModeDefault) setPermissionMode("plan");
       setProjectMemory(nextMemory);
@@ -969,6 +997,15 @@ export function App() {
       if (!selectedArtifactId && nextArtifacts[0]) setSelectedArtifactId(nextArtifacts[0].id);
       if (!session && nextSessions[0]) {
         await openSessionSummary(nextSessions[0]);
+      }
+      const primaryHarnessStatusIncomplete = ["codex", "claude-code"].some((id) =>
+        !nextResolvedHarnesses.find((harness) => harness.id === id)?.authStatus,
+      );
+      if (nextRuntimeHealth === "ready" && primaryHarnessStatusIncomplete) {
+        harnessReadinessRefreshAttemptsRef.current = 0;
+        window.setTimeout(() => {
+          void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+        }, 650);
       }
       setError(null);
     } catch (err) {
@@ -2870,11 +2907,13 @@ export function App() {
           />
         ) : null}
 
-        <ConversationGoalRow
-          goal={conversationGoal}
-          turnIndex={conversationTurnCount}
-          onChange={setConversationGoal}
-        />
+        {showConversationGoalRow ? (
+          <ConversationGoalRow
+            goal={conversationGoal}
+            turnIndex={conversationTurnCount}
+            onChange={setConversationGoal}
+          />
+        ) : null}
         {queuedPrompt.trim() ? (
           <section className="queued-prompt-row" data-queued-prompt="pending" aria-label="Queued follow-up">
             <span className="queued-prompt-label">Queued</span>
@@ -2890,33 +2929,37 @@ export function App() {
             </button>
           </section>
         ) : null}
-        <ChangedFilesPanel
-          trace={designTrace}
-          onReview={() => chooseRightPane("changes", "Changed files review")}
-          onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
-        />
+        {hasChangedFileContext ? (
+          <ChangedFilesPanel
+            trace={designTrace}
+            onReview={() => chooseRightPane("changes", "Changed files review")}
+            onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
+          />
+        ) : null}
 
-        <CreationStrip
-          session={session}
-          sessionStatus={visibleSessionStatus}
-          action={effectiveAction}
-          traceModel={traceModel}
-          events={events}
-          terminalBlocks={terminalBlocks}
-          artifacts={allDesignArtifacts}
-          designTrace={designTrace}
-          memoryPins={chatMemoryPins}
-          packet={activeReviewPacket}
-          searchQuery={chatSearchQuery}
-          lastFailure={lastFailure}
-          onSearchChange={setChatSearchQuery}
-          onFollowUp={handleChatFollowUp}
-          onPinMemory={pinCurrentChatMemory}
-          onBranch={branchCurrentChat}
-          onCopyVerification={copyCurrentVerificationReceipt}
-          onSelectArtifact={(artifact) => inspectWorkbenchItem({ kind: "artifact", id: artifact.id })}
-          onOpenPacket={() => void openActiveReviewPacket()}
-        />
+        {showCreationStrip ? (
+          <CreationStrip
+            session={session}
+            sessionStatus={visibleSessionStatus}
+            action={effectiveAction}
+            traceModel={traceModel}
+            events={events}
+            terminalBlocks={terminalBlocks}
+            artifacts={allDesignArtifacts}
+            designTrace={designTrace}
+            memoryPins={chatMemoryPins}
+            packet={activeReviewPacket}
+            searchQuery={chatSearchQuery}
+            lastFailure={lastFailure}
+            onSearchChange={setChatSearchQuery}
+            onFollowUp={handleChatFollowUp}
+            onPinMemory={pinCurrentChatMemory}
+            onBranch={branchCurrentChat}
+            onCopyVerification={copyCurrentVerificationReceipt}
+            onSelectArtifact={(artifact) => inspectWorkbenchItem({ kind: "artifact", id: artifact.id })}
+            onOpenPacket={() => void openActiveReviewPacket()}
+          />
+        ) : null}
         <ApprovalBanner
           events={events}
           onResolve={handleResolveApproval}
@@ -3063,7 +3106,7 @@ export function App() {
             </div>
             {prompt.trim().length === 0 ? (
               <div className="composer-starter-chips" data-agent-run-launcher="composer-inline" data-starter-prompts="composer-inline" aria-label="Agent run launcher">
-                {STARTER_PROMPTS.map((starter, index) => (
+                {DEFAULT_COMPOSER_STARTERS.map((starter, index) => (
                   <ActionChip
                     action={{ id: `starter.prompt.${index}`, label: starter.label, shortLabel: starter.shortLabel, ariaLabel: starter.label, title: starter.template, icon: starter.icon }}
                     key={starter.label}
@@ -3580,7 +3623,7 @@ export function App() {
                   <div className="artifact-pane-tabs" data-right-pane-tabs="agent-cockpit-mermaid-board" role="tablist" aria-label="Agent Cockpit">
                     {RIGHT_PANE_TAB_GROUPS.map((group) => (
                       <div className="artifact-pane-tab-group" data-right-pane-tab-group={group} key={group}>
-                        {RIGHT_PANE_TABS.filter((tab) => tab.group === group).map((tab) => (
+                        {visibleRightPaneTabs.filter((tab) => tab.group === group).map((tab) => (
                           <button
                             aria-label={tab.label}
                             aria-selected={rightPaneTab === tab.id}
@@ -3736,7 +3779,7 @@ function paneIntentForAction(action: StudioAction): PaneIntent | null {
     return { tab: "memory", reason: "Research context is most relevant", confidence: 0.84 };
   }
   if (action === "self-design" || action === "design-doc") {
-    return { tab: "work-packet", reason: "Design action selected", confidence: 0.82 };
+    return { tab: "run", reason: "Design action starts in the run trace", confidence: 0.82 };
   }
   if (action === "audit" || action === "fix" || action === "app-build" || action === "browser-audit") {
     return { tab: "run", reason: "Run trace is most relevant", confidence: 0.78 };
@@ -4326,6 +4369,9 @@ function ContextualInspectorPane(props: {
     pendingApprovals,
     lastFailure: props.lastFailure,
   });
+  const [showReadinessDetails, setShowReadinessDetails] = useState(false);
+  const readinessNeedsAttention = readinessItems.some((item) => item.status !== "ready");
+  const showReadinessPanel = readinessNeedsAttention || showReadinessDetails;
 
   return (
     <section className="agent-cockpit-pane inspector-pane" data-agent-cockpit="inspector" data-pane-intent-surface="inspector">
@@ -4359,42 +4405,33 @@ function ContextualInspectorPane(props: {
               <dt>Session</dt>
               <dd>{compactSessionStatusLabel(props.visibleSessionStatus)}</dd>
             </div>
-            <div>
-              <dt>Events</dt>
-              <dd>{props.events.length}</dd>
-            </div>
-            <div>
-              <dt>Files</dt>
-              <dd>{props.designTrace?.files.length ?? 0}</dd>
-            </div>
-            <div>
-              <dt>Approvals</dt>
-              <dd>{pendingApprovals.length}</dd>
-            </div>
-            <div>
-              <dt>Cost</dt>
-              <dd>{props.usageSnapshot ? formatCostEstimate(props.usageSnapshot.totals.estimatedCostUsd) : props.usageLoading ? "..." : "--"}</dd>
-            </div>
           </dl>
           <p>{props.lastFailure ? trimText(props.lastFailure.message, 140) : "Select a run event, changed file, artifact, or approval to inspect details here."}</p>
-          <section className="designer-readiness-panel" aria-label="Designer workbench readiness">
-            <header>
-              <span>Designer workbench</span>
-              <strong>{designerReadinessSummary(readinessItems)}</strong>
-            </header>
-            <div className="designer-readiness-list">
-              {readinessItems.map((item) => (
-                <article className="designer-readiness-item" data-readiness-status={item.status} key={item.id}>
-                  <i className="status-dot" data-auth-status={item.status === "missing" ? "missing" : item.status} aria-hidden="true" />
-                  <div>
-                    <strong>{item.label}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-          <button data-action-id="inspector.usage" type="button" onClick={props.onOpenUsageLimits}>Usage details</button>
+          {showReadinessPanel ? (
+            <section className="designer-readiness-panel" aria-label="Designer workbench readiness">
+              <header>
+                <span>Designer workbench</span>
+                <strong>{designerReadinessSummary(readinessItems)}</strong>
+              </header>
+              <div className="designer-readiness-list">
+                {readinessItems.map((item) => (
+                  <article className="designer-readiness-item" data-readiness-status={item.status} key={item.id}>
+                    <i className="status-dot" data-auth-status={item.status === "missing" ? "missing" : item.status} aria-hidden="true" />
+                    <div>
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <div className="inspector-summary-actions">
+            <button data-action-id="inspector.usage" type="button" onClick={props.onOpenUsageLimits}>Usage details</button>
+            <button data-action-id="inspector.readiness" type="button" onClick={() => setShowReadinessDetails((current) => !current)}>
+              {showReadinessPanel ? "Hide readiness" : "Readiness details"}
+            </button>
+          </div>
         </section>
       ) : null}
 
@@ -4858,7 +4895,7 @@ function truthHarnessLabel(harness: Harness | undefined, shortName: string): str
   if (harness.authStatus === "needs_login") return `${shortName} login`;
   if (harness.authStatus === "signed_in" || harness.authStatus === "ready") return `${shortName} signed in`;
   if (harness.authStatus === "not_required") return `${shortName} available`;
-  return `${shortName} checking`;
+  return harness.installed ? `${shortName} available` : `${shortName} checking`;
 }
 
 function truthHarnessStatus(harness: Harness | undefined): TruthStripStatus {
@@ -4890,7 +4927,7 @@ function harnessAuthDot(harness: Harness | undefined): "ready" | "warn" | "missi
   if (!harness.installed || harness.authStatus === "missing") return "missing";
   if (harness.authStatus === "needs_login") return "warn";
   if (harness.authStatus === "signed_in" || harness.authStatus === "ready" || harness.authStatus === "not_required") return "ready";
-  return "unknown";
+  return harness.installed ? "ready" : "unknown";
 }
 
 function ConversationGoalRow(props: {

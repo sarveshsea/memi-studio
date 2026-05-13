@@ -9,7 +9,7 @@ export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
 
 export type HarnessVisibility = "primary" | "advanced";
 
-export const DEFAULT_RIGHT_PANE_TAB_IDS = ["run", "work-packet", "changes", "memory"] as const;
+export const DEFAULT_RIGHT_PANE_TAB_IDS = ["run", "changes", "memory"] as const;
 export type WorkbenchRightPaneTab = (typeof WORKBENCH_COPY.rightPaneTabs)[number]["id"];
 
 export function isPrimaryHarness(id: HarnessId): boolean {
