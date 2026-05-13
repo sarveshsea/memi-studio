@@ -205,7 +205,6 @@ type RightPaneTab = WorkbenchRightPaneTab;
 type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
 type TruthStripStatus = "ready" | "warn" | "missing" | "unknown";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
-type ComposerPetState = "idle" | "typing" | "ready" | "submitting" | "running" | "queued" | "success" | "error" | "limited";
 
 interface TruthStripItemModel {
   id: string;
@@ -687,17 +686,6 @@ export function App() {
       ?? null;
   }, [reviewPackets, session?.id]);
   const lastFailure = useMemo(() => findLatestFailureEvent(events), [events]);
-  const composerPet = composerPetState({
-    prompt,
-    canRunSession,
-    isStartingSession,
-    isSessionActive,
-    queuedPrompt,
-    visibleSessionStatus,
-    lastFailure,
-    usageWarning,
-    errorMessage: error,
-  });
   const latestRun = session ?? recentSessions[0] ?? null;
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
@@ -3033,7 +3021,6 @@ export function App() {
         </div>
 
         <CommandBar data-command-editor="bottom-pinned" data-composer-layout="single-toolbar">
-          <ComposerPet state={composerPet} />
           <div
             className="message-composer"
             data-composer-agent-state="codex-workbench"
@@ -3475,6 +3462,7 @@ export function App() {
         <header className="console-topbar" data-top-status-bar="studio-status" data-topbar-density="thirty-percent" data-icon-topbar="memoire-compact">
           <div className="wordmark-row" aria-label="Mémoire">
             <MemoireLogoMark />
+            <span className="wordmark-text">Mémoire</span>
           </div>
           <div className="harness-readiness-row" data-harness-readiness="compact" data-harness-readiness-contract="truth-strip" data-topbar-tags="left-compact" aria-label="Runtime, agent, and workspace status">
             {truthStripItems.map((item) => (
@@ -3907,52 +3895,6 @@ function usageLimitChipLabel(snapshot: StudioUsageSnapshot | null, limit: UsageL
   if (limit?.status === "warning") return "Budget";
   if (!snapshot) return "Limits";
   return `${formatTokenCount(snapshot.totals.totalTokens)} tok`;
-}
-
-function composerPetState(input: {
-  prompt: string;
-  canRunSession: boolean;
-  isStartingSession: boolean;
-  isSessionActive: boolean;
-  queuedPrompt: string;
-  visibleSessionStatus: string;
-  lastFailure: StudioEvent | null;
-  usageWarning: UsageLimitState | null;
-  errorMessage: string | null;
-}): ComposerPetState {
-  if (input.lastFailure || input.errorMessage) return "error";
-  if (input.usageWarning && input.usageWarning.status !== "ok") return "limited";
-  if (input.isStartingSession) return "submitting";
-  if (input.queuedPrompt.trim()) return "queued";
-  if (input.isSessionActive) return "running";
-  if (input.prompt.trim()) return input.canRunSession ? "ready" : "typing";
-  if (input.visibleSessionStatus === "completed") return "success";
-  return "idle";
-}
-
-const COMPOSER_PET_FRAMES: Record<ComposerPetState, [string, string, string]> = {
-  idle: ["(・ω・)", "(・ᴗ・)", "(・ω・)"],
-  typing: ["(・o・)", "(・O・)", "(・o・)"],
-  ready: ["(・v・)", "(・ᴗ・)", "(・v・)"],
-  submitting: ["(・-・)", "(・o・)", "(・-・)"],
-  running: ["(ง・ω・)ง", "(ง・ᴗ・)ง", "(ง・ω・)ง"],
-  queued: ["(・…・)", "(・-・)", "(・…・)"],
-  success: ["(・ᴗ・)ノ", "(・▽・)ノ", "(・ᴗ・)ノ"],
-  error: ["(・!・)", "(；︵；)", "(・!・)"],
-  limited: ["(・_・)", "(・o・)!", "(・_・)"],
-};
-
-function ComposerPet({ state }: { state: ComposerPetState }) {
-  const frames = COMPOSER_PET_FRAMES[state];
-  return (
-    <div className="composer-pet-strip" data-composer-pet="kaomoji-sprite" data-composer-pet-state={state} aria-hidden="true">
-      <span className="composer-pet-track" aria-hidden="true">
-        {frames.map((glyph, index) => (
-          <span className="composer-pet-sprite" data-composer-pet-glyph={index} key={`${state}-${index}`}>{glyph}</span>
-        ))}
-      </span>
-    </div>
-  );
 }
 
 function usageLimitRows(snapshot: StudioUsageSnapshot | null): Array<{ id: string; label: string; message: string; status: UsageLimitState["status"] }> {
