@@ -943,6 +943,121 @@ button.active,
   width: 100%;
   height: 1px;
 }
+.run-spine {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+.run-spine-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.run-spine-marker {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  margin-top: 7px;
+}
+.run-spine-row[data-status="running"] .run-spine-marker { border-color: var(--accent); background: var(--accent); }
+.run-spine-row[data-status="done"] .run-spine-marker { border-color: var(--ok); background: var(--ok); }
+.run-spine-row[data-status="warn"] .run-spine-marker { border-color: var(--danger); background: var(--danger); }
+.run-spine-row-body {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-2);
+}
+.run-spine-row:last-of-type .run-spine-row-body {
+  border-bottom: 0;
+}
+.run-spine-row-body header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.run-spine-row-body header span {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.run-spine-row-body header small,
+.run-spine-row-body p,
+.run-spine-receipt small,
+.run-spine-log summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-spine-row-body p {
+  margin: 0;
+  line-height: 1.45;
+}
+.run-spine-receipts {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.run-spine-receipt {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  background: var(--surface-soft);
+  padding: var(--space-0-5) var(--space-1);
+}
+.run-spine-receipt strong {
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+.run-spine-receipt[data-status="running"] { border-color: var(--accent); }
+.run-spine-receipt[data-status="warn"] { border-color: var(--danger); }
+.run-spine-log {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  background: var(--surface);
+}
+.run-spine-log summary {
+  min-height: var(--control-height);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+}
+.run-spine-log summary span {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.run-spine-log .block-feed {
+  background: transparent;
+  border-top: 1px solid var(--line);
+}
+.run-spine-start {
+  min-height: var(--control-height);
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 .conversation-scroll-region .activity-timeline {
   padding: var(--space-2) var(--space-2) var(--space-0);
 }

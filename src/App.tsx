@@ -138,8 +138,9 @@ import {
   type StudioWorkspacePermissions,
   type StudioAttachment,
   type StudioAttachmentSource,
+  type StudioActiveProcess,
+  type StudioActivityItem,
   type StudioDownloadJob,
-  type StudioWorkArtifact,
 } from "./studio-api";
 import { deriveStudioTrace, type StudioTraceModel } from "./runtime/index.js";
 import {
@@ -162,7 +163,6 @@ import {
   ProjectSidebar,
   SettingsPanel,
   StudioControlIcon,
-  WorkArtifactCards,
   WorkPacketPane,
   ActionChip,
   IconButton,
@@ -1169,29 +1169,6 @@ export function App() {
       setReviewPacketError(message);
       setError(message);
     }
-  }
-
-  function copyWorkArtifact(artifact: StudioWorkArtifact) {
-    void copyText(`${artifact.title}\n\n${artifact.body || artifact.summary}`);
-  }
-
-  function useWorkArtifactAsContext(artifact: StudioWorkArtifact) {
-    setPrompt((current) => `${current.trim()}\n\n${WORKBENCH_COPY.artifactPrompts.context(artifact.title, artifact.body || artifact.summary)}`.trim());
-  }
-
-  function addWorkArtifactToChangelog(artifact: StudioWorkArtifact) {
-    openChangelogSurface();
-    setPrompt((current) => `${current.trim()}\n\n${WORKBENCH_COPY.artifactPrompts.changelog(artifact.title, artifact.body || artifact.summary)}`.trim());
-  }
-
-  function sendWorkArtifactToBoard(artifact: StudioWorkArtifact) {
-    chooseRightPane("mermaid-board", "Work artifact sent to PM Board");
-    handleUseMermaidBoardAgentPrompt(WORKBENCH_COPY.artifactPrompts.board(artifact.title, artifact.body || artifact.summary));
-  }
-
-  function sendWorkArtifactToFigma(artifact: StudioWorkArtifact) {
-    openFigmaSurface();
-    setPrompt((current) => `${current.trim()}\n\n${WORKBENCH_COPY.artifactPrompts.figma(artifact.title, artifact.body || artifact.summary)}`.trim());
   }
 
   async function handleInstallMarketplaceNote(noteId: string) {
@@ -2916,61 +2893,25 @@ export function App() {
           onScroll={handleConversationScroll}
           ref={scrollRegionRef}
         >
-          <WorkArtifactCards
-            events={events}
-            packet={activeReviewPacket}
-            onAddToChangelog={addWorkArtifactToChangelog}
-            onCopy={copyWorkArtifact}
-            onOpenPacket={() => void openActiveReviewPacket()}
-            onSendToBoard={sendWorkArtifactToBoard}
-            onSendToFigma={sendWorkArtifactToFigma}
-            onUseAsContext={useWorkArtifactAsContext}
-          />
-
-          <ActivityTimeline
+          <RunSpine
+            session={session}
+            prompt={prompt}
+            actionLabel={effectiveActionLabel}
             activities={traceModel.activities}
             activeProcesses={traceModel.activeProcesses}
             agentThinkingState={agentThinkingState}
+            terminalBlocks={visibleTerminalBlocks}
+            totalTerminalBlockCount={terminalBlocks.length}
+            designTrace={designTrace}
+            lastFailure={lastFailure}
+            collapsedBlockIds={collapsedBlockIds}
             onStart={() => void run()}
+            onCopyBlock={(block) => void copyText(block.messages.join(""))}
+            onAttachBlock={attachBlock}
+            onToggleBlock={toggleBlock}
+            onClearSearch={() => setChatSearchQuery("")}
           />
-
-          <section
-            className="block-feed"
-            data-block-feed="terminal-blocks"
-            data-output-renderer="inline"
-            data-message-feed="chat-output"
-            aria-label="Conversation output"
-          >
-            {visibleTerminalBlocks.map((block) => (
-              <TerminalBlockSurface kind={block.kind} key={block.id}>
-                <header>
-                  <div>
-                    <span>{block.title}</span>
-                    <small>{block.meta}</small>
-                  </div>
-                  <div className="blockActions">
-                    {block.timestamp ? <time dateTime={block.timestamp}>{formatTime(block.timestamp)}</time> : null}
-                    <IconButton {...workbenchAction("copy")} actionId={`block.copy.${block.id}`} ariaLabel={`Copy ${block.title}`} onClick={() => void copyText(block.messages.join(""))} />
-                    <IconButton {...workbenchAction("context")} actionId={`block.context.${block.id}`} ariaLabel={`Use ${block.title} as context`} onClick={() => attachBlock(block)} />
-                    <IconButton
-                      {...workbenchAction(collapsedBlockIds.has(block.id) ? "expand" : "collapse")}
-                      actionId={`block.toggle.${block.id}`}
-                      ariaLabel={collapsedBlockIds.has(block.id) ? `Expand ${block.title}` : `Collapse ${block.title}`}
-                      onClick={() => toggleBlock(block.id)}
-                    />
-                  </div>
-                </header>
-                {!collapsedBlockIds.has(block.id) ? <BlockBody block={block} /> : null}
-              </TerminalBlockSurface>
-            ))}
-
-            {terminalBlocks.length > 0 && visibleTerminalBlocks.length === 0 ? (
-              <div className="empty-state compact-empty-state" data-smart-empty-state="output-filter">
-                <button data-action-id="conversation.search.clear" type="button" onClick={() => setChatSearchQuery("")}>Clear</button>
-              </div>
-            ) : null}
-            <div aria-hidden="true" data-latest-anchor ref={bottomAnchorRef} />
-          </section>
+          <div aria-hidden="true" data-latest-anchor ref={bottomAnchorRef} />
         </section>
 
         <div className="agent-live-status" data-agent-thinking-state={agentThinkingState}>
@@ -4231,6 +4172,215 @@ function composerPlaceholder(inputMode: StudioInputMode, chatMode: StudioChatMod
     default:
       return "Ask Mémoire to design, audit, or build…";
   }
+}
+
+function RunSpine(props: {
+  session: SessionSummary | null;
+  prompt: string;
+  actionLabel: string;
+  activities: StudioActivityItem[];
+  activeProcesses: StudioActiveProcess[];
+  agentThinkingState: "thinking" | "running" | "idle" | "failed";
+  terminalBlocks: TerminalBlock[];
+  totalTerminalBlockCount: number;
+  designTrace: StudioDesignSystemTrace | null;
+  lastFailure: StudioEvent | null;
+  collapsedBlockIds: Set<string>;
+  onStart: () => void;
+  onCopyBlock: (block: TerminalBlock) => void;
+  onAttachBlock: (block: TerminalBlock) => void;
+  onToggleBlock: (blockId: string) => void;
+  onClearSearch: () => void;
+}) {
+  const promptText = props.session?.prompt ?? props.prompt.trim();
+  const latestPlan = [...props.activities].reverse().find((activity) =>
+    activity.kind === "thinking" || /plan|intent|reason/i.test(`${activity.label} ${activity.summary}`),
+  ) ?? null;
+  const toolActivities = props.activities.filter((activity) => activity.kind !== "thinking").slice(-6);
+  const toolReceipts = [
+    ...props.activeProcesses.map((process) => ({
+      id: `process-${process.id}`,
+      label: "Running",
+      detail: trimText(process.command, 86),
+      status: "running",
+      title: process.cwd ?? process.command,
+    })),
+    ...toolActivities.map(runSpineActivityReceipt),
+  ].slice(-6);
+  const changedFiles = props.designTrace?.files ?? [];
+  const fileReceipts = changedFiles.slice(0, 5).map((file) => ({
+    id: file.path,
+    label: file.status,
+    detail: `${runSpineCompactPath(file.path)} +${file.insertions} -${file.deletions}`,
+    status: file.status === "deleted" ? "warn" : "done",
+    title: file.path,
+  }));
+  const resultBlock = [...props.terminalBlocks].reverse().find((block) =>
+    block.kind === "session_result"
+    || block.events.some((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)),
+  ) ?? null;
+  const rows = [
+    {
+      id: "prompt",
+      label: "Prompt",
+      status: promptText ? "done" : "idle",
+      summary: promptText ? trimText(promptText, 180) : "Start with a prompt. The run spine will fill in as the agent works.",
+      meta: props.session ? `${props.session.harness} / ${props.session.action ?? "run"}` : props.actionLabel,
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      status: props.agentThinkingState === "thinking" ? "running" : latestPlan ? latestPlan.status : "idle",
+      summary: latestPlan?.summary ?? `${props.actionLabel} is ready. Plan and intent appear here once a run starts.`,
+      meta: latestPlan ? runSpineActivityMeta(latestPlan) : "intent",
+    },
+    {
+      id: "tools",
+      label: "Tool Calls",
+      status: props.activeProcesses.length ? "running" : toolActivities.length ? "done" : "idle",
+      summary: props.activeProcesses.length
+        ? `${props.activeProcesses.length} command${props.activeProcesses.length === 1 ? "" : "s"} running`
+        : toolActivities.length
+          ? `${toolActivities.length} recent action${toolActivities.length === 1 ? "" : "s"}`
+          : "No tool calls yet.",
+      receipts: toolReceipts,
+    },
+    {
+      id: "files",
+      label: "Files Changed",
+      status: changedFiles.length ? "warn" : "done",
+      summary: changedFiles.length
+        ? `${changedFiles.length} file${changedFiles.length === 1 ? "" : "s"} changed`
+        : props.designTrace?.error ?? "Clean",
+      meta: props.designTrace?.reviewLabel ?? "workspace",
+      receipts: fileReceipts,
+    },
+    {
+      id: "result",
+      label: "Result",
+      status: props.lastFailure ? "warn" : props.session?.status === "completed" ? "done" : props.session?.status === "running" || props.session?.status === "queued" ? "running" : "idle",
+      summary: props.lastFailure?.message
+        ?? runSpineResultSummary(resultBlock)
+        ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Awaiting run"),
+      meta: resultBlock?.title ?? props.session?.status ?? "standby",
+    },
+  ];
+  return (
+    <section className="run-spine" data-run-spine="compact" aria-label="Run timeline">
+      {rows.map((row) => (
+        <article className="run-spine-row" data-run-spine-row={row.id} data-status={row.status} key={row.id}>
+          <div className="run-spine-marker" aria-hidden="true" />
+          <div className="run-spine-row-body">
+            <header>
+              <span>{row.label}</span>
+              <small>{row.meta ?? row.status}</small>
+            </header>
+            <p title={row.summary}>{trimText(row.summary, 220)}</p>
+            {row.receipts?.length ? (
+              <div className="run-spine-receipts" data-run-spine-receipts={row.id}>
+                {row.receipts.map((receipt) => (
+                  <span className="run-spine-receipt" data-status={receipt.status} key={receipt.id} title={receipt.title ?? receipt.detail}>
+                    <strong>{receipt.label}</strong>
+                    <small>{receipt.detail}</small>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </article>
+      ))}
+      {props.totalTerminalBlockCount > 0 ? (
+        <details className="run-spine-log" data-run-spine-log="raw">
+          <summary>
+            <span>View log</span>
+            <small>{props.terminalBlocks.length}/{props.totalTerminalBlockCount} blocks</small>
+          </summary>
+          <section
+            className="block-feed"
+            data-block-feed="terminal-blocks"
+            data-output-renderer="inline"
+            data-message-feed="chat-output"
+            aria-label="Raw run log"
+          >
+            {props.terminalBlocks.map((block) => (
+              <TerminalBlockSurface kind={block.kind} key={block.id}>
+                <header>
+                  <div>
+                    <span>{block.title}</span>
+                    <small>{block.meta}</small>
+                  </div>
+                  <div className="blockActions">
+                    {block.timestamp ? <time dateTime={block.timestamp}>{formatTime(block.timestamp)}</time> : null}
+                    <IconButton {...workbenchAction("copy")} actionId={`block.copy.${block.id}`} ariaLabel={`Copy ${block.title}`} onClick={() => props.onCopyBlock(block)} />
+                    <IconButton {...workbenchAction("context")} actionId={`block.context.${block.id}`} ariaLabel={`Use ${block.title} as context`} onClick={() => props.onAttachBlock(block)} />
+                    <IconButton
+                      {...workbenchAction(props.collapsedBlockIds.has(block.id) ? "expand" : "collapse")}
+                      actionId={`block.toggle.${block.id}`}
+                      ariaLabel={props.collapsedBlockIds.has(block.id) ? `Expand ${block.title}` : `Collapse ${block.title}`}
+                      onClick={() => props.onToggleBlock(block.id)}
+                    />
+                  </div>
+                </header>
+                {!props.collapsedBlockIds.has(block.id) ? <BlockBody block={block} /> : null}
+              </TerminalBlockSurface>
+            ))}
+            {props.totalTerminalBlockCount > 0 && props.terminalBlocks.length === 0 ? (
+              <div className="empty-state compact-empty-state" data-smart-empty-state="output-filter">
+                <button data-action-id="conversation.search.clear" type="button" onClick={props.onClearSearch}>Clear</button>
+              </div>
+            ) : null}
+          </section>
+        </details>
+      ) : (
+        <button className="run-spine-start" data-action-id="activity.start" type="button" onClick={props.onStart}>
+          <StudioControlIcon name="command" />
+          <span>Start</span>
+        </button>
+      )}
+    </section>
+  );
+}
+
+function runSpineActivityReceipt(activity: StudioActivityItem) {
+  return {
+    id: activity.id,
+    label: runSpineActivityLabel(activity),
+    detail: runSpineActivityMeta(activity),
+    status: activity.status === "failed" ? "warn" : activity.status === "running" ? "running" : "done",
+    title: activity.command ?? activity.targetPath ?? activity.summary,
+  };
+}
+
+function runSpineActivityLabel(activity: StudioActivityItem): string {
+  if (activity.kind === "reading_file") return "Read";
+  if (activity.kind === "searching") return "Search";
+  if (activity.kind === "listing") return "List";
+  if (activity.kind === "writing_file") return "Write";
+  if (activity.kind === "running_command") return "Command";
+  if (activity.kind === "browser_action") return "Browser";
+  if (activity.kind === "figma_action") return "Figma";
+  if (activity.kind === "mcp_call") return "MCP";
+  if (activity.kind === "computer_action") return "Computer";
+  if (activity.kind === "using_tool") return "Tool";
+  return "Action";
+}
+
+function runSpineActivityMeta(activity: StudioActivityItem): string {
+  if (activity.targetPath) return runSpineCompactPath(activity.targetPath);
+  if (activity.command) return trimText(activity.command, 86);
+  return trimText(activity.summary, 86);
+}
+
+function runSpineCompactPath(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.length > 2 ? parts.slice(-2).join("/") : normalized;
+}
+
+function runSpineResultSummary(block: TerminalBlock | null): string | null {
+  if (!block) return null;
+  const text = block.messages.map((message) => message.trim()).find(Boolean);
+  return text ? trimText(text, 180) : block.title;
 }
 
 function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth): string {
