@@ -183,6 +183,14 @@ import type { IASurfaceProps } from "./ia-surface";
 import type { MermaidBoardSurfaceProps } from "./mermaid-board-surface";
 import { SLASH_COMMANDS, applySlashCommand, filterSlashCommands, slashCommandPreview, type SlashCommand } from "./slash-commands";
 import { WORKBENCH_COPY, workbenchAction, type WorkbenchIconName } from "./workbench-copy";
+import {
+  DEFAULT_PRIMARY_HARNESS_ID,
+  DEFAULT_RIGHT_PANE_TAB_IDS,
+  normalizePrimaryHarness,
+  normalizeRightPaneTab,
+  primaryHarnesses,
+  type WorkbenchRightPaneTab,
+} from "./studio-workbench";
 import { CostHud } from "./cost-hud";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
@@ -194,7 +202,8 @@ const ACTIONS: Array<{ id: StudioAction; label: string }> = WORKBENCH_COPY.actio
 const CHAT_MODES: Array<{ id: StudioChatMode; label: string }> = WORKBENCH_COPY.chatModes.map((mode) => ({ ...mode }));
 const PERMISSION_MODES: Array<{ id: StudioPermissionMode; label: string }> = WORKBENCH_COPY.permissionModes.map((mode) => ({ ...mode }));
 
-type RightPaneTab = (typeof WORKBENCH_COPY.rightPaneTabs)[number]["id"] | "mirofish-research";
+type RightPaneTab = WorkbenchRightPaneTab;
+type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
 type ComposerPetState = "idle" | "typing" | "ready" | "submitting" | "running" | "queued" | "success" | "error" | "limited";
 
@@ -302,8 +311,10 @@ interface PositionedScenarioLabNode extends ScenarioLabNode {
 }
 
 const RIGHT_PANE_TAB_GROUPS = ["primary", "utility"] as const;
-const RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
+const ALL_RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
   WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }));
+const RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
+  ALL_RIGHT_PANE_TABS.filter((tab) => DEFAULT_RIGHT_PANE_TAB_IDS.includes(normalizeRightPaneTab(tab.id) as typeof DEFAULT_RIGHT_PANE_TAB_IDS[number]));
 
 const SCENARIO_TOOL_IDS = ["harness.study", "research.patterns.extract", "research.patterns.list", "simulation.models", "simulation.run_matrix", "simulation.transcript", "research.design_package", "mermaid_jam.export"] as const;
 const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.update_node", "board.connect", "board.layout", "board.capture_ia", "board.export_mermaid_jam"] as const;
@@ -311,8 +322,6 @@ const PM_MERMAID_BOARD_TOOL_IDS = ["board.apply_template", "board.sync_figjam"] 
 const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavailable;
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 
-const PRIMARY_HARNESS_IDS: HarnessId[] = ["claude-code", "codex", "hermes"];
-const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "claude-code";
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
 const TRACE_REFRESH_DELAY_MS = 350;
@@ -400,7 +409,7 @@ export function App() {
   const [serverTrace, setServerTrace] = useState<StudioTraceSnapshot | null>(null);
   const [isStartingSession, setIsStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [runtimeHealth, setRuntimeHealth] = useState<"offline" | "starting" | "ready" | "degraded">("starting");
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth>("starting");
   const [runtimeRecoveryMessage, setRuntimeRecoveryMessage] = useState<string | null>(null);
   const [runtimeMetrics, setRuntimeMetrics] = useState<StudioRuntimeMetrics | null>(null);
   const [usageSnapshot, setUsageSnapshot] = useState<StudioUsageSnapshot | null>(null);
@@ -821,6 +830,14 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (runtimeHealth !== "starting") return undefined;
+    const timeout = window.setTimeout(() => {
+      void refresh();
+    }, 750);
+    return () => window.clearTimeout(timeout);
+  }, [runtimeHealth]);
+
   async function refresh() {
     try {
       const nextStatus = await getStatus();
@@ -847,7 +864,7 @@ export function App() {
         nextRecentWorkspaces,
         nextWorkspacePermissions,
       ] = await Promise.all([
-        nextStatus.harnesses ? Promise.resolve(nextStatus.harnesses) : listHarnesses(),
+        listHarnesses({ refresh: true }).catch(() => nextStatus.harnesses ?? []),
         getProjectMemory().catch(() => null),
         getKnowledgeIndex().catch(() => null),
         getFigmaStatus().catch(() => null),
@@ -870,8 +887,8 @@ export function App() {
       ]);
       setStatus(nextStatus);
       setRuntimeMetrics(nextRuntimeMetrics);
-      setRuntimeHealth(nextStatus.status === "running" ? "ready" : "degraded");
-      setRuntimeRecoveryMessage(null);
+      setRuntimeHealth(runtimeHealthFromStatus(nextStatus));
+      setRuntimeRecoveryMessage(nextStatus.runtime?.error ?? null);
       setHarnesses(nextHarnesses);
       setSettingsDraft(nextStatus.config);
       setSelectedHarness(normalizePrimaryHarness(nextStatus.config.defaultHarness, nextHarnesses));
@@ -3205,8 +3222,6 @@ export function App() {
             <span title={status?.projectRoot}>{workspaceLabel}</span>
             <span>{currentHarness?.label ?? selectedHarness}</span>
             <span title={currentHarness?.authMessage ?? harnessStatusCopy}>{harnessStatusCopy}</span>
-            <button data-workspace-action="new-folder" type="button" onClick={() => void handleCreateWorkspace()}>New folder</button>
-            <button data-workspace-action="open-folder" type="button" onClick={() => void handleOpenWorkspace()}>Open folder</button>
             <IconButton
               {...workbenchAction("changeWorkspace")}
               actionId={workbenchAction("changeWorkspace").id}
@@ -3492,7 +3507,7 @@ export function App() {
       );
     }
     if (rightPaneTab === "ia") return renderIAPane();
-    if (rightPaneTab === "research-lab" || rightPaneTab === "mirofish-research") return renderScenarioLab();
+    if (rightPaneTab === "research-lab") return renderScenarioLab();
     if (rightPaneTab === "mermaid-board") return renderMermaidBoardPane();
     if (rightPaneTab === "design-changelog") {
       return (
@@ -3670,7 +3685,7 @@ export function App() {
                   {paneIntent ? (
                     <div className="agent-pane-intent" data-agent-pane-intent="suggested-switch">
                       <span>Agent Cockpit</span>
-                      <strong>{RIGHT_PANE_TABS.find((tab) => tab.id === paneIntent.tab)?.label ?? paneIntent.tab}</strong>
+                      <strong>{ALL_RIGHT_PANE_TABS.find((tab) => tab.id === paneIntent.tab)?.label ?? paneIntent.tab}</strong>
                       <small>{paneIntent.reason} · {Math.round(paneIntent.confidence * 100)}%</small>
                     </div>
                   ) : null}
@@ -3758,7 +3773,7 @@ export function App() {
         computerStatus={computerStatus}
         figmaStatus={figmaStatus}
         figmaConnecting={figmaConnecting}
-        harnesses={visibleHarnesses}
+        harnesses={harnesses}
         marketplaceNotes={marketplaceNotes}
         marketplaceBusyId={marketplaceBusyId}
         marketplaceError={marketplaceError}
@@ -3804,10 +3819,10 @@ export function App() {
 
 function paneIntentForAction(action: StudioAction): PaneIntent | null {
   if (action === "simulate") {
-    return { tab: "research-lab", reason: "Simulation action selected", confidence: 0.9 };
+    return { tab: "run", reason: "Simulation runs stay in the trace", confidence: 0.9 };
   }
   if (action === "research") {
-    return { tab: "research-lab", reason: "Research action selected", confidence: 0.84 };
+    return { tab: "memory", reason: "Research context is most relevant", confidence: 0.84 };
   }
   if (action === "self-design" || action === "design-doc") {
     return { tab: "work-packet", reason: "Design action selected", confidence: 0.82 };
@@ -3832,20 +3847,14 @@ function paneIntentForEvents(events: StudioEvent[], action: StudioAction, lastFa
   if (!event) return paneIntentForAction(action);
   const type = event.type.toLowerCase();
   const text = `${type} ${event.message ?? ""} ${JSON.stringify(event.data ?? {})}`;
-  if (/\b(information architecture|ia\b|sitemap|navigation|journey|user flow|screen map|sequenceDiagram)\b/i.test(text)) {
-    return { tab: "ia", reason: "IA-ready artifact received", confidence: 0.88, sourceEventId: event.id };
-  }
-  if (type.startsWith("board_") || type.startsWith("board.") || type.includes("mermaid")) {
-    return { tab: "mermaid-board", reason: "Board update received", confidence: 0.9, sourceEventId: event.id };
-  }
   if (type.startsWith("simulation_") || type.includes("simulation")) {
-    return { tab: "research-lab", reason: "Simulation event received", confidence: 0.88, sourceEventId: event.id };
+    return { tab: "run", reason: "Simulation event received", confidence: 0.88, sourceEventId: event.id };
   }
   if (type.startsWith("research_") || type.includes("research")) {
-    return { tab: "research-lab", reason: "Research event received", confidence: 0.82, sourceEventId: event.id };
+    return { tab: "memory", reason: "Research event received", confidence: 0.82, sourceEventId: event.id };
   }
   if (type.startsWith("figma_") || type.includes("figma")) {
-    return { tab: "figma", reason: "Figma bridge event received", confidence: 0.86, sourceEventId: event.id };
+    return { tab: "work-packet", reason: "Figma artifact received", confidence: 0.86, sourceEventId: event.id };
   }
   if (type.includes("design_system") || type.includes("design_artifact") || type === "artifact" || type === "design_decision" || type === "session_result") {
     return { tab: "work-packet", reason: "Packet-ready artifact received", confidence: 0.84, sourceEventId: event.id };
@@ -3935,10 +3944,6 @@ function macOSSettingsUrl(permission: string): string {
   if (permission === "automation") return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation";
   if (permission === "fileAccess") return "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
   return "x-apple.systempreferences:com.apple.preference.security";
-}
-
-function normalizeRightPaneTab(tab: RightPaneTab): Exclude<RightPaneTab, "mirofish-research"> {
-  return tab === "mirofish-research" ? "research-lab" : tab;
 }
 
 function layoutScenarioLabGraph(nodes: ScenarioLabNode[], edges: Array<[string, string]>): PositionedScenarioLabNode[] {
@@ -4114,7 +4119,7 @@ function updateSessionSummaryCollection(
 }
 
 function RuntimeRecoveryStrip(props: {
-  health: "offline" | "starting" | "ready" | "degraded";
+  health: RuntimeHealth;
   message: string | null;
   canRestart: boolean;
   onRetry: () => void;
@@ -4137,14 +4142,23 @@ function RuntimeRecoveryStrip(props: {
   );
 }
 
-function runtimeHealthLabel(health: "offline" | "starting" | "ready" | "degraded"): string {
+function runtimeHealthFromStatus(status: StudioStatus): RuntimeHealth {
+  const runtimeStatus = status.runtime?.status;
+  if (runtimeStatus === "running") return "ready";
+  if (runtimeStatus === "starting") return "starting";
+  if (runtimeStatus === "stopped" || runtimeStatus === "error") return "degraded";
+  if (status.status === "running" || status.status === "ready") return "ready";
+  return "degraded";
+}
+
+function runtimeHealthLabel(health: RuntimeHealth): string {
   if (health === "ready") return "Ready";
   if (health === "starting") return "Starting";
   if (health === "degraded") return "Degraded";
   return "Offline";
 }
 
-function queueDockItemsFromRuntime(metrics: StudioRuntimeMetrics | null | undefined, health: "offline" | "starting" | "ready" | "degraded"): Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> {
+function queueDockItemsFromRuntime(metrics: StudioRuntimeMetrics | null | undefined, health: RuntimeHealth): Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> {
   if (health !== "ready") return [{ id: "runtime", label: health === "starting" ? "Starting" : health === "degraded" ? "Blocked" : "Offline", detail: "Runtime", status: "blocked" }];
   if (!metrics) return [];
   const items: Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> = [];
@@ -4163,21 +4177,6 @@ function harnessCanRun(harness: Harness | undefined, action: StudioAction): bool
   if (!harness.enabled || !harness.installed) return false;
   if (harness.capabilities?.length && !harness.capabilities.includes(action)) return false;
   return harness.authStatus !== "missing" && harness.authStatus !== "needs_login";
-}
-
-function isPrimaryHarness(id: HarnessId): boolean {
-  return PRIMARY_HARNESS_IDS.includes(id);
-}
-
-function primaryHarnesses(harnesses: Harness[]): Harness[] {
-  const byId = new Map(harnesses.map((harness) => [harness.id, harness]));
-  return PRIMARY_HARNESS_IDS.map((id) => byId.get(id)).filter((harness): harness is Harness => Boolean(harness));
-}
-
-function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): HarnessId {
-  if (isPrimaryHarness(id) && harnesses.some((harness) => harness.id === id)) return id;
-  if (harnesses.some((harness) => harness.id === DEFAULT_PRIMARY_HARNESS_ID)) return DEFAULT_PRIMARY_HARNESS_ID;
-  return primaryHarnesses(harnesses)[0]?.id ?? DEFAULT_PRIMARY_HARNESS_ID;
 }
 
 function harnessReadinessLabel(harness: Harness | undefined): string {
@@ -4222,7 +4221,7 @@ function composerPlaceholder(inputMode: StudioInputMode, chatMode: StudioChatMod
   }
 }
 
-function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: "offline" | "starting" | "ready" | "degraded"): string {
+function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth): string {
   if (runtimeHealth !== "ready") return `Runtime ${runtimeHealthLabel(runtimeHealth)}`;
   if (!prompt.trim()) return "Add a prompt to run";
   if (!harness) return "Pick a harness to run";

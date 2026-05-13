@@ -27,6 +27,7 @@
       "command": "memi",
       "description": "Run the current Mémoire design intelligence engine.",
       "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["memi", "memoire"],
       "capabilities": ["compose", "design-doc", "audit", "references", "video", "raw", "app-build", "self-design", "research", "simulate", "fix", "browser-audit", "handoff"],
       "commandTemplates": {
@@ -59,6 +60,7 @@
       "description": "Delegate to Claude Code when installed.",
       "docsUrl": "https://code.claude.com/docs/en/cli-reference",
       "enabledByDefault": true,
+      "visibility": "primary",
       "installProbe": ["claude"],
       "setup": [
         {
@@ -101,9 +103,9 @@
       ],
       "capabilities": ["compose", "audit", "raw", "app-build", "self-design", "research", "simulate", "fix", "browser-audit", "handoff"],
       "commandTemplates": {
-        "compose": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "{{claudePermissionMode}}", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"],
-        "audit": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "{{claudePermissionMode}}", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"],
-        "raw": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "{{claudePermissionMode}}", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"]
+        "compose": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "default", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"],
+        "audit": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "default", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"],
+        "raw": ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "default", "--append-system-prompt", "{{agentSystemPrompt}}", "{{promptEnvelope}}"]
       },
       "envPolicy": "provider",
       "workspacePolicy": "workspace-required",
@@ -120,6 +122,7 @@
       "description": "Run OpenAI Codex as the primary GPT-5.5 design-oriented repository agent.",
       "docsUrl": "https://developers.openai.com/codex/cli",
       "enabledByDefault": true,
+      "visibility": "primary",
       "installProbe": ["codex"],
       "setup": [
         {
@@ -181,6 +184,7 @@
       "command": "opencode",
       "description": "Delegate to OpenCode when installed.",
       "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["opencode"],
       "pluginDirs": ["~/.opencode/plugins", ".opencode/plugins"],
       "capabilities": ["compose", "audit", "raw", "app-build", "self-design", "research", "simulate", "fix", "browser-audit", "handoff"],
@@ -203,6 +207,7 @@
       "command": "gemini",
       "description": "Delegate to Gemini CLI when installed.",
       "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["gemini"],
       "pluginDirs": ["~/.gemini/plugins", ".gemini/plugins"],
       "capabilities": ["compose", "audit", "raw", "app-build", "self-design", "research", "simulate", "fix", "browser-audit", "handoff"],
@@ -225,6 +230,7 @@
       "command": "ollama",
       "description": "Run a local Ollama model as an agent harness.",
       "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["ollama"],
       "capabilities": ["compose", "raw", "app-build", "self-design", "research", "simulate", "fix", "browser-audit", "handoff"],
       "commandTemplates": {
@@ -245,7 +251,8 @@
       "provider": "local",
       "command": "hermes",
       "description": "Run Hermes Agent chat in non-interactive mode with local workspace context.",
-      "enabledByDefault": true,
+      "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["hermes"],
       "docsUrl": "https://hermes-agent.nousresearch.com/docs/user-guide/cli",
       "setup": [
@@ -324,6 +331,7 @@
       "command": "sh",
       "description": "Trusted shell execution, disabled by default.",
       "enabledByDefault": false,
+      "visibility": "advanced",
       "installProbe": ["sh"],
       "capabilities": ["raw"],
       "commandTemplates": {

@@ -35,6 +35,7 @@ const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const PACKAGE_JSON = join(ROOT, "package.json");
 const BIN_DIR = join(ROOT, "src-tauri", "binaries");
 const RES_DIR = join(ROOT, "src-tauri", "resources", "memoire-runtime");
+const STUDIO_HARNESS_MANIFEST = join(ROOT, "src-tauri", "resources", "harness-manifest.json");
 
 const ALL_ARCHS = process.argv.includes("--all-archs");
 const OFFLINE = process.argv.includes("--offline");
@@ -119,7 +120,7 @@ async function main() {
     console.log(`fetch-runtime: staged ${tauriName}`);
   }
 
-  // Download + extract the resources tarball (skills, notes, plugin, etc.)
+// Download + extract the resources tarball (skills, notes, plugin, etc.)
   await ensureDir(RES_DIR);
   const tarball = await downloadAsset(
     cfg.engineRepo,
@@ -128,7 +129,15 @@ async function main() {
     dirname(RES_DIR),
   );
   console.log(`fetch-runtime: extracting ${cfg.resourcesAsset}`);
-  await exec("tar", ["-xzf", tarball, "-C", dirname(RES_DIR)]);
+  await fs.rm(RES_DIR, { recursive: true, force: true });
+  await ensureDir(RES_DIR);
+  await exec("tar", ["-xzf", tarball, "-C", RES_DIR]);
+  if (await exists(STUDIO_HARNESS_MANIFEST)) {
+    const runtimeManifest = join(RES_DIR, "studio", "harness-manifest.json");
+    await ensureDir(dirname(runtimeManifest));
+    await fs.copyFile(STUDIO_HARNESS_MANIFEST, runtimeManifest);
+    console.log("fetch-runtime: overlaid Studio harness manifest");
+  }
   console.log("fetch-runtime: done");
 }
 

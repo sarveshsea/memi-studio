@@ -728,19 +728,23 @@ fn resolve_runtime_package_root(app: &AppHandle) -> Result<PathBuf, String> {
         }
     }
 
+    let mut candidates = Vec::new();
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let packaged = resource_dir.join(STUDIO_RUNTIME_RESOURCE_DIR);
-        if packaged.join("package.json").is_file() {
-            return Ok(packaged);
-        }
+        candidates.push(resource_dir.join(STUDIO_RUNTIME_RESOURCE_DIR));
+        candidates.push(resource_dir.join("memoire-runtime"));
+        candidates.push(resource_dir);
     }
 
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("..");
-    if repo_root.join("package.json").is_file() {
-        return Ok(repo_root);
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    candidates.push(manifest_dir.join("resources").join("memoire-runtime"));
+    candidates.push(manifest_dir.join("resources"));
+    candidates.push(manifest_dir.join(".."));
+
+    if let Some(path) = candidates
+        .into_iter()
+        .find(|candidate| candidate.join("package.json").is_file())
+    {
+        return Ok(path);
     }
 
     Err("Bundled Studio runtime resources are missing. Run `node scripts/build-studio-runtime.mjs --target=darwin-arm64` before building the app.".to_string())

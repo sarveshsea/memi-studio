@@ -39,6 +39,7 @@ pub struct HarnessDefinition {
     pub command: String,
     pub description: String,
     pub enabled_by_default: bool,
+    pub visibility: String,
     pub install_probe: Vec<String>,
     pub capabilities: Vec<String>,
     pub command_templates: HashMap<String, Vec<String>>,
@@ -60,6 +61,7 @@ pub struct HarnessStatus {
     pub description: String,
     pub capabilities: Vec<String>,
     pub enabled: bool,
+    pub visibility: String,
     pub installed: bool,
     #[serde(rename = "resolvedPath")]
     pub resolved_path: Option<String>,
@@ -367,6 +369,7 @@ pub fn list_harnesses() -> Vec<HarnessStatus> {
                 description: harness.description,
                 capabilities: harness.capabilities,
                 enabled: harness.enabled_by_default,
+                visibility: harness.visibility,
                 installed,
                 resolved_path: resolved_path.map(|path| path.to_string_lossy().to_string()),
                 supports_cancel: harness.supports_cancel,
@@ -797,6 +800,14 @@ mod tests {
         assert_eq!(manifest.schema_version, 2);
         assert_eq!(codex.provider, "openai");
         assert_eq!(codex.output_parser, "codex-jsonl");
+        assert_eq!(codex.visibility, "primary");
+        let primary = manifest
+            .harnesses
+            .iter()
+            .filter(|entry| entry.visibility == "primary")
+            .map(|entry| entry.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(primary, vec!["claude-code", "codex"]);
     }
 
     #[test]

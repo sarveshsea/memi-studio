@@ -34,6 +34,7 @@ export type StudioCodexReasoningEffort = "low" | "medium" | "high" | "xhigh";
 export type StudioCodexApprovalPolicy = "untrusted" | "on-request" | "never";
 export type StudioAutonomyLevel = "supervised" | "ask-before-tools" | "autonomous";
 export type StudioPermissionPolicy = "allow" | "approval" | "block";
+export type StudioHarnessVisibility = "primary" | "advanced";
 export type StudioComputerPermissionState = "unknown" | "granted" | "denied" | "not_applicable";
 export type StudioMacOSPermissionKey = "accessibility" | "screenRecording" | "automation" | "fileAccess";
 export type StudioSetupStatus = "ready" | "needs_action" | "optional" | "blocked";
@@ -60,6 +61,7 @@ export interface Harness {
   description: string;
   command: string;
   enabled: boolean;
+  visibility?: StudioHarnessVisibility;
   installed: boolean;
   resolvedPath?: string | null;
   authStatus?: "missing" | "needs_login" | "signed_in" | "ready" | "not_required";
@@ -143,7 +145,7 @@ export interface StudioCodexConfig {
 export type StudioAutomationKind = "cron" | "heartbeat";
 export type StudioAutomationStatus = "ACTIVE" | "PAUSED";
 export type StudioAutomationMutationPolicy = "review" | "allow_writes" | "read_only";
-export type StudioRightPaneTab = "run" | "changes" | "design-system" | "ia" | "research-lab" | "mirofish-research" | "mermaid-board" | "design-changelog" | "figma" | "memory";
+export type StudioRightPaneTab = "run" | "changes" | "design-system" | "ia" | "research-lab" | "mermaid-board" | "design-changelog" | "figma" | "memory";
 
 export interface StudioPaneIntent {
   tab: StudioRightPaneTab;
@@ -221,7 +223,7 @@ export interface StudioConfig {
   providers?: StudioProviderConfig;
   usageBudgets?: StudioUsageBudgetConfig;
   codex?: StudioCodexConfig;
-  harnesses?: Array<Harness & { enabledByDefault?: boolean; installProbe?: string[]; capabilities?: StudioAction[] }>;
+  harnesses?: Array<Harness & { enabledByDefault?: boolean; installProbe?: string[]; capabilities?: StudioAction[]; visibility?: StudioHarnessVisibility }>;
   ui?: {
     theme: "light" | "dark" | "system";
     inputMode: StudioInputMode;
@@ -898,6 +900,7 @@ export interface StudioCompatibilitySnapshot {
     provider: string;
     installed: boolean;
     enabled: boolean;
+    visibility?: StudioHarnessVisibility;
     authStatus: Harness["authStatus"];
     authMessage: string;
     supportedActions: StudioAction[];
@@ -1514,6 +1517,11 @@ export async function getStatus(): Promise<StudioStatus> {
 }
 
 export async function getRuntimeMetrics(): Promise<StudioRuntimeMetrics> {
+  if (hasTauri()) {
+    const status = await fetchJSON<StudioStatus>("/api/status");
+    if (!status.metrics) throw new Error("Studio runtime metrics are unavailable");
+    return status.metrics;
+  }
   const status = await getStatus();
   if (!status.metrics) throw new Error("Studio runtime metrics are unavailable");
   return status.metrics;
@@ -1602,7 +1610,7 @@ export async function createWorkspace(input: { parentPath?: string | null; name:
 
 export async function listHarnesses(options: { refresh?: boolean } = {}): Promise<Harness[]> {
   const payload = await fetchJSON<{ harnesses: Harness[] }>(`/api/harnesses${options.refresh ? "?refresh=1" : ""}`);
-  return payload.harnesses;
+  return payload.harnesses.map(normalizeHarnessStatus);
 }
 
 export async function getHarnessSetupPlan(harnessId: HarnessId, options: { refresh?: boolean } = {}): Promise<StudioHarnessSetupPlan> {
@@ -2222,6 +2230,35 @@ export async function openFigma(fileKey?: string | null): Promise<FigmaOpenResul
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ fileKey: fileKey ?? null }),
   });
+}
+
+function normalizeHarnessStatus(harness: Harness): Harness {
+  return {
+    ...harness,
+    authMessage: readableHarnessAuthMessage(harness.authMessage),
+  };
+}
+
+function readableHarnessAuthMessage(message: string | undefined): string | undefined {
+  if (!message) return message;
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("{")) return message;
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      loggedIn?: boolean;
+      authMethod?: string;
+      apiProvider?: string;
+      subscriptionType?: string;
+    };
+    if (parsed.loggedIn) {
+      const method = parsed.authMethod ? ` via ${parsed.authMethod}` : "";
+      const plan = parsed.subscriptionType ? ` (${parsed.subscriptionType})` : "";
+      return `Signed in${method}${plan}`;
+    }
+  } catch {
+    return "Signed in";
+  }
+  return "Ready";
 }
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {

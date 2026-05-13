@@ -63,6 +63,7 @@ import {
   type WorkbenchActionCopy,
   type WorkbenchIconName,
 } from "./workbench-copy";
+import { harnessVisibility, isPrimaryHarness } from "./studio-workbench";
 
 export const OUTPUT_TABS = WORKBENCH_COPY.outputTabs;
 
@@ -159,7 +160,6 @@ const FIGMA_MUTATING_ACTIONS: Array<{ label: string; request: FigmaActionRequest
   },
 ];
 
-const CORE_HARNESS_IDS: Harness["id"][] = ["claude-code", "codex", "hermes"];
 const DEFAULT_CODEX_UI_CONFIG: StudioCodexConfig = {
   model: "gpt-5.5",
   reasoningEffort: "xhigh",
@@ -216,7 +216,7 @@ const FALLBACK_AGENTIC_INTERACTION_PATTERNS: AgenticInteractionPatterns = [
 ];
 
 function isCoreHarness(id: Harness["id"]): boolean {
-  return CORE_HARNESS_IDS.includes(id);
+  return isPrimaryHarness(id);
 }
 
 export function AttachmentShelf(props: {
@@ -471,8 +471,6 @@ export function WorkArtifactCards(props: {
             <button data-action-id={`work-artifact.copy.${artifact.id}`} type="button" onClick={() => props.onCopy(artifact)}>Copy</button>
             <button data-action-id={`work-artifact.context.${artifact.id}`} type="button" onClick={() => props.onUseAsContext(artifact)}>Context</button>
             {artifact.kind === "decision" ? <button data-action-id={`work-artifact.changelog.${artifact.id}`} type="button" onClick={() => props.onAddToChangelog(artifact)}>Changelog</button> : null}
-            {artifact.kind === "visual" || artifact.kind === "spec" ? <button data-action-id={`work-artifact.board.${artifact.id}`} type="button" onClick={() => props.onSendToBoard(artifact)}>Board</button> : null}
-            {artifact.kind === "visual" ? <button data-action-id={`work-artifact.figma.${artifact.id}`} type="button" onClick={() => props.onSendToFigma(artifact)}>Figma</button> : null}
           </footer>
         </article>
       ))}
@@ -524,7 +522,7 @@ export function WorkPacketPane(props: {
           <div className="work-packet-empty-body">
             <span className="work-packet-empty-pill">No packet captured yet</span>
             <h3>Spin up a packet with {harnessLabel}</h3>
-            <p>Pick a starting point or open files from your desktop. Every harness in Studio (Claude Code, Codex, Hermes) ships work into the same packet surface.</p>
+            <p>Pick a starting point or open files from your desktop. Codex and Claude Code ship work into the same packet surface.</p>
             <div className="work-packet-empty-actions">
               {props.onCreatePacket ? (
                 <button
@@ -618,9 +616,7 @@ export function WorkPacketPane(props: {
       <WorkPacketList title="Next Moves" items={packet.nextMoves} />
       {packet.captureWarnings.length ? <WorkPacketList title="Warnings" items={packet.captureWarnings} /> : null}
       <footer className="work-packet-feed-actions">
-        <button data-action-id="work-packet.feed.board" type="button" onClick={props.onOpenBoard}>PM Board</button>
         <button data-action-id="work-packet.feed.changelog" type="button" onClick={props.onOpenChangelog}>Changelog</button>
-        <button data-action-id="work-packet.feed.figma" type="button" onClick={props.onOpenFigma}>Figma</button>
       </footer>
     </section>
   );
@@ -1261,21 +1257,9 @@ export function ProjectSidebar(props: {
               <SidebarIcon name="search" />
               <span>Search</span>
             </button>
-            <button data-action-id="plugins.open.sidebar" type="button" onClick={props.onOpenPlugins} title="Plugins">
-              <SidebarIcon name="plugins" />
-              <span>Plugins</span>
-            </button>
             <button data-action-id="changelog.open.sidebar" type="button" onClick={props.onOpenChangelog} title="Changelog">
               <SidebarIcon name="changelog" />
               <span>Changelog</span>
-            </button>
-            <button data-action-id="figma.open.sidebar" type="button" onClick={() => void props.onOpenFigma()} title="Figma">
-              <SidebarIcon name="figma" />
-              <span>Figma</span>
-            </button>
-            <button data-action-id="automations.open.sidebar" type="button" onClick={props.onOpenAutomations} title="Automations">
-              <SidebarIcon name="clock" />
-              <span>Automations</span>
             </button>
           </nav>
         </div>
@@ -1327,18 +1311,9 @@ export function ProjectSidebar(props: {
             );
           })}
           {projects.length === 0 ? (
-            <div className="project-sidebar-empty" data-project-sessions-empty="add-only">
-              <button aria-label="New folder" data-workspace-action="new-folder" data-action-id="sidebar.empty-new-folder" title="New folder" type="button" onClick={() => void props.onCreateWorkspace()}>
-                <SidebarIcon name="new-chat" />
-                <span>New folder</span>
-              </button>
-              <button aria-label="Open folder" data-workspace-action="open-folder" data-action-id="sidebar.empty-open-folder" title="Open folder" type="button" onClick={() => void props.onOpenWorkspace()}>
-                <SidebarIcon name="folder-open" />
-                <span>Open folder</span>
-              </button>
-              <button aria-label="New session" data-action-id="sidebar.empty-new-chat" title="New session" type="button" onClick={props.onNewChat}>
-                <SidebarIcon name="new-chat" />
-              </button>
+            <div className="project-sidebar-empty" data-project-sessions-empty="quiet">
+              <span>No project sessions.</span>
+              <small>Open a folder to start.</small>
             </div>
           ) : null}
         </div>
@@ -3061,7 +3036,8 @@ export function SettingsPanel(props: {
       requiredActionIds: harness.installed ? [] : [`${harness.id}-install`],
     },
   }));
-  const coreHarnessRows = harnessRows.filter((harness) => isCoreHarness(harness.id));
+  const coreHarnessRows = harnessRows.filter((harness) => harnessVisibility(harness) === "primary");
+  const advancedHarnessRows = harnessRows.filter((harness) => harnessVisibility(harness) === "advanced");
   const codexHarness = coreHarnessRows.find((harness) => harness.id === "codex");
   const codexConfig = normalizeCodexUiConfig(props.config?.codex);
   const providers = props.config?.providers ?? {};
@@ -3148,7 +3124,7 @@ export function SettingsPanel(props: {
           <label>
             <span>Default harness</span>
             <select value={isCoreHarness(props.config?.defaultHarness ?? "codex") ? props.config?.defaultHarness ?? "codex" : "codex"} onChange={(event) => props.onPatchConfig((current) => ({ ...current, defaultHarness: event.target.value as Harness["id"] }))}>
-              {props.harnesses.map((harness) => <option key={harness.id} value={harness.id}>{harness.label}</option>)}
+              {props.harnesses.filter((harness) => harnessVisibility(harness) === "primary").map((harness) => <option key={harness.id} value={harness.id}>{harness.label}</option>)}
             </select>
           </label>
           <label>
@@ -3310,6 +3286,22 @@ export function SettingsPanel(props: {
             </div>
           </article>
         ))}
+        {advancedHarnessRows.length ? (
+          <details className="advanced-harness-list" data-advanced-harnesses="settings">
+            <summary>Advanced integrations</summary>
+            {advancedHarnessRows.map((harness) => (
+              <article className="setup-action-row" key={harness.id}>
+                <strong>{harness.label}</strong>
+                <span>{harness.setupStatus} · {harness.setupAction}</span>
+                <small>{harness.setupPlan.summary}</small>
+                <div className="inline-actions">
+                  <button data-action-id={`settings.harness.select.${harness.id}`} type="button" onClick={() => props.onSelectHarness(harness.id)}>Use</button>
+                  {harness.setupCommand ? <button data-action-id={`settings.harness.copy.${harness.id}`} type="button" onClick={() => void copyText(harness.setupCommand ?? "")}>Copy command</button> : null}
+                </div>
+              </article>
+            ))}
+          </details>
+        ) : null}
       </div>
     );
   }
@@ -3373,7 +3365,7 @@ export function SettingsPanel(props: {
           />
         </label>
         <label data-usage-budget-field="hermes">
-          <span>Hermes token warning</span>
+          <span>Advanced harness token warning</span>
           <input
             min="0"
             step="1000"

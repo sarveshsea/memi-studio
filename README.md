@@ -1,6 +1,6 @@
 # Mémoire Studio
 
-> Native macOS agent shell for Codex, Claude Code, OpenCode, Hermes, OpenClaw, Ollama, Gemini, and Mémoire-native runs — with Figma bridge, Mermaid Board, project memory, scenario lab, and a filterable artifact panel.
+> Native macOS workbench for Codex-first repository runs, Claude Code handoff, live traces, project context, and artifact review.
 
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue.svg)](./LICENSE)
 [![Future License: Apache-2.0](https://img.shields.io/badge/future_license-Apache--2.0-green.svg)](https://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,8 @@ Mémoire Studio is the desktop counterpart to the Mémoire engine ([github.com/s
 This repository is the **home** for the Mémoire Studio Tauri application. The macOS shell lives here; the npm engine, MCP server, harness runtime, and packaged sidecar assets live in `sarveshsea/memi`.
 
 Track engine release progress in the [memi changelog](https://github.com/sarveshsea/memi/blob/main/CHANGELOG.md).
+
+The default product surface is a single workbench: workspace picker, Codex/Claude readiness, composer, run trace, artifacts, context, and settings. Scenario Lab, Mermaid Board, Figma driver, Automations, Marketplace Notes, and secondary harnesses remain available as advanced integrations.
 
 ## Install
 
@@ -28,14 +30,12 @@ Direct DMG downloads are attached to [memi-studio releases](https://github.com/s
 
 ## What Mémoire Studio is
 
-- **Multi-harness agent shell** — one interface across 8 coding agents (Codex, Claude Code, OpenCode, Hermes, OpenClaw, Ollama, Gemini, Mémoire-native).
-- **Figma bridge** — live design-system pull, screenshot capture, token sync, component library extraction.
-- **Mermaid Board** — visual product workspace with node-link planning and FigJam handoff.
-- **Project memory** — indexed knowledge corpus per workspace; sessions accumulate research evidence.
-- **Scenario Lab** — product simulation with model swarms (20–60 agent cohorts, deterministic fallback when offline).
-- **Filterable artifact panel** — diffs, screenshots, recordings, walkthroughs, plans, transcripts, all in one pane.
-- **Browser-driving agent** — Playwright-backed self-healing loop for verification of UI work.
-- **Cloud delegation** — fire-and-forget background tasks (coming in 0.18.x).
+- **One workbench** — pick a workspace, verify agent readiness, compose the task, watch the run trace, and review artifacts/context without switching products.
+- **Codex primary, Claude supported** — Codex is the default harness; Claude Code is the supported alternate. Other harnesses are advanced integrations.
+- **Explicit setup** — install/auth/model/effort/permission state is visible, with copyable commands and refresh actions.
+- **Project memory** — indexed knowledge corpus per workspace; sessions accumulate design and engineering evidence.
+- **Artifact panel** — diffs, screenshots, plans, transcripts, and work packets stay tied to the run.
+- **Advanced integrations** — Figma, Mermaid Board, IA, Scenario Lab, Automations, Marketplace Notes, and secondary harnesses are available from command palette/settings.
 
 ## Architecture
 

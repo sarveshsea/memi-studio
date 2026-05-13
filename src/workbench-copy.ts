@@ -260,7 +260,6 @@ export const WORKBENCH_COPY = {
     { id: "right-pane.tab.design-system", label: "System", kind: "local", surface: "cockpit" },
     { id: "right-pane.tab.ia", label: "IA", kind: "local", surface: "board" },
     { id: "right-pane.tab.research-lab", label: "Research", kind: "local", surface: "cockpit" },
-    { id: "right-pane.tab.mirofish-research", label: "Research", kind: "local", surface: "cockpit" },
     { id: "right-pane.tab.mermaid-board", label: "Board", kind: "local", surface: "board" },
     { id: "right-pane.tab.design-changelog", label: "Changelog", kind: "local", surface: "changelog" },
     { id: "right-pane.tab.figma", label: "Figma", kind: "local", surface: "figma" },

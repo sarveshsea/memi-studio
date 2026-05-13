@@ -48,7 +48,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   command("handoff", "Handoff", "Stage a product handoff run.", ["ship"], { action: "handoff", chatMode: "review", permissionMode: "guarded" }),
   command("codex", "Codex", "Switch composer harness to Codex.", ["cc"], { harness: "codex" }),
   command("claude", "Claude", "Switch composer harness to Claude Code.", ["claude-code"], { harness: "claude-code" }),
-  command("hermes", "Hermes", "Switch composer harness to Hermes.", ["hm"], { harness: "hermes" }),
   command("guarded", "Guarded", "Use guarded workspace-write access.", ["write"], { permissionMode: "guarded" }),
   command("full", "Full", "Use full-access mode.", ["full-access"], { permissionMode: "full_access" }),
   command("figma", "Figma", "Focus the Figma cockpit pane.", ["bridge"], { pane: "figma" }),
