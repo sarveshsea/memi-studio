@@ -18,6 +18,7 @@ import {
   type ProjectMemoryItem,
   type SessionSummary,
   type StudioAction,
+  type AgentInstallTargetInput,
   type StudioAutomationDefinition,
   type StudioAutomationMutationPolicy,
   type StudioAutomationRun,
@@ -39,6 +40,7 @@ import {
   type DesignSystemArtifactSection,
   type StudioEvent,
   type StudioHarnessSetupAction,
+  type StudioHarnessSetupPlan,
   type StudioInputMode,
   type StudioAttachment,
   type StudioActiveProcess,
@@ -1910,18 +1912,27 @@ export function DesignSystemReviewSurface(props: {
     sectionId: string,
     comment?: string,
   ) => void | Promise<void>;
+  onSaveArtifact: (artifact: DesignSystemArtifact) => void | Promise<void>;
   onUseSystem: (artifact: DesignSystemArtifact) => void;
 }) {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [pendingReviewKey, setPendingReviewKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DesignSystemArtifact | null>(props.artifact);
+  const [savingArtifact, setSavingArtifact] = useState(false);
   const artifact = props.artifact;
+  const visibleArtifact = draft ?? artifact;
+  const draftDirty = Boolean(artifact && draft && JSON.stringify(draft) !== JSON.stringify(artifact));
 
   useEffect(() => {
-    if (!artifact) return;
+    setDraft(artifact);
+    if (!artifact) {
+      setOpenSections(new Set());
+      return;
+    }
     const needsWork = artifact.sections.filter((section) => section.reviewState === "needs_work").map((section) => section.id);
     const firstUnreviewed = artifact.sections.find((section) => section.reviewState === "unreviewed")?.id;
     setOpenSections(new Set([...needsWork, ...(firstUnreviewed ? [firstUnreviewed] : [])]));
-  }, [artifact?.id]);
+  }, [artifact?.id, artifact?.updatedAt]);
 
   function toggle(sectionId: string) {
     setOpenSections((current) => {
@@ -1932,15 +1943,47 @@ export function DesignSystemReviewSurface(props: {
     });
   }
 
-  async function handleReview(section: DesignSystemArtifactSection, reviewState: DesignSystemArtifactReviewState) {
-    if (!artifact) return;
-    const key = `${section.id}:${reviewState}`;
-    setPendingReviewKey(key);
+  function patchDraft(update: (current: DesignSystemArtifact) => DesignSystemArtifact) {
+    setDraft((current) => current ? update(current) : current);
+  }
+
+  function patchDraftSection(sectionId: string, update: (section: DesignSystemArtifactSection) => DesignSystemArtifactSection) {
+    patchDraft((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === sectionId ? update(section) : section),
+    }));
+  }
+
+  async function saveDraft() {
+    if (!draft || !draftDirty) return;
+    setSavingArtifact(true);
     try {
+      await props.onSaveArtifact(draft);
+    } finally {
+      setSavingArtifact(false);
+    }
+  }
+
+  async function handleReview(section: DesignSystemArtifactSection, reviewState: DesignSystemArtifactReviewState) {
+    if (!visibleArtifact) return;
+    const key = `${section.id}:${reviewState}`;
+    const comment = reviewState === "needs_work"
+      ? `${section.title} needs a scoped agent fix.`
+      : `${section.title} verified in Studio.`;
+    const nextDraft = {
+      ...visibleArtifact,
+      sections: visibleArtifact.sections.map((candidate) =>
+        candidate.id === section.id ? { ...candidate, reviewState } : candidate,
+      ),
+    };
+    setPendingReviewKey(key);
+    setDraft(nextDraft);
+    try {
+      if (draftDirty) await props.onSaveArtifact(nextDraft);
       if (reviewState === "needs_work") {
-        await props.onFixSection(artifact.id, section.id, `${section.title} needs a scoped agent fix.`);
+        await props.onFixSection(visibleArtifact.id, section.id, comment);
       } else {
-        await props.onReviewSection(artifact.id, section.id, reviewState, `${section.title} verified in Studio.`);
+        await props.onReviewSection(visibleArtifact.id, section.id, reviewState, comment);
       }
       setOpenSections((current) => new Set([...current, section.id]));
     } finally {
@@ -1948,7 +1991,7 @@ export function DesignSystemReviewSurface(props: {
     }
   }
 
-  if (!artifact) {
+  if (!visibleArtifact) {
     return (
       <section className="design-system-review empty-review" data-design-system-artifact="review-surface" aria-label="Design system artifact">
         <header className="artifact-review-head">
@@ -1964,27 +2007,45 @@ export function DesignSystemReviewSurface(props: {
   }
 
   return (
-    <section className="design-system-review" data-design-system-artifact="review-surface" data-artifact-acceptance-state={artifact.status} aria-label={artifact.title}>
+    <section className="design-system-review" data-design-system-artifact="review-surface" data-artifact-acceptance-state={visibleArtifact.status} data-artifact-dirty={String(draftDirty)} aria-label={visibleArtifact.title}>
       <header className="artifact-review-head">
         <div>
           <p className="eyebrow">Review</p>
-          <h2>{artifact.title}</h2>
-          <p>{artifact.createdByHarness} / {artifact.sourceWorkspace ? displaySourceLabel(artifact.sourceWorkspace) : "local"}</p>
+          <label className="artifact-title-editor">
+            <span>Title</span>
+            <input
+              value={visibleArtifact.title}
+              onChange={(event) => patchDraft((current) => ({ ...current, title: event.target.value }))}
+            />
+          </label>
+          <p>{visibleArtifact.createdByHarness} / {visibleArtifact.sourceWorkspace ? displaySourceLabel(visibleArtifact.sourceWorkspace) : "local"}</p>
         </div>
         <div className="artifact-review-actions">
-          <label className="checkbox-row"><input type="checkbox" checked={artifact.status === "published"} readOnly /> Published</label>
-          <label className="checkbox-row"><input type="checkbox" checked={artifact.status === "published"} readOnly /> Default</label>
-          <button data-action-id="artifact.use-system" type="button" onClick={() => props.onUseSystem(artifact)}>Use</button>
+          <label>
+            <span>Status</span>
+            <select
+              value={visibleArtifact.status}
+              onChange={(event) => patchDraft((current) => ({ ...current, status: event.target.value as DesignSystemArtifact["status"] }))}
+            >
+              <option value="draft">Draft</option>
+              <option value="review">Review</option>
+              <option value="published">Published</option>
+            </select>
+          </label>
+          <button data-action-id="artifact.save" type="button" onClick={() => void saveDraft()} disabled={!draftDirty || savingArtifact}>
+            {savingArtifact ? "Saving" : draftDirty ? "Save" : "Saved"}
+          </button>
+          <button data-action-id="artifact.use-system" type="button" onClick={() => props.onUseSystem(visibleArtifact)}>Use</button>
         </div>
       </header>
 
-      <DesignSystemSandbox artifact={artifact} figmaStatus={props.figmaStatus ?? null} />
-      <AgenticDesignSystemContract artifact={artifact} />
-      <SourceReferenceChips refs={artifact.sourceRefs.slice(0, 8)} />
-      <ArtifactResolvedEvidence artifact={artifact} />
+      <DesignSystemSandbox artifact={visibleArtifact} figmaStatus={props.figmaStatus ?? null} />
+      <AgenticDesignSystemContract artifact={visibleArtifact} />
+      <SourceReferenceChips refs={visibleArtifact.sourceRefs.slice(0, 8)} />
+      <ArtifactResolvedEvidence artifact={visibleArtifact} />
 
       <div className="artifact-review-list">
-        {artifact.sections.map((section) => {
+        {visibleArtifact.sections.map((section) => {
           const open = openSections.has(section.id);
           return (
             <article className="review-section" data-review-section={section.kind} data-review-state={section.reviewState} key={section.id}>
@@ -1997,6 +2058,17 @@ export function DesignSystemReviewSurface(props: {
               {open ? (
                 <div className="review-section-body">
                   <div className="review-toolbar">
+                    <label>
+                      <span>State</span>
+                      <select
+                        value={section.reviewState}
+                        onChange={(event) => patchDraftSection(section.id, (current) => ({ ...current, reviewState: event.target.value as DesignSystemArtifactReviewState }))}
+                      >
+                        <option value="unreviewed">Unreviewed</option>
+                        <option value="looks_good">Looks good</option>
+                        <option value="needs_work">Needs work</option>
+                      </select>
+                    </label>
                     <button
                       aria-pressed={section.reviewState === "looks_good"}
                       disabled={pendingReviewKey === `${section.id}:looks_good`}
@@ -2018,14 +2090,30 @@ export function DesignSystemReviewSurface(props: {
                       Fix
                     </button>
                   </div>
-                  <ArtifactPreview artifact={artifact} section={section} />
+                  <label className="artifact-section-editor">
+                    <span>Summary</span>
+                    <input
+                      value={section.summary}
+                      onChange={(event) => patchDraftSection(section.id, (current) => ({ ...current, summary: event.target.value }))}
+                    />
+                  </label>
+                  <label className="artifact-section-editor">
+                    <span>Content</span>
+                    <textarea
+                      value={section.content}
+                      onChange={(event) => patchDraftSection(section.id, (current) => ({ ...current, content: event.target.value }))}
+                    />
+                  </label>
+                  <ArtifactPreview artifact={visibleArtifact} section={section} />
                   <SourceReferenceChips refs={section.sourceRefs} />
-                  <FormattedMessage text={section.content} />
-                  {section.comments.length ? (
-                    <div className="review-comments" data-review-comments={section.id}>
-                      {section.comments.map((comment, index) => <p key={`${section.id}-comment-${index}`}>{comment}</p>)}
-                    </div>
-                  ) : null}
+                  <label className="artifact-section-editor">
+                    <span>Comments</span>
+                    <textarea
+                      value={section.comments.join("\n")}
+                      onChange={(event) => patchDraftSection(section.id, (current) => ({ ...current, comments: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) }))}
+                      placeholder="Add review comments..."
+                    />
+                  </label>
                 </div>
               ) : null}
             </article>
@@ -2446,7 +2534,7 @@ function matchesDesignChangelogFilter(entry: DesignChangelogEntry, filter: Desig
 }
 
 type CommandPaletteRowKind = "navigation" | "harness" | "session" | "knowledge" | "empty";
-type CommandPaletteIcon = "settings" | "figma" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
+type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
 type CommandPaletteRow = {
   id: string;
   kind: CommandPaletteRowKind;
@@ -2467,6 +2555,8 @@ export function CommandPalette(props: {
   onClose: () => void;
   onOpenSettings: () => void;
   onOpenSettingsSection: (section: string) => void;
+  onOpenDesignSystem: () => void;
+  onOpenBoard: () => void;
   onOpenFigma: () => void;
   onOpenPlugins: () => void;
   onOpenAutomations: () => void;
@@ -2513,6 +2603,8 @@ export function CommandPalette(props: {
     }));
   const navigationRows: CommandPaletteRow[] = [
     { id: "settings.open", kind: "navigation" as const, icon: "settings" as const, label: "Settings", detail: "Open Studio settings", run: props.onOpenSettings },
+    { id: "command.open.design-system", kind: "navigation" as const, icon: "system" as const, label: "Design System", detail: "Open editable artifact review and design memory", run: props.onOpenDesignSystem },
+    { id: "command.open.figjam-board", kind: "navigation" as const, icon: "board" as const, label: "FigJam Board", detail: "Open PM board, source export, and sync status", run: props.onOpenBoard },
     { id: "command.open.figma", kind: "navigation" as const, icon: "figma" as const, label: "Figma Bridge", detail: "Open bridge status and plugin actions", run: props.onOpenFigma },
     { id: "command.open.plugins", kind: "navigation" as const, icon: "plugins" as const, label: "Plugins", detail: "Open Mémoire Notes marketplace", run: props.onOpenPlugins },
     { id: "command.open.automations", kind: "navigation" as const, icon: "automations" as const, label: "Automations", detail: "Open scheduled Studio work", run: props.onOpenAutomations },
@@ -2574,6 +2666,8 @@ function harnessIcon(id: Harness["id"]): CommandPaletteIcon {
 
 function CommandPaletteIconGlyph({ name }: { name: CommandPaletteIcon }) {
   if (name === "settings") return <StudioLineIcon><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.3 3a8 8 0 0 0-1.7 1L5.1 6l-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1l.3 3h5l.3-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1Z" /></StudioLineIcon>;
+  if (name === "system") return <StudioLineIcon><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="8" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="16" cy="18" r="1.5" /></StudioLineIcon>;
+  if (name === "board") return <StudioLineIcon><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 9h3M13 9h3M8 14h8" /></StudioLineIcon>;
   if (name === "figma") return <StudioLineIcon><circle cx="9" cy="6" r="3" /><circle cx="15" cy="6" r="3" /><circle cx="9" cy="12" r="3" /><circle cx="15" cy="12" r="3" /><circle cx="9" cy="18" r="3" /></StudioLineIcon>;
   if (name === "plugins") return <StudioLineIcon><path d="M8 4h8v5h4v8h-5v3H7v-5H4V7h4V4Z" /></StudioLineIcon>;
   if (name === "automations") return <StudioLineIcon><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></StudioLineIcon>;
@@ -2923,6 +3017,13 @@ function formatAutomationDate(value: string | null | undefined): string {
   return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${formatTime(value)}`;
 }
 
+function formatMaybeDate(value: string | null | undefined): string {
+  if (!value) return "never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export function SettingsPanel(props: {
   open: boolean;
   activeSection: string;
@@ -2963,6 +3064,7 @@ export function SettingsPanel(props: {
   onOpenAutomationsCenter: () => void;
   onPatchConfig: (update: (current: StudioConfig) => StudioConfig) => void;
   onSave: () => void;
+  onInstallAgentKit: (target: AgentInstallTargetInput) => void | Promise<void>;
   onComputerCapture: () => void;
   onConnectFigma: () => void | Promise<void>;
   onOpenFigma: () => void | Promise<void>;
@@ -2972,10 +3074,21 @@ export function SettingsPanel(props: {
   onSelectWorkspace: () => void | Promise<void>;
   onCompleteSetup: () => void | Promise<void>;
 }) {
-  if (!props.open) return null;
-  const sections = ["Setup", "General", "Codex", "Agents", "Providers", "Permissions", "Figma", "Plugins", "Automations", "Download", "Advanced"];
+  const sections: Array<{ id: string; label: string; icon: StudioControlIconName; tag: string }> = [
+    { id: "Setup", label: "Setup", icon: "check", tag: "Start" },
+    { id: "General", label: "General", icon: "settings", tag: "App" },
+    { id: "Codex", label: "Codex", icon: "command", tag: "AI" },
+    { id: "Agents", label: "Agents", icon: "harness", tag: "Run" },
+    { id: "Providers", label: "Providers", icon: "receipt", tag: "API" },
+    { id: "Permissions", label: "Permissions", icon: "access", tag: "Risk" },
+    { id: "Figma", label: "Figma", icon: "figma", tag: "Bridge" },
+    { id: "Plugins", label: "Plugins", icon: "system", tag: "Notes" },
+    { id: "Automations", label: "Automations", icon: "automation", tag: "Cron" },
+    { id: "Download", label: "Download", icon: "download", tag: "DMG" },
+    { id: "Advanced", label: "Advanced", icon: "filter", tag: "Tools" },
+  ];
   const downloadItems = buildDownloadReadyItems({ status: props.status, config: props.config });
-  const harnessRows = props.compatibility?.harnesses ?? props.harnesses.map((harness) => ({
+  const rawHarnessRows = props.compatibility?.harnesses ?? props.harnesses.map((harness) => ({
     id: harness.id,
     label: harness.label,
     setupStatus: harness.installed ? "ready" : "needs_action",
@@ -3008,6 +3121,10 @@ export function SettingsPanel(props: {
       requiredActionIds: harness.installed ? [] : [`${harness.id}-install`],
     },
   }));
+  const harnessRows = rawHarnessRows.map((harness) => ({
+    ...harness,
+    setupPlan: harness.setupPlan ?? fallbackHarnessSetupPlan(harness),
+  }));
   const coreHarnessRows = harnessRows.filter((harness) => harnessVisibility(harness) === "primary");
   const advancedHarnessRows = harnessRows.filter((harness) => harnessVisibility(harness) === "advanced");
   const codexHarness = coreHarnessRows.find((harness) => harness.id === "codex");
@@ -3024,6 +3141,8 @@ export function SettingsPanel(props: {
   const [marketplaceQuery, setMarketplaceQuery] = useState("");
   const [marketplaceCategoryFilter, setMarketplaceCategoryFilter] = useState("all");
   const [marketplaceSourceFilter, setMarketplaceSourceFilter] = useState("all");
+
+  if (!props.open) return null;
 
   function patchCodexConfig(update: Partial<StudioCodexConfig>) {
     props.onPatchConfig((current) => ({
@@ -3087,16 +3206,32 @@ export function SettingsPanel(props: {
     return (
       <div className="settings-general-surface" data-settings-section-content="general">
         <div className="settings-section-grid">
-          <article data-setup-completion="first-run"><span>Setup</span><strong>{props.config?.setup?.completedAt ? "complete" : "needs setup"}</strong></article>
-          <article><span>Input</span><strong>{props.config?.ui?.inputMode ?? "agent"}</strong></article>
-          <article><span>Harnesses</span><strong>{coreHarnessRows.filter((harness) => harness.enabled).length}</strong></article>
-          <article><span>Computer</span><strong>{props.computerStatus?.available ? "ready" : "limited"}</strong></article>
+          <SettingsMetricCard icon="check" label="Setup" value={props.config?.setup?.completedAt ? "Complete" : "Pending"} tone={props.config?.setup?.completedAt ? "ok" : "warn"} />
+          <SettingsMetricCard icon="mode" label="Input" value={props.config?.ui?.inputMode ?? "agent"} />
+          <SettingsMetricCard icon="harness" label="Agents" value={`${coreHarnessRows.filter((harness) => harness.enabled).length}/${coreHarnessRows.length}`} />
+          <SettingsMetricCard icon="access" label="Computer" value={props.computerStatus?.available ? "Ready" : "Limited"} tone={props.computerStatus?.available ? "ok" : "warn"} />
         </div>
         <div className="settings-field-grid">
           <label>
             <span>Default harness</span>
             <select value={isCoreHarness(props.config?.defaultHarness ?? "codex") ? props.config?.defaultHarness ?? "codex" : "codex"} onChange={(event) => props.onPatchConfig((current) => ({ ...current, defaultHarness: event.target.value as Harness["id"] }))}>
               {props.harnesses.filter((harness) => harnessVisibility(harness) === "primary").map((harness) => <option key={harness.id} value={harness.id}>{harness.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Theme</span>
+            <select value={props.config?.ui?.theme ?? "dark"} onChange={(event) => props.onPatchConfig((current) => ({
+              ...current,
+              ui: {
+                theme: event.target.value as "light" | "dark" | "system",
+                inputMode: current.ui?.inputMode ?? "agent",
+                commandPaletteEnabled: current.ui?.commandPaletteEnabled ?? true,
+                toolbeltLayout: current.ui?.toolbeltLayout ?? "compact",
+              },
+            }))}>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
             </select>
           </label>
           <label>
@@ -3115,6 +3250,33 @@ export function SettingsPanel(props: {
               <option value="auto">Auto</option>
             </select>
           </label>
+          <label>
+            <span>Toolbelt</span>
+            <select value={props.config?.ui?.toolbeltLayout ?? "compact"} onChange={(event) => props.onPatchConfig((current) => ({
+              ...current,
+              ui: {
+                theme: current.ui?.theme ?? "dark",
+                inputMode: current.ui?.inputMode ?? "agent",
+                commandPaletteEnabled: current.ui?.commandPaletteEnabled ?? true,
+                toolbeltLayout: event.target.value as "compact" | "expanded",
+              },
+            }))}>
+              <option value="compact">Compact</option>
+              <option value="expanded">Expanded</option>
+            </select>
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={props.config?.ui?.commandPaletteEnabled ?? true} onChange={(event) => props.onPatchConfig((current) => ({
+              ...current,
+              ui: {
+                theme: current.ui?.theme ?? "dark",
+                inputMode: current.ui?.inputMode ?? "agent",
+                commandPaletteEnabled: event.target.checked,
+                toolbeltLayout: current.ui?.toolbeltLayout ?? "compact",
+              },
+            }))} />
+            <span>Command palette</span>
+          </label>
         </div>
       </div>
     );
@@ -3128,26 +3290,10 @@ export function SettingsPanel(props: {
     return (
       <div className="codex-settings-surface" data-settings-section-content="codex">
         <div className="settings-section-grid">
-          <article data-codex-auth="status">
-            <span>Codex auth</span>
-            <strong>{codexHarness?.authStatus ?? "checking"}</strong>
-            <small>{codexAuthMessage}</small>
-          </article>
-          <article>
-            <span>Model</span>
-            <strong>{codexConfig.model}</strong>
-            <small>model_reasoning_effort={codexConfig.reasoningEffort}</small>
-          </article>
-          <article>
-            <span>Repositories</span>
-            <strong>{workspaceRoots.length}</strong>
-            <small>{props.status?.projectRoot ?? workspaceRoots[0] ?? "No workspace"}</small>
-          </article>
-          <article>
-            <span>Plan default</span>
-            <strong>{codexConfig.planModeDefault ? "on" : "off"}</strong>
-            <small>read-only first pass</small>
-          </article>
+          <SettingsMetricCard icon="command" label="Auth" value={codexHarness?.authStatus ?? "checking"} detail={codexAuthMessage} tone={codexHarness?.authStatus === "ready" || codexHarness?.authStatus === "signed_in" ? "ok" : "warn"} />
+          <SettingsMetricCard icon="harness" label="Model" value={codexConfig.model} detail={codexConfig.reasoningEffort} />
+          <SettingsMetricCard icon="workspace" label="Repos" value={String(workspaceRoots.length)} detail={props.status?.projectRoot ?? workspaceRoots[0] ?? "No workspace"} />
+          <SettingsMetricCard icon="plan" label="Plan" value={codexConfig.planModeDefault ? "On" : "Off"} detail="default mode" />
         </div>
         <div className="settings-field-grid">
           <label>
@@ -3172,23 +3318,23 @@ export function SettingsPanel(props: {
         <div className="settings-toggle-list">
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.planModeDefault} onChange={(event) => patchCodexConfig({ planModeDefault: event.target.checked })} />
-            <span>Use plan mode by default for new Codex runs</span>
+            <span>Plan first</span>
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.webSearch} onChange={(event) => patchCodexConfig({ webSearch: event.target.checked })} />
-            <span>Enable Codex live web search for research and audit actions</span>
+            <span>Web search</span>
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.skipGitRepoCheck} onChange={(event) => patchCodexConfig({ skipGitRepoCheck: event.target.checked })} />
-            <span>Allow non-git repositories with --skip-git-repo-check</span>
+            <span>Skip git check</span>
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.includeMemoireCommands} onChange={(event) => patchCodexConfig({ includeMemoireCommands: event.target.checked })} />
-            <span>Inject Mémoire command ladder into Codex prompts</span>
+            <span>Mémoire hints</span>
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.includeCodexCommands} onChange={(event) => patchCodexConfig({ includeCodexCommands: event.target.checked })} />
-            <span>Inject Codex readiness commands into prompts</span>
+            <span>Codex hints</span>
           </label>
         </div>
         <div className="setup-list" data-codex-repositories="workspaceRoots">
@@ -3220,9 +3366,39 @@ export function SettingsPanel(props: {
       return "Copy command";
     }
 
+    function enableHarness(harnessId: Harness["id"]) {
+      props.onPatchConfig((current) => {
+        const configured = current.harnesses ?? [];
+        const existing = configured.find((harness) => harness.id === harnessId);
+        const fallback = props.harnesses.find((harness) => harness.id === harnessId);
+        const nextHarness = {
+          ...(fallback ?? existing),
+          ...(existing ?? {}),
+          id: harnessId,
+          enabled: true,
+          enabledByDefault: true,
+        } as NonNullable<StudioConfig["harnesses"]>[number];
+        return {
+          ...current,
+          harnesses: [
+            nextHarness,
+            ...configured.filter((harness) => harness.id !== harnessId),
+          ],
+        };
+      });
+    }
+
     function runSetupAction(harnessId: Harness["id"], action: StudioHarnessSetupAction) {
       if (action.kind === "refresh") {
         void props.onDiagnoseHarness(harnessId);
+        return;
+      }
+      if (action.kind === "enable_harness") {
+        enableHarness(harnessId);
+        return;
+      }
+      if (action.kind === "agent_kit") {
+        void props.onInstallAgentKit(action.agentKitTarget ?? agentKitTargetForHarness(harnessId));
         return;
       }
       if (action.command) {
@@ -3238,9 +3414,16 @@ export function SettingsPanel(props: {
       <div className="setup-list" data-settings-section-content="agents">
         {coreHarnessRows.map((harness) => (
           <article className="setup-action-row" key={harness.id}>
-            <strong>{harness.label}</strong>
-            <span>{harness.setupStatus} · {harness.setupAction}</span>
-            <small>{harness.setupPlan.summary}</small>
+            <span className="settings-row-icon"><CommandPaletteIconGlyph name={harnessIcon(harness.id)} /></span>
+            <div className="settings-row-copy">
+              <strong>{harness.label}</strong>
+              <span>{harness.setupPlan.summary}</span>
+              <div className="settings-tag-row">
+                <SettingsTag tone={harness.installed ? "ok" : "warn"}>{harness.installed ? "installed" : "missing"}</SettingsTag>
+                <SettingsTag tone={harness.enabled ? "ok" : "neutral"}>{harness.enabled ? "enabled" : "off"}</SettingsTag>
+                <SettingsTag tone={harness.authStatus === "ready" || harness.authStatus === "signed_in" ? "ok" : "neutral"}>{harness.authStatus ?? "checking"}</SettingsTag>
+              </div>
+            </div>
             <div className="inline-actions">
               <button data-action-id={`settings.harness.select.${harness.id}`} type="button" onClick={() => props.onSelectHarness(harness.id)}>Use</button>
               {harness.setupCommand ? <button data-action-id={`settings.harness.copy.${harness.id}`} type="button" onClick={() => void copyText(harness.setupCommand ?? "")}>Copy command</button> : null}
@@ -3263,12 +3446,29 @@ export function SettingsPanel(props: {
             <summary>Advanced integrations</summary>
             {advancedHarnessRows.map((harness) => (
               <article className="setup-action-row" key={harness.id}>
-                <strong>{harness.label}</strong>
-                <span>{harness.setupStatus} · {harness.setupAction}</span>
-                <small>{harness.setupPlan.summary}</small>
+                <span className="settings-row-icon"><CommandPaletteIconGlyph name={harnessIcon(harness.id)} /></span>
+                <div className="settings-row-copy">
+                  <strong>{harness.label}</strong>
+                  <span>{harness.setupPlan.summary}</span>
+                  <div className="settings-tag-row">
+                    <SettingsTag tone={harness.installed ? "ok" : "warn"}>{harness.installed ? "installed" : "missing"}</SettingsTag>
+                    <SettingsTag tone={harness.enabled ? "ok" : "neutral"}>{harness.enabled ? "enabled" : "off"}</SettingsTag>
+                  </div>
+                </div>
                 <div className="inline-actions">
                   <button data-action-id={`settings.harness.select.${harness.id}`} type="button" onClick={() => props.onSelectHarness(harness.id)}>Use</button>
                   {harness.setupCommand ? <button data-action-id={`settings.harness.copy.${harness.id}`} type="button" onClick={() => void copyText(harness.setupCommand ?? "")}>Copy command</button> : null}
+                  {harness.setupPlan.actions.slice(0, 2).map((action) => (
+                    <button
+                      data-action-id={`settings.harness.setup.${harness.id}.${action.id}`}
+                      data-harness-setup-action={action.kind}
+                      key={action.id}
+                      type="button"
+                      onClick={() => runSetupAction(harness.id, action)}
+                    >
+                      {setupActionLabel(action)}
+                    </button>
+                  ))}
                 </div>
               </article>
             ))}
@@ -3280,11 +3480,64 @@ export function SettingsPanel(props: {
 
   function renderProviders() {
     const usageBudgets = normalizeUsageBudgetConfig(props.config?.usageBudgets);
+    const providerConfig = {
+      anthropic: providers.anthropic ?? { enabled: true, envKey: "ANTHROPIC_API_KEY" as const },
+      openai: providers.openai ?? { enabled: true, envKey: "OPENAI_API_KEY" as const },
+      openaiCompatible: providers.openaiCompatible ?? { enabled: false, baseUrl: null, envKey: null },
+      ollama: providers.ollama ?? { enabled: true, baseUrl: "http://127.0.0.1:11434", defaultModel: "llama3.1:8b" },
+    };
+
+    function patchProviders(update: NonNullable<StudioConfig["providers"]>) {
+      props.onPatchConfig((current) => ({
+        ...current,
+        providers: {
+          ...providerConfig,
+          ...(current.providers ?? {}),
+          ...update,
+        },
+      }));
+    }
+
     return (
       <div className="settings-field-grid" data-settings-section-content="providers">
-        <article><strong>Anthropic</strong><span>{providers.anthropic?.enabled ? providers.anthropic.envKey : "disabled"}</span></article>
-        <article><strong>OpenAI</strong><span>{providers.openai?.enabled ? providers.openai.envKey : "disabled"}</span></article>
-        <article><strong>Ollama</strong><span>{providers.ollama?.baseUrl ?? "http://127.0.0.1:11434"}</span></article>
+        <div className="settings-section-grid">
+          <SettingsMetricCard icon="receipt" label="Anthropic" value={providerConfig.anthropic.enabled ? "On" : "Off"} detail={providerConfig.anthropic.envKey} tone={providerConfig.anthropic.enabled ? "ok" : "neutral"} />
+          <SettingsMetricCard icon="command" label="OpenAI" value={providerConfig.openai.enabled ? "On" : "Off"} detail={providerConfig.openai.envKey} tone={providerConfig.openai.enabled ? "ok" : "neutral"} />
+          <SettingsMetricCard icon="harness" label="Ollama" value={providerConfig.ollama.enabled ? "On" : "Off"} detail={providerConfig.ollama.baseUrl} tone={providerConfig.ollama.enabled ? "ok" : "neutral"} />
+          <SettingsMetricCard icon="open" label="Compatible" value={providerConfig.openaiCompatible.enabled ? "On" : "Off"} detail={providerConfig.openaiCompatible.baseUrl ?? "Not set"} tone={providerConfig.openaiCompatible.enabled ? "ok" : "neutral"} />
+        </div>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={providerConfig.anthropic.enabled} onChange={(event) => patchProviders({ anthropic: { enabled: event.target.checked, envKey: "ANTHROPIC_API_KEY" } })} />
+          <span>Anthropic</span>
+        </label>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={providerConfig.openai.enabled} onChange={(event) => patchProviders({ openai: { enabled: event.target.checked, envKey: "OPENAI_API_KEY" } })} />
+          <span>OpenAI</span>
+        </label>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={providerConfig.ollama.enabled} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, enabled: event.target.checked } })} />
+          <span>Ollama</span>
+        </label>
+        <label>
+          <span>Ollama URL</span>
+          <input value={providerConfig.ollama.baseUrl} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, baseUrl: event.target.value } })} />
+        </label>
+        <label>
+          <span>Ollama model</span>
+          <input value={providerConfig.ollama.defaultModel} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, defaultModel: event.target.value } })} />
+        </label>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={providerConfig.openaiCompatible.enabled} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, enabled: event.target.checked } })} />
+          <span>OpenAI-compatible</span>
+        </label>
+        <label>
+          <span>Compatible URL</span>
+          <input value={providerConfig.openaiCompatible.baseUrl ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, baseUrl: event.target.value || null } })} />
+        </label>
+        <label>
+          <span>Compatible key env</span>
+          <input value={providerConfig.openaiCompatible.envKey ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, envKey: event.target.value || null } })} placeholder="OPENAI_API_KEY" />
+        </label>
         <label data-usage-budget-field="global-threshold">
           <span>Usage warning threshold</span>
           <input
@@ -3351,50 +3604,106 @@ export function SettingsPanel(props: {
   }
 
   function renderPermissions() {
+    type PolicyValue = "allow" | "approval" | "block";
+    const permissionConfig = props.config?.permissions ?? {
+      workspaceWrite: "approval" as PolicyValue,
+      shell: "approval" as PolicyValue,
+      computer: "approval" as PolicyValue,
+      figma: "allow" as PolicyValue,
+      allowlist: [],
+      denylist: [],
+    };
+    const computerConfig = props.config?.computer ?? {
+      enabled: false,
+      allowedApps: ["Figma"],
+      requireApproval: true,
+      permissions,
+    };
+
+    function patchPolicy(key: "workspaceWrite" | "shell" | "computer" | "figma", value: PolicyValue) {
+      props.onPatchConfig((current) => ({
+        ...current,
+        permissions: {
+          workspaceWrite: current.permissions?.workspaceWrite ?? "approval",
+          shell: current.permissions?.shell ?? "approval",
+          computer: current.permissions?.computer ?? "approval",
+          figma: current.permissions?.figma ?? "allow",
+          allowlist: current.permissions?.allowlist ?? [],
+          denylist: current.permissions?.denylist ?? [],
+          [key]: value,
+        },
+      }));
+    }
+
+    function patchComputer(update: Partial<NonNullable<StudioConfig["computer"]>>) {
+      props.onPatchConfig((current) => ({
+        ...current,
+        computer: {
+          enabled: current.computer?.enabled ?? false,
+          allowedApps: current.computer?.allowedApps ?? ["Figma"],
+          requireApproval: current.computer?.requireApproval ?? true,
+          permissions: current.computer?.permissions ?? permissions,
+          ...update,
+        },
+      }));
+    }
+
     return (
       <>
+        <div className="settings-section-grid" data-settings-permission-summary="policies">
+          <SettingsMetricCard icon="workspace" label="Workspace" value={permissionConfig.workspaceWrite} />
+          <SettingsMetricCard icon="command" label="Shell" value={permissionConfig.shell} tone={permissionConfig.shell === "allow" ? "warn" : "neutral"} />
+          <SettingsMetricCard icon="access" label="Computer" value={computerConfig.enabled ? "On" : "Off"} tone={computerConfig.enabled ? "ok" : "neutral"} />
+          <SettingsMetricCard icon="figma" label="Figma" value={permissionConfig.figma} />
+        </div>
         <div className="settings-field-grid" data-settings-section-content="permissions">
           <label>
+            <span>Workspace writes</span>
+            <select value={permissionConfig.workspaceWrite} onChange={(event) => patchPolicy("workspaceWrite", event.target.value as PolicyValue)}>
+              <option value="approval">Approval</option>
+              <option value="allow">Allow</option>
+              <option value="block">Block</option>
+            </select>
+          </label>
+          <label>
             <span>Shell policy</span>
-            <select value={props.config?.permissions?.shell ?? "approval"} onChange={(event) => props.onPatchConfig((current) => ({
-              ...current,
-              permissions: {
-                workspaceWrite: current.permissions?.workspaceWrite ?? "approval",
-                shell: event.target.value as "allow" | "approval" | "block",
-                computer: current.permissions?.computer ?? "approval",
-                figma: current.permissions?.figma ?? "allow",
-                allowlist: current.permissions?.allowlist ?? [],
-                denylist: current.permissions?.denylist ?? [],
-              },
-            }))}>
+            <select value={permissionConfig.shell} onChange={(event) => patchPolicy("shell", event.target.value as PolicyValue)}>
+              <option value="approval">Approval</option>
+              <option value="allow">Allow</option>
+              <option value="block">Block</option>
+            </select>
+          </label>
+          <label>
+            <span>Computer policy</span>
+            <select value={permissionConfig.computer} onChange={(event) => patchPolicy("computer", event.target.value as PolicyValue)}>
+              <option value="approval">Approval</option>
+              <option value="allow">Allow</option>
+              <option value="block">Block</option>
+            </select>
+          </label>
+          <label>
+            <span>Figma policy</span>
+            <select value={permissionConfig.figma} onChange={(event) => patchPolicy("figma", event.target.value as PolicyValue)}>
               <option value="approval">Approval</option>
               <option value="allow">Allow</option>
               <option value="block">Block</option>
             </select>
           </label>
           <label className="checkbox-row">
-            <input type="checkbox" checked={props.config?.computer?.enabled ?? false} onChange={(event) => props.onPatchConfig((current) => ({
-              ...current,
-              computer: {
-                enabled: event.target.checked,
-                allowedApps: current.computer?.allowedApps ?? ["Figma"],
-                requireApproval: current.computer?.requireApproval ?? true,
-                permissions: current.computer?.permissions ?? {
-                  accessibility: "unknown",
-                  screenRecording: "unknown",
-                  automation: "unknown",
-                  fileAccess: "unknown",
-                },
-              },
-            }))} />
+            <input type="checkbox" checked={computerConfig.enabled} onChange={(event) => patchComputer({ enabled: event.target.checked })} />
             <span>Enable Computer</span>
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={computerConfig.requireApproval} onChange={(event) => patchComputer({ requireApproval: event.target.checked })} />
+            <span>Computer approval</span>
           </label>
         </div>
         <div className="permission-grid" data-macos-permission-actions="settings">
           {macOSPermissionActions.map((action) => (
             <button data-action-id={`settings.permission.${action.permission ?? action.id}`} key={action.id} type="button" onClick={() => runMacOSPermissionAction(action)}>
+              <span className="settings-row-icon"><StudioControlIcon name={permissionIcon(action.permission)} /></span>
               <strong>{action.label}</strong>
-              <span>{action.status ?? (action.required ? "needs action" : "ready")}</span>
+              <SettingsTag tone={permissionTone(action.status, action.required)}>{permissionStatusLabel(action.status, action.required)}</SettingsTag>
             </button>
           ))}
         </div>
@@ -3404,10 +3713,16 @@ export function SettingsPanel(props: {
 
   function renderFigma() {
     return (
-      <div className="setup-card" data-settings-section-content="figma">
-        <span>Figma</span>
-        <strong>{figmaStatusLabel(props.figmaStatus)}</strong>
-        <p>{props.compatibility?.tools.figma.setupAction ?? "Start the bridge and connect the plugin."}</p>
+      <div className="setup-card settings-feature-card" data-settings-section-content="figma">
+        <span className="settings-row-icon"><StudioControlIcon name="figma" /></span>
+        <div className="settings-row-copy">
+          <span>Figma</span>
+          <strong>{figmaStatusLabel(props.figmaStatus)}</strong>
+          <div className="settings-tag-row">
+            <SettingsTag tone={isFigmaBridgeRunning(props.figmaStatus) ? "ok" : "neutral"}>{props.figmaStatus?.port ? `:${props.figmaStatus.port}` : "bridge"}</SettingsTag>
+            <SettingsTag tone={isFigmaPluginConnected(props.figmaStatus) ? "ok" : "warn"}>{isFigmaPluginConnected(props.figmaStatus) ? "plugin" : "plugin off"}</SettingsTag>
+          </div>
+        </div>
         <div className="inline-actions">
           <button data-action-id="figma.connect" type="button" onClick={props.onConnectFigma} disabled={props.figmaConnecting}>{props.figmaConnecting ? "Starting" : "Start bridge"}</button>
           <button data-action-id="figma.open" type="button" onClick={props.onOpenFigma}>Open Figma</button>
@@ -3685,41 +4000,116 @@ export function SettingsPanel(props: {
   }
 
   function renderSetup() {
+    const workspaceRoot = props.config?.workspaceRoots?.[0] ?? props.status?.projectRoot ?? "No workspace";
+    const providerCount = [
+      providers.anthropic?.enabled ?? true,
+      providers.openai?.enabled ?? true,
+      providers.ollama?.enabled ?? true,
+      providers.openaiCompatible?.enabled ?? false,
+    ].filter(Boolean).length;
+
     return (
       <section className="settings-setup-surface" data-settings-setup="macos-download-readiness">
-        <div className="setup-card" data-setup-step="install-source">
-          <span>Welcome</span>
-          <strong>@memi-design/cli@1.0.1</strong>
-          <p>{props.status?.projectRoot ?? "Waiting for Studio runtime"}</p>
-        </div>
-        <div className="setup-card" data-setup-step="workspace">
-          <span>Workspace</span>
-          <strong>{props.config?.workspaceRoots?.[0] ?? props.status?.projectRoot ?? "No workspace"}</strong>
-          <p>Local runs, memory, and history use this root.</p>
+        <div className="settings-hero-card" data-setup-step="install-source" data-atomic-level="organism">
+          <span className="settings-row-icon"><StudioControlIcon name="settings" /></span>
+          <div className="settings-row-copy">
+            <span>Studio</span>
+            <strong>@memi-design/cli@1.0.1</strong>
+            <div className="settings-tag-row">
+              <SettingsTag tone={props.status ? "ok" : "warn"}>{props.status?.status ?? "loading"}</SettingsTag>
+              <SettingsTag>{compactName(workspaceRoot)}</SettingsTag>
+              <SettingsTag tone={props.config?.setup?.completedAt ? "ok" : "neutral"}>{props.config?.setup?.completedAt ? "complete" : "setup"}</SettingsTag>
+            </div>
+          </div>
           <div className="inline-actions">
-            <button data-action-id="workspace.change" type="button" onClick={props.onSelectWorkspace}>Change workspace</button>
+            <button data-action-id="runtime.refresh" type="button" onClick={props.onRefresh}><StudioControlIcon name="refresh" />Refresh</button>
+            <button className="primary" data-action-id="settings.save" type="button" onClick={props.onSave} disabled={!props.config}><StudioControlIcon name="save" />Save</button>
           </div>
         </div>
+
+        <div className="settings-setup-grid" data-atomic-level="template">
+          <article className="setup-card settings-feature-card" data-setup-step="workspace">
+            <span className="settings-row-icon"><StudioControlIcon name="workspace" /></span>
+            <div className="settings-row-copy">
+              <span>Workspace</span>
+              <strong title={workspaceRoot}>{compactName(workspaceRoot)}</strong>
+              <small title={workspaceRoot}>{workspaceRoot}</small>
+            </div>
+            <button data-action-id="workspace.change" type="button" onClick={props.onSelectWorkspace}>Change</button>
+          </article>
+
+          <article className="setup-card settings-feature-card" data-setup-step="agents">
+            <span className="settings-row-icon"><StudioControlIcon name="harness" /></span>
+            <div className="settings-row-copy">
+              <span>Agents</span>
+              <strong>{coreHarnessRows.filter((harness) => harness.installed).length}/{coreHarnessRows.length} installed</strong>
+              <div className="settings-tag-row">
+                {coreHarnessRows.slice(0, 2).map((harness) => (
+                  <SettingsTag key={harness.id} tone={harness.installed ? "ok" : "warn"}>{harness.label}</SettingsTag>
+                ))}
+              </div>
+            </div>
+            <button data-action-id="settings.section.agents.from-setup" type="button" onClick={() => props.onSectionChange("Agents")}>Open</button>
+          </article>
+
+          <article className="setup-card settings-feature-card" data-setup-step="providers">
+            <span className="settings-row-icon"><StudioControlIcon name="receipt" /></span>
+            <div className="settings-row-copy">
+              <span>Providers</span>
+              <strong>{providerCount} active</strong>
+              <div className="settings-tag-row">
+                <SettingsTag tone={providers.anthropic?.enabled === false ? "neutral" : "ok"}>Anthropic</SettingsTag>
+                <SettingsTag tone={providers.openai?.enabled === false ? "neutral" : "ok"}>OpenAI</SettingsTag>
+                <SettingsTag tone={providers.ollama?.enabled === false ? "neutral" : "ok"}>Ollama</SettingsTag>
+              </div>
+            </div>
+            <button data-action-id="settings.section.providers.from-setup" type="button" onClick={() => props.onSectionChange("Providers")}>Edit</button>
+          </article>
+
+          <article className="setup-card settings-feature-card" data-setup-step="figma">
+            <span className="settings-row-icon"><StudioControlIcon name="figma" /></span>
+            <div className="settings-row-copy">
+              <span>Figma</span>
+              <strong>{figmaStatusLabel(props.figmaStatus)}</strong>
+              <div className="settings-tag-row">
+                <SettingsTag tone={isFigmaBridgeRunning(props.figmaStatus) ? "ok" : "neutral"}>bridge</SettingsTag>
+                <SettingsTag tone={isFigmaPluginConnected(props.figmaStatus) ? "ok" : "warn"}>plugin</SettingsTag>
+              </div>
+            </div>
+            <button data-action-id="figma.connect.setup" type="button" onClick={props.onConnectFigma} disabled={props.figmaConnecting}>{props.figmaConnecting ? "Starting" : "Start"}</button>
+          </article>
+
+          <article className="setup-card settings-feature-card" data-setup-step="download">
+            <span className="settings-row-icon"><StudioControlIcon name="download" /></span>
+            <div className="settings-row-copy">
+              <span>Download</span>
+              <strong>DMG ready path</strong>
+              <small title={expectedDmgPath(props.status)}>{compactName(expectedDmgPath(props.status))}</small>
+            </div>
+            <button data-action-id="download.copy-dmg-path.setup" type="button" onClick={() => void copyText(expectedDmgPath(props.status))}>Copy</button>
+          </article>
+        </div>
+
         <div className="setup-card" data-setup-step="macos-permissions">
-          <span>macOS permissions</span>
-          <strong>{requiredMacOSPermissionCount === 0 ? "ready" : `${requiredMacOSPermissionCount} to grant`}</strong>
-          <p>{props.compatibility?.tools.computer.setupAction ?? "Open System Settings and grant agent permissions."}</p>
+          <div className="settings-card-head">
+            <span className="settings-row-icon"><StudioControlIcon name="access" /></span>
+            <div>
+              <span>macOS</span>
+              <strong>{requiredMacOSPermissionCount === 0 ? "Ready" : `${requiredMacOSPermissionCount} left`}</strong>
+            </div>
+          </div>
           <div className="permission-grid" data-macos-permission-actions="setup">
             {macOSPermissionActions.map((action) => (
               <button data-action-id={`setup.permission.${action.permission ?? action.id}`} key={action.id} type="button" onClick={() => runMacOSPermissionAction(action)}>
+                <span className="settings-row-icon"><StudioControlIcon name={permissionIcon(action.permission)} /></span>
                 <strong>{action.label}</strong>
-                <span>{action.status ?? (action.required ? "needs action" : "ready")}</span>
+                <SettingsTag tone={permissionTone(action.status, action.required)}>{permissionStatusLabel(action.status, action.required)}</SettingsTag>
               </button>
             ))}
           </div>
         </div>
-        {renderAgents()}
-        {renderProviders()}
-        {renderFigma()}
-        {renderPermissions()}
-        {renderDownload()}
         <div className="settings-actions">
-          <span>{props.config?.setup?.completedAt ? `completed ${props.config.setup.completedAt}` : "setup state not completed"}</span>
+          <span>{props.config?.setup?.completedAt ? `Completed ${formatAutomationDate(props.config.setup.completedAt)}` : "First-run setup pending"}</span>
           <button className="primary" data-action-id="setup.finish" type="button" onClick={props.onCompleteSetup}>Mark setup complete</button>
         </div>
       </section>
@@ -3742,18 +4132,20 @@ export function SettingsPanel(props: {
 
   return (
     <div className="modal-backdrop settings-backdrop" data-settings-panel="warp-style" data-user-settings="studio-settings" role="dialog" aria-modal="true" aria-label="Studio settings">
-      <section className="settings-panel">
+      <section className="settings-panel" data-atomic-level="template">
         <aside>
           <strong>Settings</strong>
           {sections.map((section) => (
             <button
-              className={props.activeSection === section ? "active" : ""}
-              data-action-id={`settings.section.${section.toLowerCase().replace(/[^a-z]+/g, "-")}`}
-              key={section}
+              className={props.activeSection === section.id ? "active" : ""}
+              data-action-id={`settings.section.${section.id.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+              key={section.id}
               type="button"
-              onClick={() => props.onSectionChange(section)}
+              onClick={() => props.onSectionChange(section.id)}
             >
-              {section}
+              <StudioControlIcon name={section.icon} />
+              <span>{section.label}</span>
+              <small>{section.tag}</small>
             </button>
           ))}
         </aside>
@@ -3764,16 +4156,18 @@ export function SettingsPanel(props: {
               <h2>Studio Settings</h2>
             </div>
             <div className="inline-actions">
-              <button data-action-id="runtime.refresh" type="button" onClick={props.onRefresh}>Refresh</button>
-              <button data-action-id="settings.close" type="button" onClick={props.onClose}>Close</button>
-              <button className="primary" data-action-id="settings.save" type="button" onClick={props.onSave} disabled={!props.config}>Save</button>
+              <IconButton actionId="runtime.refresh" ariaLabel="Refresh settings" title="Refresh" icon="refresh" onClick={() => void props.onRefresh()} />
+              <IconButton actionId="settings.close" ariaLabel="Close settings" title="Close" icon="close" onClick={props.onClose} />
+              <IconButton className="primary" actionId="settings.save" ariaLabel="Save settings" title="Save" icon="save" onClick={props.onSave} disabled={!props.config} />
             </div>
           </header>
-          {renderSection()}
+          <div className="settings-body">
+            {renderSection()}
+          </div>
           <div className="settings-actions">
             <span>{props.computerStatus?.message ?? "Computer state unavailable"}</span>
             <button data-action-id="computer.action" type="button" onClick={props.onComputerCapture}>
-              Check screen permission
+              <StudioControlIcon name="details" />Check screen
             </button>
           </div>
         </main>
@@ -4346,6 +4740,59 @@ function buildDownloadReadyItems(input: { status: StudioStatus | null; config: S
   ];
 }
 
+type SettingsTone = "ok" | "warn" | "danger" | "neutral";
+
+function SettingsTag({ children, tone = "neutral" }: { children: ReactNode; tone?: SettingsTone }) {
+  return <span className="settings-tag" data-tone={tone}>{children}</span>;
+}
+
+function SettingsMetricCard(props: { icon: StudioControlIconName; label: string; value: string; detail?: string | null; tone?: SettingsTone }) {
+  return (
+    <article className="settings-metric-card" data-tone={props.tone ?? "neutral"} data-atomic-level="molecule">
+      <span className="settings-row-icon"><StudioControlIcon name={props.icon} /></span>
+      <span>{props.label}</span>
+      <strong title={props.value}>{props.value}</strong>
+      {props.detail ? <small title={props.detail}>{props.detail}</small> : null}
+    </article>
+  );
+}
+
+function fallbackHarnessSetupPlan(harness: {
+  id: Harness["id"];
+  label: string;
+  installed: boolean;
+  enabled: boolean;
+  authStatus?: Harness["authStatus"];
+  authMessage?: string | null;
+  resolvedPath?: string | null;
+  command?: string | null;
+}): StudioHarnessSetupPlan {
+  const command = harness.command ?? harness.id;
+  const installed = Boolean(harness.installed);
+  return {
+    harnessId: harness.id,
+    label: harness.label,
+    status: installed ? "ready" : "needs_action",
+    summary: installed ? "Ready" : `Install ${command}`,
+    generatedAt: new Date(0).toISOString(),
+    installed,
+    enabled: harness.enabled,
+    authStatus: harness.authStatus ?? (installed ? "ready" : "missing"),
+    authMessage: harness.authMessage ?? (installed ? "Ready" : "Command not found"),
+    resolvedPath: harness.resolvedPath ?? null,
+    docsUrl: null,
+    actions: installed ? [] : [{
+      id: `${harness.id}-install`,
+      label: `Install ${command}`,
+      kind: "copy_command",
+      required: true,
+      description: `Install ${command}`,
+      command: `Install ${command}`,
+    }],
+    requiredActionIds: installed ? [] : [`${harness.id}-install`],
+  };
+}
+
 function normalizeCodexUiConfig(config: Partial<StudioCodexConfig> | null | undefined): StudioCodexConfig {
   return { ...DEFAULT_CODEX_UI_CONFIG, ...(config ?? {}) };
 }
@@ -4409,6 +4856,35 @@ function fallbackMacOSPermissionAction(
     url,
     status,
   };
+}
+
+function permissionIcon(permission: StudioCompatibilityToolAction["permission"] | null | undefined): StudioControlIconName {
+  if (permission === "screenRecording") return "details";
+  if (permission === "automation") return "automation";
+  if (permission === "fileAccess") return "workspace";
+  if (permission === "accessibility") return "access";
+  return "refresh";
+}
+
+function permissionStatusLabel(status: StudioCompatibilityToolAction["status"] | null | undefined, required: boolean): string {
+  if (status === "granted") return "granted";
+  if (status === "denied") return "denied";
+  if (status === "not_applicable") return "skip";
+  return required ? "needed" : "ready";
+}
+
+function permissionTone(status: StudioCompatibilityToolAction["status"] | null | undefined, required: boolean): SettingsTone {
+  if (status === "granted" || status === "not_applicable") return "ok";
+  if (status === "denied") return "danger";
+  return required ? "warn" : "neutral";
+}
+
+function agentKitTargetForHarness(harnessId: Harness["id"]): AgentInstallTargetInput {
+  if (harnessId === "claude-code") return "claude-code";
+  if (harnessId === "codex") return "codex";
+  if (harnessId === "opencode") return "opencode";
+  if (harnessId === "hermes") return "hermes";
+  return "all";
 }
 
 export function formatTime(value: string): string {

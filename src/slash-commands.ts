@@ -3,7 +3,7 @@
 
 import type { HarnessId, StudioAction, StudioChatMode, StudioPermissionMode } from "./studio-api";
 
-export type SlashCommandPane = "run" | "changes" | "figma" | "memory" | "mermaid-board";
+export type SlashCommandPane = "run" | "changes" | "design-system" | "figma" | "memory" | "mermaid-board";
 
 export interface SlashCommand {
   id: string;
@@ -48,6 +48,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   command("handoff", "Handoff", "Stage a product handoff run.", ["ship"], { action: "handoff", chatMode: "review", permissionMode: "guarded" }),
   command("codex", "Codex", "Switch composer harness to Codex.", ["cc"], { harness: "codex" }),
   command("claude", "Claude", "Switch composer harness to Claude Code.", ["claude-code"], { harness: "claude-code" }),
+  command("system", "System", "Focus the design-system artifact lane.", ["design", "ds"], { pane: "design-system" }),
   command("guarded", "Guarded", "Use guarded workspace-write access.", ["write"], { permissionMode: "guarded" }),
   command("full", "Full", "Use full-access mode.", ["full-access"], { permissionMode: "full_access" }),
   command("figma", "Figma", "Focus the Figma cockpit pane.", ["bridge"], { pane: "figma" }),

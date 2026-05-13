@@ -18,6 +18,7 @@ import {
   callComputerAction,
   canRestartStudioRuntime,
   captureAttachment,
+  captureDesignSystemArtifact,
   captureReviewPacket,
   archiveDesignChangelogEntry,
   connectFigma,
@@ -49,6 +50,7 @@ import {
   getStatus,
   getUsageSnapshot,
   installAutomationScheduler,
+  installAgentKit,
   installMarketplaceNote,
   listAutomationRuns,
   listAutomations,
@@ -142,6 +144,7 @@ import {
   type StudioActiveProcess,
   type StudioActivityItem,
   type StudioDownloadJob,
+  type AgentInstallTargetInput,
 } from "./studio-api";
 import { deriveStudioTrace, type StudioTraceModel } from "./runtime/index.js";
 import {
@@ -201,6 +204,13 @@ const MODE_PRESETS = WORKBENCH_COPY.modePresets;
 const ACTIONS: Array<{ id: StudioAction; label: string }> = WORKBENCH_COPY.actions.map((action) => ({ ...action }));
 const CHAT_MODES: Array<{ id: StudioChatMode; label: string }> = WORKBENCH_COPY.chatModes.map((mode) => ({ ...mode }));
 const PERMISSION_MODES: Array<{ id: StudioPermissionMode; label: string }> = WORKBENCH_COPY.permissionModes.map((mode) => ({ ...mode }));
+const DESIGN_LANE_ACTIONS = new Set<StudioAction>([
+  "audit",
+  "browser-audit",
+  "design-doc",
+  "handoff",
+  "self-design",
+]);
 
 type RightPaneTab = WorkbenchRightPaneTab;
 type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
@@ -333,6 +343,24 @@ type InspectorSelection =
   | { kind: "approval"; eventId: string }
   | { kind: "event"; id: string };
 
+type DesignLaneState = {
+  active: boolean;
+  hasDesignSystem: boolean;
+  hasFigma: boolean;
+  hasFigJam: boolean;
+  needsFigmaSetup: boolean;
+  reason: string;
+};
+
+type RunSpineReceiptModel = {
+  id: string;
+  label: string;
+  status: "done" | "idle" | "running" | "warn";
+  title?: string;
+  fields: Array<{ label: string; value: string }>;
+  onSelect?: () => void;
+};
+
 const RIGHT_PANE_TAB_GROUPS = ["primary", "utility"] as const;
 type RightPaneTabDefinition = { id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean };
 const ALL_RIGHT_PANE_TABS: RightPaneTabDefinition[] = WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }));
@@ -344,7 +372,6 @@ const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.up
 const PM_MERMAID_BOARD_TOOL_IDS = ["board.apply_template", "board.sync_figjam"] as const;
 const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavailable;
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
-
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
 const TRACE_REFRESH_DELAY_MS = 350;
@@ -366,6 +393,14 @@ interface StudioActionRegistryItem {
 const STUDIO_ACTION_REGISTRY: StudioActionRegistryItem[] = [
   ...WORKBENCH_COPY.actionRegistry.map((item) => ({ ...item } as StudioActionRegistryItem)),
 ];
+
+function isDesignLaneAction(action: StudioAction): boolean {
+  return DESIGN_LANE_ACTIONS.has(action);
+}
+
+function isDesignLanePrompt(value: string): boolean {
+  return /\b(design system|design-system|figma|figjam|tokens?|components?|style guide|brand|typography|spacing|accessibility|handoff|screen|mockup|wireframe|prototype|shadcn|tailwind|visual|motion)\b/i.test(value);
+}
 
 export function App() {
   const scrollRegionRef = useRef<HTMLElement | null>(null);
@@ -698,10 +733,57 @@ export function App() {
   }, [reviewPackets, session?.id]);
   const lastFailure = useMemo(() => findLatestFailureEvent(events), [events]);
   const hasChangedFileContext = (designTrace?.files.length ?? 0) > 0 || Boolean(designTrace?.error);
+  const hasDesignSystemTraceContext = (designTrace?.designSystemFiles.length ?? 0) > 0;
+  const hasDesignArtifactContext = allDesignArtifacts.length > 0;
   const hasPacketContext = Boolean(activeReviewPacket || allDesignArtifacts.length);
   const hasCreationEventContext = events.some((event) =>
     /artifact|design|decision|acceptance|screenshot|snapshot|figma|research/i.test(event.type),
   );
+  const hasFigmaConnection = Boolean(
+    isFigmaBridgeRunning(figmaStatus)
+    || figmaStatus?.pluginStatus === "connected"
+    || figmaStatus?.connectionState === "connected"
+    || (figmaStatus?.clients.length ?? 0) > 0,
+  );
+  const mermaidBoardSync = mermaidBoard?.lastFigJamSync ?? null;
+  const iaBoardSync = iaBoard?.lastFigJamSync ?? null;
+  const hasFigJamContext = Boolean(
+    mermaidBoard
+    || mermaidBoardExports.length
+    || mermaidBoardSync
+    || iaBoard
+    || iaBoardExports.length
+    || iaBoardSync
+    || scenarioDesignPackage
+    || scenarioFigJamExports.length,
+  );
+  const hasDesignPromptContext = isDesignLanePrompt(prompt)
+    || isDesignLanePrompt(session?.prompt ?? "")
+    || isDesignLaneAction(effectiveAction);
+  const designLaneState: DesignLaneState = useMemo(() => {
+    const hasDesignSystem = hasDesignArtifactContext || hasDesignSystemTraceContext;
+    const active = hasDesignSystem || hasFigmaConnection || hasFigJamContext || hasDesignPromptContext;
+    const needsFigmaSetup = active && !hasFigmaConnection;
+    const reason = hasDesignArtifactContext
+      ? "Design-system artifact ready"
+      : hasDesignSystemTraceContext
+        ? "Design-system files changed"
+        : hasFigJamContext
+          ? "FigJam source or board ready"
+          : hasFigmaConnection
+            ? "Figma bridge connected"
+            : hasDesignPromptContext
+              ? "Design-oriented prompt"
+              : "No design lane context";
+    return {
+      active,
+      hasDesignSystem,
+      hasFigma: hasFigmaConnection,
+      hasFigJam: hasFigJamContext,
+      needsFigmaSetup,
+      reason,
+    };
+  }, [hasDesignArtifactContext, hasDesignPromptContext, hasDesignSystemTraceContext, hasFigJamContext, hasFigmaConnection]);
   const showConversationGoalRow = Boolean(conversationGoal.trim() || conversationTurnCount > 0);
   const showCreationStrip = Boolean(
     hasPacketContext
@@ -712,15 +794,53 @@ export function App() {
     || (session && events.length > 0),
   );
   const shouldShowPacketTab = rightPaneTab === "work-packet" || hasPacketContext;
+  const shouldShowDesignSystemTab = rightPaneTab === "design-system" || designLaneState.hasDesignSystem;
+  const shouldShowBoardTab = rightPaneTab === "mermaid-board" || designLaneState.hasFigJam;
+  const shouldShowFigmaTab = rightPaneTab === "figma" || designLaneState.hasFigma || designLaneState.needsFigmaSetup;
   const visibleRightPaneTabs = useMemo(() => {
-    if (!shouldShowPacketTab) return DEFAULT_RIGHT_PANE_TABS;
-    const packetTab = ALL_RIGHT_PANE_TABS.find((tab) => tab.id === "work-packet");
-    if (!packetTab || DEFAULT_RIGHT_PANE_TABS.some((tab) => tab.id === packetTab.id)) return DEFAULT_RIGHT_PANE_TABS;
-    const nextTabs = [...DEFAULT_RIGHT_PANE_TABS];
-    const insertAt = Math.max(1, nextTabs.findIndex((tab) => tab.id === "changes"));
-    nextTabs.splice(insertAt, 0, packetTab);
-    return nextTabs;
-  }, [shouldShowPacketTab]);
+    const visibleIds = new Set<RightPaneTab>(DEFAULT_RIGHT_PANE_TABS.map((tab) => tab.id));
+    visibleIds.add(rightPaneTab);
+    if (shouldShowPacketTab) visibleIds.add("work-packet");
+    if (shouldShowDesignSystemTab) visibleIds.add("design-system");
+    if (shouldShowBoardTab) visibleIds.add("mermaid-board");
+    if (shouldShowFigmaTab) visibleIds.add("figma");
+    return ALL_RIGHT_PANE_TABS.filter((tab) => visibleIds.has(tab.id));
+  }, [rightPaneTab, shouldShowBoardTab, shouldShowDesignSystemTab, shouldShowFigmaTab, shouldShowPacketTab]);
+  const designLaneReceipt = useMemo<RunSpineReceiptModel | null>(() => {
+    if (activeDesignArtifact) {
+      return {
+        id: `design-system-${activeDesignArtifact.id}`,
+        label: "Design lane",
+        status: activeDesignArtifact.status === "draft" ? "warn" : "done",
+        title: activeDesignArtifact.title,
+        fields: [
+          { label: "system", value: trimText(activeDesignArtifact.title, 28) },
+          { label: "sections", value: String(activeDesignArtifact.sections.length) },
+          { label: "review", value: activeDesignArtifact.status },
+        ],
+        onSelect: () => chooseRightPane("design-system", "Design-system artifact opened from run spine"),
+      };
+    }
+    const figJamExportCount = mermaidBoardExports.length + iaBoardExports.length + scenarioFigJamExports.length;
+    const figJamSourceCount = figJamExportCount || scenarioDesignPackage?.mermaidArtifacts?.length || 0;
+    const sync = mermaidBoardSync ?? iaBoardSync;
+    if (figJamSourceCount > 0 || sync) {
+      const synced = sync?.status === "synced";
+      return {
+        id: `figjam-${sync?.syncedAt ?? figJamSourceCount}`,
+        label: synced ? "FigJam synced" : "FigJam source",
+        status: synced ? "done" : sync?.status === "failed" ? "warn" : "done",
+        title: sync?.fallbackReason ?? "Open FigJam, inspect source, and verify sync status.",
+        fields: [
+          { label: "open", value: "FigJam" },
+          { label: "source", value: `${figJamSourceCount} file${figJamSourceCount === 1 ? "" : "s"}` },
+          { label: "sync", value: sync?.status ?? "source" },
+        ],
+        onSelect: () => chooseRightPane(mermaidBoard || mermaidBoardExports.length ? "mermaid-board" : "research-lab", "FigJam receipt opened from run spine"),
+      };
+    }
+    return null;
+  }, [activeDesignArtifact, iaBoardSync, iaBoardExports.length, mermaidBoard, mermaidBoardSync, mermaidBoardExports.length, scenarioDesignPackage?.mermaidArtifacts?.length, scenarioFigJamExports.length]);
   const latestRun = session ?? recentSessions[0] ?? null;
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
@@ -1023,6 +1143,21 @@ export function App() {
   async function handleDiagnoseHarness(id: HarnessId) {
     await diagnoseHarness(id, { refresh: true });
     await refresh();
+  }
+
+  async function handleInstallAgentKit(target: AgentInstallTargetInput) {
+    try {
+      await installAgentKit({
+        target,
+        dryRun: false,
+        force: false,
+        project: status?.projectRoot ?? settingsDraft?.workspaceRoots?.[0],
+      });
+      await refresh();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function scheduleSessionTraceRefresh(sessionId: string) {
@@ -1495,6 +1630,15 @@ export function App() {
   function openFigmaSurface() {
     chooseRightPane("figma", "Figma bridge opened");
     void getFigmaStatus().then(setFigmaStatus).catch(() => undefined);
+  }
+
+  function openDesignSystemSurface() {
+    chooseRightPane("design-system", activeDesignArtifact ? "Design-system artifact opened" : "Design-system lane opened");
+    void listDesignSystemArtifacts().then(setDesignArtifacts).catch(() => undefined);
+  }
+
+  function openFigJamBoardSurface() {
+    chooseRightPane("mermaid-board", mermaidBoard || mermaidBoardExports.length ? "FigJam board opened" : "FigJam board requested");
   }
 
   function openAutomationsSurface() {
@@ -2118,6 +2262,23 @@ export function App() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function saveDesignSystemArtifact(nextArtifact: DesignSystemArtifact) {
+    try {
+      const artifact = await captureDesignSystemArtifact({
+        artifact: {
+          ...nextArtifact,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+      setSelectedArtifactId(artifact.id);
+      setDesignArtifacts((current) => [artifact, ...current.filter((candidate) => candidate.id !== artifact.id)]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      throw err;
     }
   }
 
@@ -2988,6 +3149,7 @@ export function App() {
             designTrace={designTrace}
             lastFailure={lastFailure}
             usageSnapshot={usageSnapshot}
+            designLaneReceipt={designLaneReceipt}
             collapsedBlockIds={collapsedBlockIds}
             onStart={() => void run()}
             onCopyBlock={(block) => void copyText(block.messages.join(""))}
@@ -3473,6 +3635,7 @@ export function App() {
           figmaStatus={figmaStatus}
           onReviewSection={reviewArtifactSection}
           onFixSection={handleFixDesignSystemSection}
+          onSaveArtifact={saveDesignSystemArtifact}
           onUseSystem={useDesignSystemArtifact}
         />
       );
@@ -3594,7 +3757,12 @@ export function App() {
           />
           <section className="console-content" data-console-content="primary">
             {error ? <div className="error">{error}</div> : null}
-            <section className="agent-workbench-shell" data-agent-workbench="design-system">
+            <section
+              className="agent-workbench-shell"
+              data-agent-workbench="design-system"
+              data-design-lane-active={String(designLaneState.active)}
+              data-design-lane-reason={designLaneState.reason}
+            >
               <section
                 className="agent-workbench"
                 data-agent-workbench="resizable-conversation-artifacts"
@@ -3672,6 +3840,14 @@ export function App() {
         onOpenFigma={() => {
           setCommandPaletteOpen(false);
           openFigmaSurface();
+        }}
+        onOpenDesignSystem={() => {
+          setCommandPaletteOpen(false);
+          openDesignSystemSurface();
+        }}
+        onOpenBoard={() => {
+          setCommandPaletteOpen(false);
+          openFigJamBoardSurface();
         }}
         onOpenPlugins={() => {
           setCommandPaletteOpen(false);
@@ -3758,6 +3934,7 @@ export function App() {
         onOpenAutomationsCenter={openAutomationsSurface}
         onPatchConfig={patchSettings}
         onSave={saveSettings}
+        onInstallAgentKit={handleInstallAgentKit}
         onComputerCapture={handleComputerCaptureRequest}
         onConnectFigma={handleFigmaConnect}
         onOpenFigma={handleFigmaOpen}
@@ -4142,6 +4319,7 @@ function RunSpine(props: {
   designTrace: StudioDesignSystemTrace | null;
   lastFailure: StudioEvent | null;
   usageSnapshot: StudioUsageSnapshot | null;
+  designLaneReceipt: RunSpineReceiptModel | null;
   collapsedBlockIds: Set<string>;
   onStart: () => void;
   onCopyBlock: (block: TerminalBlock) => void;
@@ -4223,6 +4401,15 @@ function RunSpine(props: {
       meta: props.designTrace?.reviewLabel ?? "workspace",
       receipts: fileReceipts,
     },
+    ...(props.designLaneReceipt ? [{
+      id: "design-lane",
+      label: "Design Lane",
+      status: props.designLaneReceipt.status,
+      summary: props.designLaneReceipt.title ?? "Design-system and FigJam handoff context is ready.",
+      meta: "system / figjam",
+      receipts: [props.designLaneReceipt],
+      onSelect: props.designLaneReceipt.onSelect,
+    }] : []),
     {
       id: "result",
       label: "Result",
