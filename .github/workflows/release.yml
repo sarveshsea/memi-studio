@@ -90,7 +90,7 @@ jobs:
           # the .app.tar.gz + .app.tar.gz.sig artifacts that latest.json points at.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri:build -- --target ${{ matrix.target }}
+        run: npm run tauri:build:release -- --target ${{ matrix.target }}
 
       - name: Notarize DMG
         env:

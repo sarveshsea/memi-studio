@@ -4,6 +4,8 @@
 
 All secrets live in **`sarveshsea/memi-studio` → Settings → Secrets and Variables → Actions**.
 
+Local developer builds intentionally do **not** require the updater private key. `npm run tauri:build` merges `src-tauri/tauri.local.conf.json`, which disables `bundle.createUpdaterArtifacts` so it emits the `.app` and `.dmg` without trying to sign the updater tarball. Release builds use `npm run tauri:build:release` and still require `TAURI_SIGNING_PRIVATE_KEY`.
+
 ## What's set today
 
 | Name | Purpose | Source / Owner | Rotates | Where it shows up |
@@ -125,4 +127,10 @@ gh release view v0.18.0 --repo sarveshsea/memi-studio --json assets \
 # Was a DMG actually notarized?
 spctl -a -vv --type install <path-to-downloaded.dmg>
 # Expected: accepted, source=Notarized Developer ID
+
+# Local app/DMG build without updater signing
+npm run tauri:build -- --target aarch64-apple-darwin
+
+# Release build path that requires TAURI_SIGNING_PRIVATE_KEY
+npm run tauri:build:release -- --target aarch64-apple-darwin
 ```

@@ -46,6 +46,10 @@ const SKIP_DIRS = new Set([
   "out",
 ]);
 
+const SKIP_PATH_PREFIXES = [
+  "src-tauri/resources/memoire-runtime",
+];
+
 const SKIP_FILES = new Set([
   "LICENSE",
   "NOTICE",
@@ -59,12 +63,22 @@ const SKIP_FILES = new Set([
   ".gitignore",
 ]);
 
+function repoPath(path) {
+  return relative(ROOT, path).split(sep).join("/");
+}
+
+function shouldSkipPath(path) {
+  const normalized = repoPath(path);
+  return SKIP_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+}
+
 async function* walk(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue;
+      if (shouldSkipPath(full)) continue;
       yield* walk(full);
     } else if (entry.isFile()) {
       if (SKIP_FILES.has(entry.name)) continue;
