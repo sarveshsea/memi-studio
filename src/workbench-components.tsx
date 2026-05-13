@@ -2534,7 +2534,7 @@ function matchesDesignChangelogFilter(entry: DesignChangelogEntry, filter: Desig
 }
 
 type CommandPaletteRowKind = "navigation" | "harness" | "session" | "knowledge" | "empty";
-type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
+type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "research" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
 type CommandPaletteRow = {
   id: string;
   kind: CommandPaletteRowKind;
@@ -2557,6 +2557,7 @@ export function CommandPalette(props: {
   onOpenSettingsSection: (section: string) => void;
   onOpenDesignSystem: () => void;
   onOpenBoard: () => void;
+  onOpenResearchLab: () => void;
   onOpenFigma: () => void;
   onOpenPlugins: () => void;
   onOpenAutomations: () => void;
@@ -2605,6 +2606,7 @@ export function CommandPalette(props: {
     { id: "settings.open", kind: "navigation" as const, icon: "settings" as const, label: "Settings", detail: "Open Studio settings", run: props.onOpenSettings },
     { id: "command.open.design-system", kind: "navigation" as const, icon: "system" as const, label: "Design System", detail: "Open editable artifact review and design memory", run: props.onOpenDesignSystem },
     { id: "command.open.figjam-board", kind: "navigation" as const, icon: "board" as const, label: "FigJam Board", detail: "Open PM board, source export, and sync status", run: props.onOpenBoard },
+    { id: "command.open.research-lab", kind: "navigation" as const, icon: "research" as const, label: "Research Lab", detail: "Open research patterns and scenario simulation", run: props.onOpenResearchLab },
     { id: "command.open.figma", kind: "navigation" as const, icon: "figma" as const, label: "Figma Bridge", detail: "Open bridge status and plugin actions", run: props.onOpenFigma },
     { id: "command.open.plugins", kind: "navigation" as const, icon: "plugins" as const, label: "Plugins", detail: "Open Mémoire Notes marketplace", run: props.onOpenPlugins },
     { id: "command.open.automations", kind: "navigation" as const, icon: "automations" as const, label: "Automations", detail: "Open scheduled Studio work", run: props.onOpenAutomations },
@@ -2668,6 +2670,7 @@ function CommandPaletteIconGlyph({ name }: { name: CommandPaletteIcon }) {
   if (name === "settings") return <StudioLineIcon><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.3 3a8 8 0 0 0-1.7 1L5.1 6l-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1l.3 3h5l.3-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1Z" /></StudioLineIcon>;
   if (name === "system") return <StudioLineIcon><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="8" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="16" cy="18" r="1.5" /></StudioLineIcon>;
   if (name === "board") return <StudioLineIcon><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 9h3M13 9h3M8 14h8" /></StudioLineIcon>;
+  if (name === "research") return <StudioLineIcon><path d="M5 6h14M7 10h10M9 14h6" /><circle cx="8" cy="18" r="2" /><circle cx="16" cy="18" r="2" /><path d="M10 18h4" /></StudioLineIcon>;
   if (name === "figma") return <StudioLineIcon><circle cx="9" cy="6" r="3" /><circle cx="15" cy="6" r="3" /><circle cx="9" cy="12" r="3" /><circle cx="15" cy="12" r="3" /><circle cx="9" cy="18" r="3" /></StudioLineIcon>;
   if (name === "plugins") return <StudioLineIcon><path d="M8 4h8v5h4v8h-5v3H7v-5H4V7h4V4Z" /></StudioLineIcon>;
   if (name === "automations") return <StudioLineIcon><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></StudioLineIcon>;

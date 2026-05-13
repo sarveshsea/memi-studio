@@ -1861,8 +1861,12 @@ export async function listDesignSystemArtifacts(): Promise<DesignSystemArtifact[
 }
 
 export async function listDesignChangelogEntries(): Promise<DesignChangelogEntry[]> {
-  const payload = await fetchJSON<{ entries: DesignChangelogEntry[] }>("/api/design-changelog");
-  return payload.entries;
+  try {
+    const payload = await fetchJSON<{ entries: DesignChangelogEntry[] }>("/api/design-changelog");
+    return payload.entries;
+  } catch {
+    return [];
+  }
 }
 
 export async function createDesignChangelogEntry(input: DesignChangelogCreateInput): Promise<DesignChangelogEntry> {
@@ -2018,8 +2022,35 @@ export async function listSessions(): Promise<SessionSummary[]> {
 }
 
 export async function getUsageSnapshot(): Promise<StudioUsageSnapshot> {
-  const payload = await fetchJSON<{ usage: StudioUsageSnapshot }>("/api/usage");
-  return payload.usage;
+  try {
+    const payload = await fetchJSON<{ usage: StudioUsageSnapshot }>("/api/usage");
+    return payload.usage;
+  } catch {
+    return emptyUsageSnapshot();
+  }
+}
+
+function emptyUsageSnapshot(): StudioUsageSnapshot {
+  return {
+    generatedAt: new Date().toISOString(),
+    sessions: [],
+    totals: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+      estimatedCostUsd: 0,
+    },
+    byHarness: {},
+    byProvider: {},
+    rateLimits: [],
+    budgets: {
+      warningThreshold: 0.8,
+      providers: {},
+      harnesses: {},
+    },
+  };
 }
 
 export async function getSessionEvents(id: string, limit = 160): Promise<{ session: SessionSummary; events: StudioEvent[] }> {

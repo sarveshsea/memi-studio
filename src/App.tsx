@@ -370,6 +370,7 @@ const DEFAULT_RIGHT_PANE_TABS = ALL_RIGHT_PANE_TABS
 const SCENARIO_TOOL_IDS = ["harness.study", "research.patterns.extract", "research.patterns.list", "simulation.models", "simulation.run_matrix", "simulation.transcript", "research.design_package", "mermaid_jam.export"] as const;
 const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.update_node", "board.connect", "board.layout", "board.capture_ia", "board.export_mermaid_jam"] as const;
 const PM_MERMAID_BOARD_TOOL_IDS = ["board.apply_template", "board.sync_figjam"] as const;
+const MERMAID_SOURCE_TOOL_IDS = ["research.design_package", "mermaid_jam.export"] as const;
 const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavailable;
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 const LIVE_EVENT_LIMIT = 220;
@@ -460,6 +461,7 @@ export function App() {
   const [conversationGoal, setConversationGoal] = useState<string>("");
   const [queuedPrompt, setQueuedPrompt] = useState<string>("");
   const [startingPrompt, setStartingPrompt] = useState<string>("");
+  const [runBlockedMessage, setRunBlockedMessage] = useState<string | null>(null);
   const [harnessModelRegistries, setHarnessModelRegistries] = useState<Record<string, HarnessModelRegistry>>({});
   const [selectedModelByHarness, setSelectedModelByHarness] = useState<Record<string, string>>({});
   const [selectedEffort, setSelectedEffort] = useState<StudioEffort | null>(null);
@@ -651,7 +653,7 @@ export function App() {
           }
           if (["artifact", "design_system_artifact", "design_decision", "session_done"].includes(event.type)) {
             window.setTimeout(() => {
-              void listDesignSystemArtifacts().then(setDesignArtifacts).catch(() => undefined);
+              void listDesignSystemArtifacts().then(updateDesignArtifacts).catch(() => undefined);
               void listReviewPackets().then(setReviewPackets).catch(() => undefined);
             }, TRACE_REFRESH_DELAY_MS);
           }
@@ -684,6 +686,7 @@ export function App() {
   const effectiveRuntimeMetrics = status?.metrics ?? runtimeMetrics;
   const hasWorkspace = Boolean((status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "").trim());
   const canRunSession = Boolean(hasWorkspace && runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
+  const runDisabledMessage = runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace, effectiveAction);
   const canContinueConversation = Boolean(activeConversationId && session && (session.status === "completed" || session.status === "interrupted") && (session.conversationId ?? session.id) === activeConversationId);
   const isResumingInterrupted = Boolean(session?.status === "interrupted");
   const activeModelRegistry = harnessModelRegistries[selectedHarness] ?? null;
@@ -901,11 +904,13 @@ export function App() {
           ? "parallel"
           : visibleSessionStatus;
   const activeSidebarProjectId = session?.cwd ?? visibleRecentSessions[0]?.cwd ?? status?.projectRoot ?? null;
-  const mermaidBoardCoreRuntimeReady = Boolean(status?.projectRoot && hasCoreMermaidBoardToolContract(studioTools));
-  const mermaidBoardPmRuntimeReady = mermaidBoardCoreRuntimeReady && hasPmMermaidBoardToolContract(studioTools);
+  const mermaidBoardToolRuntimeReady = Boolean(status?.projectRoot && hasCoreMermaidBoardToolContract(studioTools));
+  const mermaidSourceRuntimeReady = Boolean(status?.projectRoot && hasMermaidSourceToolContract(studioTools));
+  const mermaidBoardCoreRuntimeReady = mermaidBoardToolRuntimeReady || mermaidSourceRuntimeReady;
+  const mermaidBoardPmRuntimeReady = mermaidBoardToolRuntimeReady && hasPmMermaidBoardToolContract(studioTools);
   const mermaidBoardRecovery = useMemo(
-    () => mermaidBoardRuntimeRecovery(status, mermaidBoardCoreRuntimeReady, mermaidBoardPmRuntimeReady, canRestartStudioRuntime(), mermaidBoardError),
-    [mermaidBoardCoreRuntimeReady, mermaidBoardError, mermaidBoardPmRuntimeReady, status],
+    () => mermaidBoardRuntimeRecovery(status, mermaidBoardCoreRuntimeReady, mermaidBoardPmRuntimeReady, canRestartStudioRuntime(), mermaidBoardError, mermaidSourceRuntimeReady && !mermaidBoardToolRuntimeReady),
+    [mermaidBoardCoreRuntimeReady, mermaidBoardError, mermaidBoardPmRuntimeReady, mermaidBoardToolRuntimeReady, mermaidSourceRuntimeReady, status],
   );
   useEffect(() => {
     if (!activeSidebarProjectId) return;
@@ -1102,7 +1107,7 @@ export function App() {
       setCompatibility(nextCompatibility);
       setComputerStatus(nextComputer);
       setDesignTrace(nextDesignTrace);
-      setDesignArtifacts(nextArtifacts);
+      updateDesignArtifacts(nextArtifacts);
       setMarketplaceNotes(nextMarketplaceNotes);
       setDesignChangelogEntries(nextDesignChangelogEntries);
       setReviewPackets(nextReviewPackets);
@@ -1114,7 +1119,6 @@ export function App() {
       setUsageSnapshot(nextUsage);
       setRecentWorkspaces(nextRecentWorkspaces);
       setWorkspacePermissions(nextWorkspacePermissions);
-      if (!selectedArtifactId && nextArtifacts[0]) setSelectedArtifactId(nextArtifacts[0].id);
       if (!session && nextSessions[0]) {
         await openSessionSummary(nextSessions[0]);
       }
@@ -1192,6 +1196,15 @@ export function App() {
     }
   }
 
+  function updateDesignArtifacts(nextArtifacts: DesignSystemArtifact[]) {
+    setDesignArtifacts(nextArtifacts);
+    setSelectedArtifactId((current) => {
+      if (!nextArtifacts.length) return null;
+      if (current && nextArtifacts.some((artifact) => artifact.id === current)) return current;
+      return nextArtifacts[0].id;
+    });
+  }
+
   async function openSessionSummary(nextSession: SessionSummary) {
     setSession(nextSession);
     setServerTrace(null);
@@ -1205,16 +1218,27 @@ export function App() {
     if (nextSession.status === "interrupted") {
       setPrompt(nextSession.prompt ?? "");
     }
-    try {
-      const [eventPayload, tracePayload] = await Promise.all([
-        getSessionEvents(nextSession.id, SESSION_EVENT_LIMIT),
-        getSessionTrace(nextSession.id),
-      ]);
-      setEvents(eventPayload.events);
-      setServerTrace(tracePayload.trace);
+    const [eventResult, traceResult] = await Promise.allSettled([
+      getSessionEvents(nextSession.id, SESSION_EVENT_LIMIT),
+      getSessionTrace(nextSession.id),
+    ]);
+    if (eventResult.status === "fulfilled") {
+      setEvents(eventResult.value.events);
+      setSession((current) => current?.id === nextSession.id ? { ...current, ...eventResult.value.session } : current);
+    } else {
+      setEvents([]);
+    }
+    if (traceResult.status === "fulfilled") {
+      setServerTrace(traceResult.value.trace);
+      setSession((current) => current?.id === nextSession.id ? { ...current, ...traceResult.value.session } : current);
+    } else {
+      setServerTrace(null);
+    }
+    const failures = [eventResult, traceResult].filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+    if (failures.length === 2) {
+      setError(failures.map((failure) => failure.reason instanceof Error ? failure.reason.message : String(failure.reason)).join(" / "));
+    } else {
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -1634,11 +1658,17 @@ export function App() {
 
   function openDesignSystemSurface() {
     chooseRightPane("design-system", activeDesignArtifact ? "Design-system artifact opened" : "Design-system lane opened");
-    void listDesignSystemArtifacts().then(setDesignArtifacts).catch(() => undefined);
+    void listDesignSystemArtifacts().then(updateDesignArtifacts).catch((err) => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
   }
 
   function openFigJamBoardSurface() {
     chooseRightPane("mermaid-board", mermaidBoard || mermaidBoardExports.length ? "FigJam board opened" : "FigJam board requested");
+  }
+
+  function openResearchLabSurface() {
+    chooseRightPane("research-lab", "Research Lab opened");
   }
 
   function openAutomationsSurface() {
@@ -2063,7 +2093,10 @@ export function App() {
   }
 
   async function run() {
-    if (runtimeHealth !== "ready" || !status || !prompt.trim() || !harnessCanRun(currentHarness, effectiveAction)) return;
+    if (runtimeHealth !== "ready" || !status || !prompt.trim() || !harnessCanRun(currentHarness, effectiveAction)) {
+      setRunBlockedMessage(runDisabledMessage);
+      return;
+    }
     const submittedPrompt = prompt.trim();
     if (isSessionActive) {
       setQueuedPrompt(submittedPrompt);
@@ -2071,14 +2104,19 @@ export function App() {
       return;
     }
     setPrompt("");
+    setRunBlockedMessage(null);
     await runWithPrompt(submittedPrompt, { restorePromptOnFailure: true });
   }
 
   async function runWithPrompt(text: string, options: { conversationIdOverride?: string | null; restorePromptOnFailure?: boolean } = {}) {
-    if (!status || !text.trim() || !harnessCanRun(currentHarness, effectiveAction)) return;
+    if (!status || !text.trim() || !harnessCanRun(currentHarness, effectiveAction)) {
+      setRunBlockedMessage(runDisabledMessage);
+      return;
+    }
     setEvents([]);
     setServerTrace(null);
     setError(null);
+    setRunBlockedMessage(null);
     setCollapsedBlockIds(new Set());
     setStartingPrompt(text.trim());
     setIsStartingSession(true);
@@ -2447,7 +2485,7 @@ export function App() {
       const [nextStatus, nextTools] = await Promise.all([getStatus(), listStudioTools()]);
       setStatus(nextStatus);
       setStudioTools(nextTools);
-      if (!nextStatus.projectRoot || !hasCoreMermaidBoardToolContract(nextTools)) {
+      if (!nextStatus.projectRoot || (!hasCoreMermaidBoardToolContract(nextTools) && !hasMermaidSourceToolContract(nextTools))) {
         throw new Error(MERMAID_BOARD_RUNTIME_UNAVAILABLE);
       }
       if (options.requirePm && !hasPmMermaidBoardToolContract(nextTools)) {
@@ -2493,6 +2531,13 @@ export function App() {
     setMermaidBoardError(null);
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const readyBoard = createLocalMermaidBoard(prompt || latestRun?.prompt || "", mermaidBoard?.id ?? "studio-mermaid-board", "pm-brainstorm");
+        setMermaidBoard(readyBoard);
+        chooseRightPane("mermaid-board", "Local FigJam source board ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.create",
         cwd: projectRoot,
@@ -2523,7 +2568,14 @@ export function App() {
     setMermaidBoardLoading(true);
     setMermaidBoardError(null);
     try {
-      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: true });
+      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: mermaidBoardToolRuntimeReady });
+      if (!mermaidBoardToolRuntimeReady) {
+        const readyBoard = createLocalMermaidBoard(prompt || latestRun?.prompt || "", mermaidBoard?.id ?? "studio-mermaid-board", "pm-brainstorm");
+        setMermaidBoard(readyBoard);
+        chooseRightPane("mermaid-board", "Local product board template ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.apply_template",
         cwd: projectRoot,
@@ -2555,6 +2607,13 @@ export function App() {
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
       const context = trimText((prompt || latestRun?.prompt || "").trim(), 240);
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const readyBoard = addLocalMermaidBoardNode(mermaidBoard ?? createLocalMermaidBoard(prompt || latestRun?.prompt || "", "studio-mermaid-board", "pm-brainstorm"), kind, context);
+        setMermaidBoard(readyBoard);
+        chooseRightPane("mermaid-board", readyBoard.nodes.at(-1)?.title ?? readyBoard.title);
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.add_node",
         cwd: projectRoot,
@@ -2588,6 +2647,13 @@ export function App() {
     setMermaidBoardError(null);
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
+      if (!mermaidBoardToolRuntimeReady && mermaidBoard) {
+        const readyBoard = hydrateMermaidBoardAgentSurface(layoutLocalMermaidBoard(mermaidBoard));
+        setMermaidBoard(readyBoard);
+        chooseRightPane("mermaid-board", "Local board arranged");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.layout",
         cwd: projectRoot,
@@ -2614,6 +2680,19 @@ export function App() {
     setMermaidBoardError(null);
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const call = await callStudioTool({
+          toolId: "mermaid_jam.export",
+          cwd: projectRoot,
+          input: { source: "research", intent: prompt || latestRun?.prompt || mermaidBoard?.title || "Product design board" },
+        });
+        assertToolCallCompleted(call);
+        const exports = mermaidBoardExportsFromResearchCall(call.data);
+        setMermaidBoardExports(exports);
+        chooseRightPane("mermaid-board", "Local Mermaid Jam source ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.export_mermaid_jam",
         cwd: projectRoot,
@@ -2642,7 +2721,27 @@ export function App() {
     setMermaidBoardLoading(true);
     setMermaidBoardError(null);
     try {
-      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: true });
+      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: mermaidBoardToolRuntimeReady });
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const call = await callStudioTool({
+          toolId: "mermaid_jam.export",
+          cwd: projectRoot,
+          input: { source: "research", intent: prompt || latestRun?.prompt || mermaidBoard?.title || "Product design board" },
+        });
+        assertToolCallCompleted(call);
+        const exports = mermaidBoardExportsFromResearchCall(call.data);
+        setMermaidBoardExports(exports);
+        if (mermaidBoard) {
+          setMermaidBoard({
+            ...mermaidBoard,
+            lastFigJamSync: localFigJamFallbackSync(exports),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        chooseRightPane("mermaid-board", "Mermaid Jam source ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.sync_figjam",
         cwd: projectRoot,
@@ -2679,6 +2778,13 @@ export function App() {
     setIaBoardError(null);
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const readyBoard = createLocalMermaidBoard(prompt || latestRun?.prompt || "", iaBoard?.id ?? "studio-ia-board", "ia");
+        setIaBoard(readyBoard);
+        chooseRightPane("ia", "Local IA board ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.capture_ia",
         cwd: projectRoot,
@@ -2712,6 +2818,19 @@ export function App() {
     setIaBoardError(null);
     try {
       const projectRoot = await ensureMermaidBoardRuntimeReady();
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const call = await callStudioTool({
+          toolId: "mermaid_jam.export",
+          cwd: projectRoot,
+          input: { source: "research", intent: prompt || latestRun?.prompt || iaBoard?.title || "IA board" },
+        });
+        assertToolCallCompleted(call);
+        const exports = mermaidBoardExportsFromResearchCall(call.data);
+        setIaBoardExports(exports);
+        chooseRightPane("ia", "IA source ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.export_mermaid_jam",
         cwd: projectRoot,
@@ -2738,7 +2857,27 @@ export function App() {
     setIaBoardLoading(true);
     setIaBoardError(null);
     try {
-      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: true });
+      const projectRoot = await ensureMermaidBoardRuntimeReady({ requirePm: mermaidBoardToolRuntimeReady });
+      if (!mermaidBoardToolRuntimeReady && mermaidSourceRuntimeReady) {
+        const call = await callStudioTool({
+          toolId: "mermaid_jam.export",
+          cwd: projectRoot,
+          input: { source: "research", intent: prompt || latestRun?.prompt || iaBoard?.title || "IA board" },
+        });
+        assertToolCallCompleted(call);
+        const exports = mermaidBoardExportsFromResearchCall(call.data);
+        setIaBoardExports(exports);
+        if (iaBoard) {
+          setIaBoard({
+            ...iaBoard,
+            lastFigJamSync: localFigJamFallbackSync(exports),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        chooseRightPane("ia", "IA source ready");
+        setError(null);
+        return;
+      }
       const call = await callStudioTool({
         toolId: "board.sync_figjam",
         cwd: projectRoot,
@@ -3151,6 +3290,8 @@ export function App() {
             usageSnapshot={usageSnapshot}
             designLaneReceipt={designLaneReceipt}
             collapsedBlockIds={collapsedBlockIds}
+            canStart={canRunSession}
+            startDisabledReason={runDisabledMessage}
             onStart={() => void run()}
             onCopyBlock={(block) => void copyText(block.messages.join(""))}
             onAttachBlock={attachBlock}
@@ -3416,11 +3557,14 @@ export function App() {
                     : canContinueConversation
                       ? `Continue conversation (turn ${conversationTurnCount + 1})`
                       : workbenchAction("run").title
-                  : runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace)}
+                  : runDisabledMessage}
               >
                 {isStartingSession ? <span aria-hidden="true">...</span> : isResumingInterrupted ? <span aria-hidden="true">Resume</span> : canContinueConversation ? <span aria-hidden="true">Continue</span> : null}
               </IconButton>
             </div>
+            {runBlockedMessage ? (
+              <p className="composer-blocked-reason" data-composer-blocked-reason="run">{runBlockedMessage}</p>
+            ) : null}
           </div>
           <div className="workspace-status-row" data-workspace-status="local-branch">
             <span title={status?.projectRoot}>{workspaceLabel}</span>
@@ -3849,6 +3993,10 @@ export function App() {
           setCommandPaletteOpen(false);
           openFigJamBoardSurface();
         }}
+        onOpenResearchLab={() => {
+          setCommandPaletteOpen(false);
+          openResearchLabSurface();
+        }}
         onOpenPlugins={() => {
           setCommandPaletteOpen(false);
           openPluginsSurface();
@@ -4002,11 +4150,177 @@ function assertToolCallCompleted(call: StudioToolCallResult): void {
   }
 }
 
+function createLocalMermaidBoard(prompt: string, id: string, mode: MermaidBoard["mode"] = "pm-brainstorm"): MermaidBoard {
+  const now = new Date().toISOString();
+  const board: MermaidBoard = {
+    schemaVersion: 1,
+    id,
+    title: mode === "ia" ? "IA Board" : "Product Design Board",
+    description: "Local Studio board for product design planning and FigJam source export.",
+    mode,
+    templateId: mode === "ia" ? "ia-journeys" : "pm-brainstorm",
+    brief: {
+      problem: prompt.trim() || "Clarify the product design direction.",
+      targetUser: "Product designers and PMs",
+      outcome: "Editable, evidence-linked design decisions.",
+      constraints: [],
+      ...(prompt.trim() ? { prompt: prompt.trim() } : {}),
+    },
+    lastFigJamSync: null,
+    nodes: [],
+    edges: [],
+    frames: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  const defaults: Array<[string, MermaidBoardNodeKind, string, string]> = mode === "ia"
+    ? [
+        ["sitemap", "spec", "Sitemap hypothesis", "Top-level routes and product areas to validate."],
+        ["navigation", "sticky", "Navigation model", "Primary wayfinding, labels, and hierarchy."],
+        ["journeys", "mermaid", "Journey flow", "flowchart TD\n  Start[Open product] --> Decide[Choose task]\n  Decide --> Done[Complete flow]"],
+        ["screens", "spec", "Screen inventory", "Screens and states required for the next prototype."],
+      ]
+    : [
+        ["problem", "sticky", "Problem", board.brief?.problem ?? "Clarify the product direction."],
+        ["users", "persona", "User", board.brief?.targetUser ?? "Product designers and PMs"],
+        ["journey", "mermaid", "Journey map", "journey\n  title Product design review\n  section Discover\n    Gather evidence: 5: Designer\n  section Decide\n    Compare options: 4: PM\n  section Ship\n    Export FigJam source: 5: Designer"],
+        ["opportunities", "spec", "Opportunity", board.brief?.outcome ?? "Improve design handoff clarity."],
+        ["risks", "risk", "Risk", "Source evidence can get lost if the board is not kept local and editable."],
+      ];
+  board.nodes = defaults.map(([laneId, kind, title, body], index) => ({
+    id: `local-${laneId}-${index + 1}`,
+    kind,
+    title,
+    body,
+    mermaidSource: kind === "mermaid" ? body : undefined,
+    researchBacking: [],
+    sourceEventIds: [],
+    author: "agent",
+    laneId,
+    priority: index === 0 ? "high" : "medium",
+    decisionStatus: kind === "risk" ? "open" : undefined,
+    position: { x: 0, y: 0, width: 220, height: 128 },
+    createdAt: now,
+    updatedAt: now,
+  }));
+  return hydrateMermaidBoardAgentSurface(layoutLocalMermaidBoard(board));
+}
+
+function addLocalMermaidBoardNode(board: MermaidBoard, kind: MermaidBoardNodeKind, body: string): MermaidBoard {
+  const now = new Date().toISOString();
+  const node = {
+    id: `local-${kind}-${Date.now().toString(36)}`,
+    kind,
+    title: localBoardNodeTitle(kind),
+    body: body || "Captured board note.",
+    mermaidSource: kind === "mermaid" ? body : undefined,
+    researchBacking: [],
+    sourceEventIds: [],
+    author: "agent" as const,
+    laneId: localBoardLane(kind, board.mode),
+    priority: "medium" as const,
+    decisionStatus: kind === "risk" ? "open" as const : undefined,
+    position: { x: 0, y: 0, width: 220, height: 128 },
+    createdAt: now,
+    updatedAt: now,
+  };
+  return hydrateMermaidBoardAgentSurface(layoutLocalMermaidBoard({
+    ...board,
+    nodes: [...board.nodes, node],
+    updatedAt: now,
+  }));
+}
+
+function layoutLocalMermaidBoard(board: MermaidBoard): MermaidBoard {
+  const lanes = board.mode === "ia"
+    ? ["sitemap", "navigation", "journeys", "screens", "evidence"]
+    : ["problem", "users", "journey", "opportunities", "decisions", "risks", "metrics", "next-steps"];
+  const laneIndex = new Map(lanes.map((lane, index) => [lane, index]));
+  const counts = new Map<string, number>();
+  return {
+    ...board,
+    nodes: board.nodes.map((node) => {
+      const laneId = node.laneId ?? localBoardLane(node.kind, board.mode);
+      const index = counts.get(laneId) ?? 0;
+      counts.set(laneId, index + 1);
+      return {
+        ...node,
+        laneId,
+        position: { x: (laneIndex.get(laneId) ?? lanes.length) * 260, y: index * 160, width: node.position.width, height: node.position.height },
+      };
+    }),
+    frames: lanes.map((lane, index) => ({
+      id: `frame-${lane}`,
+      title: lane.replace(/-/g, " "),
+      laneId: lane,
+      nodeIds: board.nodes.filter((node) => (node.laneId ?? localBoardLane(node.kind, board.mode)) === lane).map((node) => node.id),
+      position: { x: index * 260 - 16, y: -48, width: 248, height: Math.max(180, (counts.get(lane) ?? 1) * 160) },
+    })),
+  };
+}
+
+function mermaidBoardExportsFromResearchCall(data: unknown): MermaidBoardExport[] {
+  const exports = data && typeof data === "object" && Array.isArray((data as { exports?: unknown }).exports)
+    ? (data as { exports: Array<Record<string, unknown>> }).exports
+    : [];
+  return exports.map((item, index) => ({
+    id: typeof item.id === "string" ? item.id : `research-export-${index + 1}`,
+    title: typeof item.title === "string" ? item.title : `FigJam source ${index + 1}`,
+    format: item.format === "markdown" ? "markdown" : item.format === "json" ? "json" : "mermaid",
+    kind: "board-source",
+    source: typeof item.source === "string" ? item.source : "",
+    outputPath: typeof item.outputPath === "string" ? item.outputPath : "",
+    integration: "mermaid-jam",
+    nextSteps: Array.isArray(item.nextSteps) ? item.nextSteps.filter((step): step is string => typeof step === "string") : [],
+  }));
+}
+
+function localFigJamFallbackSync(exports: MermaidBoardExport[]): NonNullable<MermaidBoard["lastFigJamSync"]> {
+  return {
+    status: "fallback",
+    message: "Local Mermaid Jam source is ready. Direct FigJam writes were not executed.",
+    syncedAt: new Date().toISOString(),
+    integration: exports[0]?.integration ?? "mermaid-jam",
+    outputPaths: exports.map((item) => item.outputPath).filter(Boolean),
+    createdNodeCount: 0,
+    artifactPath: exports[0]?.outputPath ?? null,
+    diagnostics: ["External FigJam sync requires explicit approval and a connected bridge."],
+    fallbackReason: "No external FigJam write was requested.",
+  };
+}
+
+function localBoardNodeTitle(kind: MermaidBoardNodeKind): string {
+  if (kind === "persona") return "Persona";
+  if (kind === "risk") return "Risk";
+  if (kind === "metric") return "Metric";
+  if (kind === "spec") return "Spec";
+  if (kind === "evidence") return "Evidence";
+  if (kind === "comment") return "Decision";
+  if (kind === "mermaid") return "Flow";
+  return "Note";
+}
+
+function localBoardLane(kind: MermaidBoardNodeKind, mode: MermaidBoard["mode"]): string {
+  if (mode === "ia") {
+    if (kind === "mermaid") return "journeys";
+    if (kind === "spec") return "screens";
+    return "evidence";
+  }
+  if (kind === "persona") return "users";
+  if (kind === "mermaid") return "journey";
+  if (kind === "spec") return "opportunities";
+  if (kind === "comment") return "decisions";
+  if (kind === "risk") return "risks";
+  if (kind === "metric") return "metrics";
+  if (kind === "evidence") return "next-steps";
+  return "problem";
+}
+
 async function waitForMermaidBoardRuntimeTools(): Promise<{ status: StudioStatus; tools: StudioToolDefinition[] }> {
   for (let attempt = 0; attempt < 14; attempt += 1) {
     try {
       const [nextStatus, nextTools] = await Promise.all([getStatus(), listStudioTools()]);
-      if (nextStatus.projectRoot && hasCoreMermaidBoardToolContract(nextTools)) {
+      if (nextStatus.projectRoot && (hasCoreMermaidBoardToolContract(nextTools) || hasMermaidSourceToolContract(nextTools))) {
         return { status: nextStatus, tools: nextTools };
       }
     } catch {
@@ -4031,12 +4345,18 @@ function hasPmMermaidBoardToolContract(tools: StudioToolDefinition[]): boolean {
   return PM_MERMAID_BOARD_TOOL_IDS.every((toolId) => toolIds.has(toolId));
 }
 
+function hasMermaidSourceToolContract(tools: StudioToolDefinition[]): boolean {
+  const toolIds = new Set(tools.filter((tool) => tool.enabled).map((tool) => tool.id));
+  return MERMAID_SOURCE_TOOL_IDS.every((toolId) => toolIds.has(toolId));
+}
+
 function mermaidBoardRuntimeRecovery(
   status: StudioStatus | null,
   coreRuntimeReady: boolean,
   pmRuntimeReady: boolean,
   canRestart: boolean,
   boardError?: string | null,
+  sourceOnly = false,
 ) {
   if (!status?.projectRoot || !coreRuntimeReady) {
     return {
@@ -4053,11 +4373,13 @@ function mermaidBoardRuntimeRecovery(
     return {
       state: "stale" as const,
       canRestart,
-      title: "Runtime update required",
-      actionLabel: canRestart ? "Restart Studio runtime" : "Runtime update required",
-      message: canRestart
-        ? `${MERMAID_BOARD_PM_RUNTIME_STALE} Restart the managed runtime to enable Brief and Send to FigJam.`
-        : `${MERMAID_BOARD_PM_RUNTIME_STALE} In preview/dev, restart the Studio runtime process, then refresh this board.`,
+      title: sourceOnly ? "Local FigJam source ready" : "Runtime update required",
+      actionLabel: canRestart && !sourceOnly ? "Restart Studio runtime" : sourceOnly ? "External sync gated" : "Runtime update required",
+      message: sourceOnly
+        ? "This runtime can create local Mermaid Jam source for FigJam. Direct board editing and FigJam sync unlock after the updated board tools are bundled."
+        : canRestart
+          ? `${MERMAID_BOARD_PM_RUNTIME_STALE} Restart the managed runtime to enable Brief and Send to FigJam.`
+          : `${MERMAID_BOARD_PM_RUNTIME_STALE} In preview/dev, restart the Studio runtime process, then refresh this board.`,
     };
   }
   return {
@@ -4321,6 +4643,8 @@ function RunSpine(props: {
   usageSnapshot: StudioUsageSnapshot | null;
   designLaneReceipt: RunSpineReceiptModel | null;
   collapsedBlockIds: Set<string>;
+  canStart: boolean;
+  startDisabledReason: string;
   onStart: () => void;
   onCopyBlock: (block: TerminalBlock) => void;
   onAttachBlock: (block: TerminalBlock) => void;
@@ -4502,9 +4826,9 @@ function RunSpine(props: {
           </section>
         </details>
       ) : (
-        <button className="run-spine-start" data-action-id="activity.start" type="button" onClick={props.onStart}>
+        <button className="run-spine-start" data-action-id="activity.start" type="button" onClick={props.onStart} disabled={!props.canStart} title={props.startDisabledReason}>
           <StudioControlIcon name="command" />
-          <span>Start</span>
+          <span>{props.canStart ? "Start" : props.startDisabledReason}</span>
         </button>
       )}
     </section>
@@ -4557,8 +4881,10 @@ function ContextualInspectorPane(props: {
     lastFailure: props.lastFailure,
   });
   const [showReadinessDetails, setShowReadinessDetails] = useState(false);
+  const [showUsageDetails, setShowUsageDetails] = useState(false);
   const readinessNeedsAttention = readinessItems.some((item) => item.status !== "ready");
   const showReadinessPanel = readinessNeedsAttention || showReadinessDetails;
+  const usageRows = usageLimitRows(props.usageSnapshot);
 
   return (
     <section className="agent-cockpit-pane inspector-pane" data-agent-cockpit="inspector" data-pane-intent-surface="inspector">
@@ -4613,8 +4939,54 @@ function ContextualInspectorPane(props: {
               </div>
             </section>
           ) : null}
+          {showUsageDetails ? (
+            <section className="inspector-usage-panel" data-inspector-usage="limits" aria-busy={props.usageLoading ? "true" : undefined}>
+              <header>
+                <div>
+                  <span>Usage and limits</span>
+                  <strong>{props.usageLoading ? "Refreshing" : usageLimitChipLabel(props.usageSnapshot, visibleUsageLimitState(props.usageSnapshot))}</strong>
+                </div>
+                <button data-action-id="inspector.usage.refresh" type="button" onClick={props.onOpenUsageLimits}>Retry</button>
+              </header>
+              <div className="usage-totals-grid">
+                <article>
+                  <span>Total</span>
+                  <strong>{formatTokenCount(props.usageSnapshot?.totals.totalTokens ?? 0)}</strong>
+                </article>
+                <article>
+                  <span>In / out</span>
+                  <strong>{formatTokenCount(props.usageSnapshot?.totals.inputTokens ?? 0)} / {formatTokenCount(props.usageSnapshot?.totals.outputTokens ?? 0)}</strong>
+                </article>
+                <article>
+                  <span>Cost</span>
+                  <strong>{formatCostEstimate(props.usageSnapshot?.totals.estimatedCostUsd ?? 0)}</strong>
+                </article>
+              </div>
+              {usageRows.length ? (
+                <div className="usage-limit-list">
+                  {usageRows.map((row) => (
+                    <article key={row.id} className={row.status}>
+                      <span>{row.label}</span>
+                      <strong>{row.message}</strong>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>No observed rate limits. Local budgets are warning-only.</p>
+              )}
+            </section>
+          ) : null}
           <div className="inspector-summary-actions">
-            <button data-action-id="inspector.usage" type="button" onClick={props.onOpenUsageLimits}>Usage details</button>
+            <button
+              data-action-id="inspector.usage"
+              type="button"
+              onClick={() => {
+                setShowUsageDetails(true);
+                props.onOpenUsageLimits();
+              }}
+            >
+              Usage details
+            </button>
             <button data-action-id="inspector.readiness" type="button" onClick={() => setShowReadinessDetails((current) => !current)}>
               {showReadinessPanel ? "Hide readiness" : "Readiness details"}
             </button>
@@ -5047,7 +5419,7 @@ function runSpineResultSummary(block: TerminalBlock | null): string | null {
   return text ? trimText(text, 180) : block.title;
 }
 
-function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean): string {
+function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean, action: StudioAction): string {
   if (!hasWorkspace) return "Open a folder to run";
   if (runtimeHealth !== "ready") return `Runtime ${runtimeHealthLabel(runtimeHealth)}`;
   if (!prompt.trim()) return "Add a prompt to run";
@@ -5056,6 +5428,7 @@ function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: stri
   if (!harness.installed) return `${harness.label} is not installed`;
   if (harness.authStatus === "needs_login") return `${harness.label} needs login`;
   if (harness.authStatus === "missing") return `${harness.label} is missing`;
+  if (harness.capabilities?.length && !harness.capabilities.includes(action)) return `${harness.label} cannot run ${action}`;
   return harnessStatusCopy;
 }
 

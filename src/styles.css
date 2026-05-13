@@ -736,6 +736,35 @@ button.active,
   font-size: var(--font-size-xs);
   line-height: 1.35;
 }
+.inspector-usage-panel {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-2);
+}
+.inspector-usage-panel header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.inspector-usage-panel header div {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-0-5);
+}
+.inspector-usage-panel header span,
+.inspector-usage-panel p {
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+}
+.inspector-usage-panel header strong {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
 .inspector-detail-title {
   min-width: 0;
   display: grid;
@@ -1405,6 +1434,11 @@ button.active,
   gap: var(--space-1);
   border-radius: var(--radius-compact);
 }
+.run-spine-start:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+  opacity: 0.72;
+}
 .conversation-scroll-region .activity-timeline {
   padding: var(--space-2) var(--space-2) var(--space-0);
 }
@@ -1619,6 +1653,17 @@ button.active,
   border-top: 1px solid var(--line);
   padding: var(--space-1) var(--space-3);
   font-size: var(--font-size-xs);
+}
+.composer-blocked-reason {
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-1) var(--space-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .control-icon { width: var(--space-4); height: var(--space-4); flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .submit-button { margin-inline-start: auto; flex: 0 0 var(--run-button-width); max-width: var(--run-button-width); border-radius: var(--radius-default); }
@@ -1898,10 +1943,15 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
   display: grid;
   gap: var(--space-1);
 }
-.settings-field-grid input,
+.settings-field-grid input:not([type="checkbox"]):not([type="radio"]),
 .settings-field-grid select {
   min-width: 0;
   width: 100%;
+}
+.settings-field-grid input[type="checkbox"],
+.settings-field-grid input[type="radio"] {
+  width: auto;
+  flex: 0 0 auto;
 }
 .knowledge-detail pre,
 .figma-driver pre {

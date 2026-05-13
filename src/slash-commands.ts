@@ -3,7 +3,7 @@
 
 import type { HarnessId, StudioAction, StudioChatMode, StudioPermissionMode } from "./studio-api";
 
-export type SlashCommandPane = "run" | "changes" | "design-system" | "figma" | "memory" | "mermaid-board";
+export type SlashCommandPane = "run" | "changes" | "design-system" | "figma" | "memory" | "mermaid-board" | "research-lab";
 
 export interface SlashCommand {
   id: string;
@@ -53,6 +53,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   command("full", "Full", "Use full-access mode.", ["full-access"], { permissionMode: "full_access" }),
   command("figma", "Figma", "Focus the Figma cockpit pane.", ["bridge"], { pane: "figma" }),
   command("board", "Board", "Focus the Mermaid Board pane.", ["mermaid"], { pane: "mermaid-board" }),
+  command("lab", "Research Lab", "Focus the research and scenario lab.", ["research-lab", "scenario-lab"], { pane: "research-lab" }),
   command("memory", "Memory", "Focus project memory and knowledge.", ["mem"], { pane: "memory" }),
   command("changes", "Changes", "Focus changed files.", ["diff"], { pane: "changes" }),
   command("limits", "Limits", "Open usage and rate-limit status.", ["usage", "quota"], { pane: "run", openUsage: true }),
