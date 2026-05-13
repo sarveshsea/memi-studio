@@ -650,6 +650,87 @@ button.active,
   font-size: var(--font-size-sm);
   line-height: 1.45;
 }
+.designer-readiness-panel {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-2);
+}
+.designer-readiness-panel header {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-0-5);
+}
+.designer-readiness-panel header span {
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+}
+.designer-readiness-panel header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+.designer-readiness-list {
+  min-width: 0;
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-compact);
+  overflow: hidden;
+}
+.designer-readiness-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1);
+  border-top: 1px solid var(--line);
+  background: var(--surface-muted);
+  padding: var(--space-1);
+}
+.designer-readiness-item:first-child {
+  border-top: 0;
+}
+.designer-readiness-item .status-dot {
+  margin-top: 5px;
+}
+.designer-readiness-item[data-readiness-status="ready"] .status-dot {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+  background: var(--ok);
+}
+.designer-readiness-item[data-readiness-status="warn"] .status-dot {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+  background: var(--warning);
+}
+.designer-readiness-item[data-readiness-status="missing"] .status-dot {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  background: var(--danger);
+}
+.designer-readiness-item div {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-0-5);
+}
+.designer-readiness-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.designer-readiness-item span {
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.35;
+}
 .inspector-detail-title {
   min-width: 0;
   display: grid;

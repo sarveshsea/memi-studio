@@ -204,6 +204,7 @@ const PERMISSION_MODES: Array<{ id: StudioPermissionMode; label: string }> = WOR
 type RightPaneTab = WorkbenchRightPaneTab;
 type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
 type TruthStripStatus = "ready" | "warn" | "missing" | "unknown";
+type DesignerReadinessStatus = "ready" | "warn" | "missing";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
 
 interface TruthStripItemModel {
@@ -211,6 +212,13 @@ interface TruthStripItemModel {
   label: string;
   status: TruthStripStatus;
   title?: string;
+}
+
+interface DesignerReadinessItem {
+  id: string;
+  label: string;
+  detail: string;
+  status: DesignerReadinessStatus;
 }
 
 interface PaneIntent {
@@ -637,7 +645,8 @@ export function App() {
   const isSessionActive = isStartingSession || sessionStatus === "running" || sessionStatus === "queued";
   const harnessStatusCopy = harnessReadinessLabel(currentHarness);
   const effectiveRuntimeMetrics = status?.metrics ?? runtimeMetrics;
-  const canRunSession = Boolean(runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
+  const hasWorkspace = Boolean((status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "").trim());
+  const canRunSession = Boolean(hasWorkspace && runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
   const canContinueConversation = Boolean(activeConversationId && session && (session.status === "completed" || session.status === "interrupted") && (session.conversationId ?? session.id) === activeConversationId);
   const isResumingInterrupted = Boolean(session?.status === "interrupted");
   const activeModelRegistry = harnessModelRegistries[selectedHarness] ?? null;
@@ -2850,7 +2859,7 @@ export function App() {
           />
         </section>
 
-        {runtimeHealth !== "ready" ? (
+        {runtimeHealth !== "ready" && hasWorkspace ? (
           <RuntimeRecoveryStrip
             health={runtimeHealth}
             message={runtimeRecoveryMessage}
@@ -3202,7 +3211,7 @@ export function App() {
                     : canContinueConversation
                       ? `Continue conversation (turn ${conversationTurnCount + 1})`
                       : workbenchAction("run").title
-                  : runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth)}
+                  : runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace)}
               >
                 {isStartingSession ? <span aria-hidden="true">...</span> : isResumingInterrupted ? <span aria-hidden="true">Resume</span> : canContinueConversation ? <span aria-hidden="true">Continue</span> : null}
               </IconButton>
@@ -4303,6 +4312,20 @@ function ContextualInspectorPane(props: {
   const selectedApproval = selection?.kind === "approval" ? props.events.find((event) => event.id === selection.eventId) ?? null : null;
   const selectedEvent = selection?.kind === "event" ? props.events.find((event) => event.id === selection.id) ?? null : null;
   const hasResolvedSelection = Boolean(selectedActivity || selectedProcess || selectedFile || selectedArtifact || selectedApproval || selectedEvent);
+  const readinessItems = designerWorkbenchReadiness({
+    runtimeHealth: props.runtimeHealth,
+    status: props.status,
+    workspaceLabel: props.workspaceLabel,
+    harnessLabel: props.harnessLabel,
+    visibleSessionStatus: props.visibleSessionStatus,
+    activities: props.activities,
+    activeProcesses: props.activeProcesses,
+    designTrace: props.designTrace,
+    artifacts: props.artifacts,
+    events: props.events,
+    pendingApprovals,
+    lastFailure: props.lastFailure,
+  });
 
   return (
     <section className="agent-cockpit-pane inspector-pane" data-agent-cockpit="inspector" data-pane-intent-surface="inspector">
@@ -4354,6 +4377,23 @@ function ContextualInspectorPane(props: {
             </div>
           </dl>
           <p>{props.lastFailure ? trimText(props.lastFailure.message, 140) : "Select a run event, changed file, artifact, or approval to inspect details here."}</p>
+          <section className="designer-readiness-panel" aria-label="Designer workbench readiness">
+            <header>
+              <span>Designer workbench</span>
+              <strong>{designerReadinessSummary(readinessItems)}</strong>
+            </header>
+            <div className="designer-readiness-list">
+              {readinessItems.map((item) => (
+                <article className="designer-readiness-item" data-readiness-status={item.status} key={item.id}>
+                  <i className="status-dot" data-auth-status={item.status === "missing" ? "missing" : item.status} aria-hidden="true" />
+                  <div>
+                    <strong>{item.label}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
           <button data-action-id="inspector.usage" type="button" onClick={props.onOpenUsageLimits}>Usage details</button>
         </section>
       ) : null}
@@ -4455,6 +4495,97 @@ function ContextualInspectorPane(props: {
       ) : null}
     </section>
   );
+}
+
+function designerWorkbenchReadiness(input: {
+  runtimeHealth: RuntimeHealth;
+  status: StudioStatus | null;
+  workspaceLabel: string;
+  harnessLabel: string;
+  visibleSessionStatus: string;
+  activities: StudioActivityItem[];
+  activeProcesses: StudioActiveProcess[];
+  designTrace: StudioDesignSystemTrace | null;
+  artifacts: DesignSystemArtifact[];
+  events: StudioEvent[];
+  pendingApprovals: StudioEvent[];
+  lastFailure: StudioEvent | null;
+}): DesignerReadinessItem[] {
+  const hasWorkspace = Boolean(input.status?.projectRoot?.trim());
+  const liveTraceCount = input.activities.length + input.activeProcesses.length + input.events.length;
+  const fileCount = input.designTrace?.files.length ?? 0;
+  const filesDetail = input.designTrace?.status === "unavailable"
+    ? "File trace unavailable; refresh runtime or open a workspace."
+    : fileCount > 0
+      ? `${fileCount} changed file${fileCount === 1 ? "" : "s"} ready for review.`
+      : "Clean working tree trace.";
+  const approvalCount = input.pendingApprovals.length;
+  const runtimeStatus: DesignerReadinessStatus = input.runtimeHealth === "ready" ? "ready" : input.runtimeHealth === "offline" ? "missing" : "warn";
+
+  return [
+    {
+      id: "runtime",
+      label: "Agent runtime",
+      status: runtimeStatus,
+      detail: `${runtimeHealthLabel(input.runtimeHealth)} runtime with Codex-style run, stop, trace, and approval controls.`,
+    },
+    {
+      id: "workspace",
+      label: "Workspace",
+      status: hasWorkspace ? "ready" : "warn",
+      detail: hasWorkspace ? `${input.workspaceLabel} is open for project-aware work.` : "Open a folder before running project-aware work.",
+    },
+    {
+      id: "harness",
+      label: "Codex and Claude",
+      status: input.runtimeHealth === "ready" ? "ready" : "warn",
+      detail: `${input.harnessLabel} selected; primary harness setup lives in Settings.`,
+    },
+    {
+      id: "composer",
+      label: "Designer composer",
+      status: "ready",
+      detail: "Attach context, choose plan/research/build/review/ship, then run or continue.",
+    },
+    {
+      id: "trace",
+      label: "Transparent run trace",
+      status: "ready",
+      detail: liveTraceCount > 0 ? `${liveTraceCount} trace signal${liveTraceCount === 1 ? "" : "s"} captured.` : "Shows prompt, plan, tools, files, result, receipts, and raw logs after a run starts.",
+    },
+    {
+      id: "files",
+      label: "Design diff review",
+      status: input.designTrace?.status === "unavailable" ? "warn" : "ready",
+      detail: filesDetail,
+    },
+    {
+      id: "approvals",
+      label: "Guarded actions",
+      status: approvalCount > 0 ? "warn" : "ready",
+      detail: approvalCount > 0 ? `${approvalCount} approval request${approvalCount === 1 ? "" : "s"} waiting.` : "Risky commands stay explicit through approval receipts.",
+    },
+    {
+      id: "artifacts",
+      label: "Product-design artifacts",
+      status: "ready",
+      detail: input.artifacts.length > 0 ? `${input.artifacts.length} artifact${input.artifacts.length === 1 ? "" : "s"} captured for handoff.` : "Specs, research, tokens, IA, Figma, memory, and handoff packets are available from tabs.",
+    },
+    {
+      id: "quality",
+      label: "Quality signals",
+      status: input.lastFailure ? "warn" : "ready",
+      detail: input.lastFailure ? trimText(input.lastFailure.message, 120) : `${compactSessionStatusLabel(input.visibleSessionStatus)} session state with cost and usage telemetry.`,
+    },
+  ];
+}
+
+function designerReadinessSummary(items: DesignerReadinessItem[]): string {
+  const setupCount = items.filter((item) => item.status === "missing").length;
+  const attentionCount = items.filter((item) => item.status === "warn").length + setupCount;
+  if (setupCount > 0) return `${setupCount} setup item${setupCount === 1 ? "" : "s"} missing`;
+  if (attentionCount > 0) return `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention`;
+  return "Ready for designer runs";
 }
 
 function InspectorTitle(props: { label: string; status: string }) {
@@ -4692,7 +4823,8 @@ function runSpineResultSummary(block: TerminalBlock | null): string | null {
   return text ? trimText(text, 180) : block.title;
 }
 
-function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth): string {
+function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean): string {
+  if (!hasWorkspace) return "Open a folder to run";
   if (runtimeHealth !== "ready") return `Runtime ${runtimeHealthLabel(runtimeHealth)}`;
   if (!prompt.trim()) return "Add a prompt to run";
   if (!harness) return "Pick a harness to run";
