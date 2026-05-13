@@ -2,7 +2,7 @@
 // Copyright 2026 Humyn LLC
 //
 // Downloads the memoire-studio-runtime sidecar binary + resources tarball
-// from a release tag of the engine repo (default: sarveshsea/m-moire).
+// from a release tag of the engine repo (default: sarveshsea/memi).
 // Idempotent — skips download if the expected file is already present and
 // matches the recorded sha256.
 //
@@ -10,7 +10,7 @@
 //   {
 //     "memoireRuntime": {
 //       "version": "0.18.1",
-//       "engineRepo": "sarveshsea/m-moire",
+//       "engineRepo": "sarveshsea/memi",
 //       "releaseTag": "runtime-v0.18.1",
 //       "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
 //       "resourcesAsset": "memoire-runtime-resources-0.18.1.tar.gz"

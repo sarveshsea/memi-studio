@@ -2,7 +2,7 @@
 // Copyright 2026 Humyn LLC
 //
 // Public surface of types/functions vendored from the Mémoire engine
-// (github.com/sarveshsea/m-moire). Studio's React UI imports from here.
+// (github.com/sarveshsea/memi). Studio's React UI imports from here.
 //
 // MIGRATION PLAN: this directory will be replaced by `@sarveshsea/memi-studio-types`
 // — a published npm package that re-exports the same names from the engine

@@ -12,7 +12,7 @@
   },
   "memoireRuntime": {
     "version": "0.18.0",
-    "engineRepo": "sarveshsea/m-moire",
+    "engineRepo": "sarveshsea/memi",
     "releaseTag": "runtime-v0.18.2",
     "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
     "resourcesAsset": "memoire-runtime-resources-0.18.0.tar.gz"

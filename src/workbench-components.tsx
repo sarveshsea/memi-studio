@@ -3725,7 +3725,7 @@ export function SettingsPanel(props: {
       <section className="settings-setup-surface" data-settings-setup="macos-download-readiness">
         <div className="setup-card" data-setup-step="install-source">
           <span>Welcome</span>
-          <strong>@sarveshsea/memoire@0.16.3</strong>
+          <strong>@memi-design/cli@1.0.1</strong>
           <p>{props.status?.projectRoot ?? "Waiting for Studio runtime"}</p>
         </div>
         <div className="setup-card" data-setup-step="workspace">
@@ -4364,12 +4364,12 @@ export function figmaStatusLabel(status: FigmaStatus | null): string {
 
 export function expectedDmgPath(status: StudioStatus | null): string {
   const root = status?.projectRoot ?? "$PROJECT_ROOT";
-  return `${root}/apps/studio/src-tauri/target/release/bundle/dmg/Mémoire Studio_0.16.3_aarch64.dmg`;
+  return `${root}/src-tauri/target/release/bundle/dmg/Mémoire Studio_1.0.0_aarch64.dmg`;
 }
 
 function buildDownloadReadyItems(input: { status: StudioStatus | null; config: StudioConfig | null }): Array<{ id: string; label: string; detail: string }> {
   return [
-    { id: "version", label: "App version", detail: "@sarveshsea/memoire@0.16.3" },
+    { id: "version", label: "Engine package", detail: "@memi-design/cli@1.0.1" },
     { id: "dmg", label: "DMG", detail: expectedDmgPath(input.status) },
     { id: "icon", label: "Bundle icon", detail: "Mémoire flower assets in Tauri bundle metadata" },
     { id: "pack", label: "Package dry run", detail: "npm run pack:dry-run size gate" },
