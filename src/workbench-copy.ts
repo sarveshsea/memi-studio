@@ -223,7 +223,7 @@ export const WORKBENCH_COPY = {
     { id: "full_access", label: "Auto" },
   ] satisfies Array<{ id: StudioPermissionMode; label: string }>,
   rightPaneTabs: [
-    { id: "run", label: "Run", shortLabel: "Run", group: "primary", icon: "run", iconOnly: false },
+    { id: "run", label: "Inspector", shortLabel: "Inspect", group: "primary", icon: "details", iconOnly: false },
     { id: "work-packet", label: "Work Packet", shortLabel: "Packet", group: "primary", icon: "packet", iconOnly: true },
     { id: "changes", label: "Changes", shortLabel: "Changes", group: "primary", icon: "changes", iconOnly: true },
     { id: "design-system", label: "Design System", shortLabel: "System", group: "primary", icon: "system", iconOnly: false },
@@ -254,7 +254,7 @@ export const WORKBENCH_COPY = {
     { id: "changelog.open.sidebar", label: "Changelog", kind: "local", surface: "changelog" },
     { id: "design-changelog.new", label: "New", kind: "runtime", surface: "changelog" },
     { id: "design-changelog.export", label: "Export", kind: "runtime", surface: "changelog" },
-    { id: "right-pane.tab.run", label: "Run", kind: "local", surface: "cockpit" },
+    { id: "right-pane.tab.run", label: "Inspector", kind: "local", surface: "cockpit" },
     { id: "right-pane.tab.work-packet", label: "Packet", kind: "local", surface: "cockpit" },
     { id: "right-pane.tab.changes", label: "Changes", kind: "local", surface: "cockpit" },
     { id: "right-pane.tab.design-system", label: "System", kind: "local", surface: "cockpit" },

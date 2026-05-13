@@ -122,6 +122,7 @@ import {
   type StudioBrowserStatus,
   type StudioComputerStatus,
   type StudioDesignSystemTrace,
+  type StudioDesignSystemTraceFile,
   type StudioEvent,
   type StudioInputMode,
   type StudioKnowledgeIndex,
@@ -149,7 +150,6 @@ import {
 } from "./studio-primitives";
 import {
   BlockBody,
-  ActivityTimeline,
   AttachmentShelf,
   AutomationCenter,
   ChangedFilesPanel,
@@ -317,11 +317,18 @@ interface PositionedScenarioLabNode extends ScenarioLabNode {
   y: number;
 }
 
+type InspectorSelection =
+  | { kind: "activity"; id: string }
+  | { kind: "process"; id: string }
+  | { kind: "file"; path: string }
+  | { kind: "artifact"; id: string }
+  | { kind: "approval"; eventId: string }
+  | { kind: "event"; id: string };
+
 const RIGHT_PANE_TAB_GROUPS = ["primary", "utility"] as const;
-const ALL_RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
-  WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }));
 const RIGHT_PANE_TABS: Array<{ id: RightPaneTab; label: string; shortLabel?: string; group: typeof RIGHT_PANE_TAB_GROUPS[number]; icon?: WorkbenchIconName; iconOnly?: boolean }> =
-  ALL_RIGHT_PANE_TABS.filter((tab) => DEFAULT_RIGHT_PANE_TAB_IDS.includes(normalizeRightPaneTab(tab.id) as typeof DEFAULT_RIGHT_PANE_TAB_IDS[number]));
+  WORKBENCH_COPY.rightPaneTabs.map((tab) => ({ ...tab }))
+    .filter((tab) => DEFAULT_RIGHT_PANE_TAB_IDS.includes(normalizeRightPaneTab(tab.id) as typeof DEFAULT_RIGHT_PANE_TAB_IDS[number]));
 
 const SCENARIO_TOOL_IDS = ["harness.study", "research.patterns.extract", "research.patterns.list", "simulation.models", "simulation.run_matrix", "simulation.transcript", "research.design_package", "mermaid_jam.export"] as const;
 const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.update_node", "board.connect", "board.layout", "board.capture_ia", "board.export_mermaid_jam"] as const;
@@ -359,6 +366,7 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const traceRefreshTimerRef = useRef<number | null>(null);
   const pendingTraceSessionIdRef = useRef<string | null>(null);
+  const harnessReadinessRefreshAttemptsRef = useRef(0);
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
@@ -442,6 +450,7 @@ export function App() {
   const [rightPaneTab, setRightPaneTab] = useState<RightPaneTab>("run");
   const [rightPaneUserLocked, setRightPaneUserLocked] = useState(false);
   const [paneIntent, setPaneIntent] = useState<PaneIntent | null>(null);
+  const [inspectorSelection, setInspectorSelection] = useState<InspectorSelection | null>(null);
   const [mermaidBoard, setMermaidBoard] = useState<MermaidBoard | null>(null);
   const [mermaidBoardExports, setMermaidBoardExports] = useState<MermaidBoardExport[]>([]);
   const [mermaidBoardLoading, setMermaidBoardLoading] = useState(false);
@@ -661,14 +670,17 @@ export function App() {
         activeProcesses: (serverTrace as Partial<StudioTraceModel>).activeProcesses ?? localTraceModel.activeProcesses,
       }
     : localTraceModel;
+  const allDesignArtifacts = useMemo(() => {
+    const traceArtifacts = (traceModel.artifacts ?? []) as DesignSystemArtifact[];
+    return [...designArtifacts, ...traceArtifacts];
+  }, [designArtifacts, traceModel.artifacts]);
   const activeDesignArtifact = useMemo(() => {
     const traceArtifacts = (traceModel.artifacts ?? []) as DesignSystemArtifact[];
-    const merged = [...designArtifacts, ...traceArtifacts];
-    return merged.find((artifact) => artifact.id === selectedArtifactId)
+    return allDesignArtifacts.find((artifact) => artifact.id === selectedArtifactId)
       ?? traceArtifacts[0]
       ?? designArtifacts[0]
       ?? null;
-  }, [designArtifacts, selectedArtifactId, traceModel.artifacts]);
+  }, [allDesignArtifacts, designArtifacts, selectedArtifactId, traceModel.artifacts]);
   const activeReviewPacket = useMemo(() => {
     return reviewPackets.find((packet) => packet.sessionId && packet.sessionId === session?.id)
       ?? reviewPackets[0]
@@ -714,6 +726,20 @@ export function App() {
       title: worktreeTruthTitle(designTrace, lastFailure),
     },
   ], [claudeHarness, codexHarness, designTrace, lastFailure, runtimeHealth, runtimeRecoveryMessage, status?.projectRoot]);
+  useEffect(() => {
+    if (runtimeHealth !== "ready") return undefined;
+    const needsAuthRefresh = [codexHarness, claudeHarness].some((harness) => !harness || !harness.authStatus);
+    if (!needsAuthRefresh) {
+      harnessReadinessRefreshAttemptsRef.current = 0;
+      return undefined;
+    }
+    if (harnessReadinessRefreshAttemptsRef.current >= 3) return undefined;
+    harnessReadinessRefreshAttemptsRef.current += 1;
+    const timeout = window.setTimeout(() => {
+      void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+    }, 650);
+    return () => window.clearTimeout(timeout);
+  }, [claudeHarness, codexHarness, runtimeHealth]);
   const visibleRecentSessions = recentSessions.length ? recentSessions : session ? [session] : [];
   const sessionInventory = session && !visibleRecentSessions.some((recent) => recent.id === session.id)
     ? [session, ...visibleRecentSessions]
@@ -1418,6 +1444,13 @@ export function App() {
     setRightPaneTab(normalized);
     setPaneIntent({ tab: normalized, reason, confidence: 1 });
     setRightPaneUserLocked(source === "user");
+  }
+
+  function inspectWorkbenchItem(selection: InspectorSelection) {
+    setInspectorSelection(selection);
+    setRightPaneTab("run");
+    setPaneIntent(null);
+    setRightPaneUserLocked(true);
   }
 
   function openPluginsSurface() {
@@ -2860,7 +2893,11 @@ export function App() {
             </button>
           </section>
         ) : null}
-        <ChangedFilesPanel trace={designTrace} onReview={() => chooseRightPane("changes", "Changed files review")} />
+        <ChangedFilesPanel
+          trace={designTrace}
+          onReview={() => chooseRightPane("changes", "Changed files review")}
+          onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
+        />
 
         <CreationStrip
           session={session}
@@ -2869,7 +2906,7 @@ export function App() {
           traceModel={traceModel}
           events={events}
           terminalBlocks={terminalBlocks}
-          artifacts={[...designArtifacts, ...((traceModel.artifacts ?? []) as DesignSystemArtifact[])]}
+          artifacts={allDesignArtifacts}
           designTrace={designTrace}
           memoryPins={chatMemoryPins}
           packet={activeReviewPacket}
@@ -2880,9 +2917,14 @@ export function App() {
           onPinMemory={pinCurrentChatMemory}
           onBranch={branchCurrentChat}
           onCopyVerification={copyCurrentVerificationReceipt}
+          onSelectArtifact={(artifact) => inspectWorkbenchItem({ kind: "artifact", id: artifact.id })}
           onOpenPacket={() => void openActiveReviewPacket()}
         />
-        <ApprovalBanner events={events} onResolve={handleResolveApproval} />
+        <ApprovalBanner
+          events={events}
+          onResolve={handleResolveApproval}
+          onSelect={(event) => inspectWorkbenchItem({ kind: "approval", eventId: event.id })}
+        />
 
         <section
           className="conversation-scroll-region"
@@ -2910,6 +2952,10 @@ export function App() {
             onAttachBlock={attachBlock}
             onToggleBlock={toggleBlock}
             onClearSearch={() => setChatSearchQuery("")}
+            onSelectActivity={(activity) => inspectWorkbenchItem({ kind: "activity", id: activity.id })}
+            onSelectProcess={(process) => inspectWorkbenchItem({ kind: "process", id: process.id })}
+            onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
+            onSelectEvent={(event) => inspectWorkbenchItem({ kind: "event", id: event.id })}
           />
           <div aria-hidden="true" data-latest-anchor ref={bottomAnchorRef} />
         </section>
@@ -3187,109 +3233,29 @@ export function App() {
   }
 
   function renderRunCockpitPane() {
-    const showRunStatusGrid = isSessionActive || isStartingSession || Boolean(lastFailure) || runtimeHealth !== "ready";
     return (
-      <section className="agent-cockpit-pane" data-agent-cockpit="run" data-pane-intent-surface="run">
-        {showRunStatusGrid ? (
-          <section className="harness-detail-grid" data-harness-readiness="cockpit">
-            <article>
-              <span>Harness</span>
-              <strong>{currentHarness?.label ?? selectedHarness}</strong>
-              <small>{currentHarness?.installed ? currentHarness.authStatus : "missing"}</small>
-            </article>
-            <article>
-              <span>Runtime</span>
-              <strong>{status?.status ?? "offline"}</strong>
-              <small>{status?.projectRoot ?? "offline"}</small>
-            </article>
-            <article>
-              <span>Active run</span>
-              <strong>{visibleSessionStatus}</strong>
-              <small>{session?.id ?? "none"}</small>
-            </article>
-            <article>
-              <span>Last failure</span>
-              <strong>{lastFailure ? formatEventName(lastFailure.type) : "clean"}</strong>
-              <small>{lastFailure ? trimText(lastFailure.message, 80) : "clean"}</small>
-            </article>
-          </section>
-        ) : (
-          <section className="cockpit-card quiet-run-summary" data-run-cockpit-empty="ready">
-            <div className="drawer-section-head">
-              <span>Workbench</span>
-              <small>{workspaceLabel}</small>
-            </div>
-            <p>Start a prompt to see trace, files, and receipts here.</p>
-          </section>
-        )}
-
-        <section className="cockpit-card" data-recent-runs>
-          <div className="drawer-section-head">
-            <span>Recent sessions</span>
-            <small>{visibleRecentSessions.length}</small>
-          </div>
-          <div className="recent-session-list">
-            {visibleRecentSessions.slice(0, 6).map((recent) => (
-              <button data-action-id={`session.open.${recent.id}`} key={recent.id} type="button" onClick={() => void openSessionSummary(recent)}>
-                <span>{trimText(recent.prompt, 48)}</span>
-                <small>{recent.harness} / {recent.status}</small>
-              </button>
-            ))}
-            {visibleRecentSessions.length === 0 ? <span className="empty">No sessions</span> : null}
-          </div>
-        </section>
-
-        <section className="cockpit-card usage-limits-card" data-usage-limits="run-cockpit" data-usage-limits-card="run-pane">
-          <div className="drawer-section-head">
-            <span>Usage and limits</span>
-            <small>{usageSnapshot ? formatTime(usageSnapshot.generatedAt) : "--"}</small>
-            <IconButton
-              {...workbenchAction("usageLimits")}
-              actionId={workbenchAction("usageLimits").id}
-              disabled={usageLoading}
-              onClick={() => void openUsageLimits()}
-            />
-          </div>
-          <div className="usage-totals-grid">
-            <article>
-              <span>Total</span>
-              <strong>{usageSnapshot ? formatTokenCount(usageSnapshot.totals.totalTokens) : "--"}</strong>
-            </article>
-            <article>
-              <span>In / out</span>
-              <strong>{usageSnapshot ? `${formatTokenCount(usageSnapshot.totals.inputTokens)} / ${formatTokenCount(usageSnapshot.totals.outputTokens)}` : "--"}</strong>
-            </article>
-            <article>
-              <span>Cost</span>
-              <strong>{usageSnapshot ? formatCostEstimate(usageSnapshot.totals.estimatedCostUsd) : "--"}</strong>
-            </article>
-          </div>
-          <div className="usage-limit-list">
-            {usageLoading ? <span className="empty">Refreshing usage...</span> : null}
-            {usageLimitRows(usageSnapshot).map((limit) => (
-              <article className={limit.status} key={limit.id}>
-                <strong>{limit.label}</strong>
-                <span>{limit.message}</span>
-              </article>
-            ))}
-            {!usageLoading && usageLimitRows(usageSnapshot).length === 0 ? <span className="empty">No observed limits. Local budgets are warning-only.</span> : null}
-          </div>
-        </section>
-
-        <section className="cockpit-card" data-agent-cockpit-card="activity-trace">
-          <div className="drawer-section-head">
-            <span>Activity trace</span>
-            <button data-action-id="runtime.refresh" type="button" onClick={refresh}>Refresh</button>
-          </div>
-          <ActivityTimeline
-            activities={traceModel.activities}
-            activeProcesses={traceModel.activeProcesses}
-            agentThinkingState={agentThinkingState}
-            onCopyPath={(path) => void copyText(path)}
-            onStart={() => void run()}
-          />
-        </section>
-      </section>
+      <ContextualInspectorPane
+        selection={inspectorSelection}
+        session={session}
+        visibleSessionStatus={visibleSessionStatus}
+        workspaceLabel={workspaceLabel}
+        runtimeHealth={runtimeHealth}
+        status={status}
+        harnessLabel={currentHarness?.label ?? selectedHarness}
+        activities={traceModel.activities}
+        activeProcesses={traceModel.activeProcesses}
+        designTrace={designTrace}
+        artifacts={allDesignArtifacts}
+        events={events}
+        lastFailure={lastFailure}
+        usageSnapshot={usageSnapshot}
+        usageLoading={usageLoading}
+        onClearSelection={() => setInspectorSelection(null)}
+        onCopyText={(value) => void copyText(value)}
+        onOpenUsageLimits={() => void openUsageLimits()}
+        onRefresh={refresh}
+        onResolveApproval={handleResolveApproval}
+      />
     );
   }
 
@@ -3635,13 +3601,6 @@ export function App() {
                       </div>
                     ))}
                   </div>
-                  {paneIntent ? (
-                    <div className="agent-pane-intent" data-agent-pane-intent="suggested-switch">
-                      <span>Agent Cockpit</span>
-                      <strong>{ALL_RIGHT_PANE_TABS.find((tab) => tab.id === paneIntent.tab)?.label ?? paneIntent.tab}</strong>
-                      <small>{paneIntent.reason} · {Math.round(paneIntent.confidence * 100)}%</small>
-                    </div>
-                  ) : null}
                   <section className="artifact-pane-body" data-artifact-pane-body={rightPaneTab}>
                     {renderRightPaneBody()}
                   </section>
@@ -4191,6 +4150,10 @@ function RunSpine(props: {
   onAttachBlock: (block: TerminalBlock) => void;
   onToggleBlock: (blockId: string) => void;
   onClearSearch: () => void;
+  onSelectActivity: (activity: StudioActivityItem) => void;
+  onSelectProcess: (process: StudioActiveProcess) => void;
+  onSelectFile: (file: StudioDesignSystemTraceFile) => void;
+  onSelectEvent: (event: StudioEvent) => void;
 }) {
   const promptText = props.session?.prompt ?? props.prompt.trim();
   const latestPlan = [...props.activities].reverse().find((activity) =>
@@ -4204,8 +4167,9 @@ function RunSpine(props: {
       detail: trimText(process.command, 86),
       status: "running",
       title: process.cwd ?? process.command,
+      onSelect: () => props.onSelectProcess(process),
     })),
-    ...toolActivities.map(runSpineActivityReceipt),
+    ...toolActivities.map((activity) => runSpineActivityReceipt(activity, () => props.onSelectActivity(activity))),
   ].slice(-6);
   const changedFiles = props.designTrace?.files ?? [];
   const fileReceipts = changedFiles.slice(0, 5).map((file) => ({
@@ -4214,11 +4178,13 @@ function RunSpine(props: {
     detail: `${runSpineCompactPath(file.path)} +${file.insertions} -${file.deletions}`,
     status: file.status === "deleted" ? "warn" : "done",
     title: file.path,
+    onSelect: () => props.onSelectFile(file),
   }));
   const resultBlock = [...props.terminalBlocks].reverse().find((block) =>
     block.kind === "session_result"
     || block.events.some((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)),
   ) ?? null;
+  const resultSelectEvent = props.lastFailure ?? resultBlock?.events.find((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)) ?? null;
   const rows = [
     {
       id: "prompt",
@@ -4263,6 +4229,7 @@ function RunSpine(props: {
         ?? runSpineResultSummary(resultBlock)
         ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Awaiting run"),
       meta: resultBlock?.title ?? props.session?.status ?? "standby",
+      onSelect: resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined,
     },
   ];
   return (
@@ -4275,14 +4242,20 @@ function RunSpine(props: {
               <span>{row.label}</span>
               <small>{row.meta ?? row.status}</small>
             </header>
-            <p title={row.summary}>{trimText(row.summary, 220)}</p>
+            {row.onSelect ? (
+              <button className="run-spine-summary-button" data-action-id={`run-spine.inspect.${row.id}`} type="button" onClick={row.onSelect} title={row.summary}>
+                {trimText(row.summary, 220)}
+              </button>
+            ) : (
+              <p title={row.summary}>{trimText(row.summary, 220)}</p>
+            )}
             {row.receipts?.length ? (
               <div className="run-spine-receipts" data-run-spine-receipts={row.id}>
                 {row.receipts.map((receipt) => (
-                  <span className="run-spine-receipt" data-status={receipt.status} key={receipt.id} title={receipt.title ?? receipt.detail}>
+                  <button className="run-spine-receipt" data-status={receipt.status} key={receipt.id} onClick={receipt.onSelect} title={receipt.title ?? receipt.detail} type="button">
                     <strong>{receipt.label}</strong>
                     <small>{receipt.detail}</small>
-                  </span>
+                  </button>
                 ))}
               </div>
             ) : null}
@@ -4341,13 +4314,281 @@ function RunSpine(props: {
   );
 }
 
-function runSpineActivityReceipt(activity: StudioActivityItem) {
+function ContextualInspectorPane(props: {
+  selection: InspectorSelection | null;
+  session: SessionSummary | null;
+  visibleSessionStatus: string;
+  workspaceLabel: string;
+  runtimeHealth: RuntimeHealth;
+  status: StudioStatus | null;
+  harnessLabel: string;
+  activities: StudioActivityItem[];
+  activeProcesses: StudioActiveProcess[];
+  designTrace: StudioDesignSystemTrace | null;
+  artifacts: DesignSystemArtifact[];
+  events: StudioEvent[];
+  lastFailure: StudioEvent | null;
+  usageSnapshot: StudioUsageSnapshot | null;
+  usageLoading: boolean;
+  onClearSelection: () => void;
+  onCopyText: (value: string) => void;
+  onOpenUsageLimits: () => void;
+  onRefresh: () => void;
+  onResolveApproval: (callId: string, decision: "approve" | "deny") => Promise<void> | void;
+}) {
+  const selection = props.selection;
+  const pendingApprovals = pendingApprovalEvents(props.events);
+  const selectedActivity = selection?.kind === "activity" ? props.activities.find((activity) => activity.id === selection.id) ?? null : null;
+  const selectedProcess = selection?.kind === "process" ? props.activeProcesses.find((process) => process.id === selection.id) ?? null : null;
+  const selectedFile = selection?.kind === "file" ? props.designTrace?.files.find((file) => file.path === selection.path) ?? null : null;
+  const selectedArtifact = selection?.kind === "artifact" ? props.artifacts.find((artifact) => artifact.id === selection.id) ?? null : null;
+  const selectedApproval = selection?.kind === "approval" ? props.events.find((event) => event.id === selection.eventId) ?? null : null;
+  const selectedEvent = selection?.kind === "event" ? props.events.find((event) => event.id === selection.id) ?? null : null;
+  const hasResolvedSelection = Boolean(selectedActivity || selectedProcess || selectedFile || selectedArtifact || selectedApproval || selectedEvent);
+
+  return (
+    <section className="agent-cockpit-pane inspector-pane" data-agent-cockpit="inspector" data-pane-intent-surface="inspector">
+      <header className="inspector-pane-head">
+        <div>
+          <span>Inspector</span>
+          <strong>{hasResolvedSelection ? inspectorSelectionTitle(selection) : "Runtime and session"}</strong>
+        </div>
+        <div className="inspector-pane-actions">
+          {hasResolvedSelection ? <button data-action-id="inspector.clear" type="button" onClick={props.onClearSelection}>Clear</button> : null}
+          <button data-action-id="runtime.refresh" type="button" onClick={props.onRefresh}>Refresh</button>
+        </div>
+      </header>
+
+      {!hasResolvedSelection ? (
+        <section className="inspector-summary-card" data-inspector-empty="runtime-session">
+          <dl>
+            <div>
+              <dt>Runtime</dt>
+              <dd>{runtimeHealthLabel(props.runtimeHealth)}</dd>
+            </div>
+            <div>
+              <dt>Workspace</dt>
+              <dd title={props.status?.projectRoot ?? props.workspaceLabel}>{props.workspaceLabel}</dd>
+            </div>
+            <div>
+              <dt>Harness</dt>
+              <dd>{props.harnessLabel}</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd>{compactSessionStatusLabel(props.visibleSessionStatus)}</dd>
+            </div>
+            <div>
+              <dt>Events</dt>
+              <dd>{props.events.length}</dd>
+            </div>
+            <div>
+              <dt>Files</dt>
+              <dd>{props.designTrace?.files.length ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Approvals</dt>
+              <dd>{pendingApprovals.length}</dd>
+            </div>
+            <div>
+              <dt>Cost</dt>
+              <dd>{props.usageSnapshot ? formatCostEstimate(props.usageSnapshot.totals.estimatedCostUsd) : props.usageLoading ? "..." : "--"}</dd>
+            </div>
+          </dl>
+          <p>{props.lastFailure ? trimText(props.lastFailure.message, 140) : "Select a run event, changed file, artifact, or approval to inspect details here."}</p>
+          <button data-action-id="inspector.usage" type="button" onClick={props.onOpenUsageLimits}>Usage details</button>
+        </section>
+      ) : null}
+
+      {selectedActivity ? (
+        <section className="inspector-detail-card" data-inspector-kind="activity">
+          <InspectorTitle label={runSpineActivityLabel(selectedActivity)} status={selectedActivity.status} />
+          <InspectorMetadata rows={[
+            ["Kind", selectedActivity.kind],
+            ["Started", formatTime(selectedActivity.startedAt)],
+            ["Finished", selectedActivity.completedAt ? formatTime(selectedActivity.completedAt) : "--"],
+            ["Target", selectedActivity.targetPath ?? selectedActivity.command ?? "--"],
+          ]} />
+          <p>{selectedActivity.summary}</p>
+          {selectedActivity.command ? <InspectorCode title="Command" value={selectedActivity.command} onCopy={props.onCopyText} /> : null}
+          {selectedActivity.outputPreview ? <InspectorCode title="Output" value={selectedActivity.outputPreview} /> : null}
+        </section>
+      ) : null}
+
+      {selectedProcess ? (
+        <section className="inspector-detail-card" data-inspector-kind="process">
+          <InspectorTitle label="Running command" status={selectedProcess.status} />
+          <InspectorMetadata rows={[
+            ["Cwd", selectedProcess.cwd ?? "--"],
+            ["Started", formatTime(selectedProcess.startedAt)],
+            ["Session", selectedProcess.sessionId ?? "--"],
+          ]} />
+          <InspectorCode title="Command" value={selectedProcess.command} onCopy={props.onCopyText} />
+          {selectedProcess.outputPreview ? <InspectorCode title="Output" value={selectedProcess.outputPreview} /> : null}
+        </section>
+      ) : null}
+
+      {selectedFile ? (
+        <section className="inspector-detail-card" data-inspector-kind="file">
+          <InspectorTitle label={runSpineCompactPath(selectedFile.path)} status={selectedFile.status} />
+          <InspectorMetadata rows={[
+            ["Kind", selectedFile.kind],
+            ["Changed", `+${selectedFile.insertions} / -${selectedFile.deletions}`],
+            ["Design system", selectedFile.designSystem ? "yes" : "no"],
+          ]} />
+          <InspectorCode title="Path" value={selectedFile.path} onCopy={props.onCopyText} />
+        </section>
+      ) : null}
+
+      {selectedArtifact ? (
+        <section className="inspector-detail-card" data-inspector-kind="artifact">
+          <InspectorTitle label={selectedArtifact.title} status={selectedArtifact.status} />
+          <InspectorMetadata rows={[
+            ["Harness", selectedArtifact.createdByHarness],
+            ["Sections", String(selectedArtifact.sections.length)],
+            ["Sources", String(selectedArtifact.sourceRefs.length)],
+            ["Updated", formatTime(selectedArtifact.updatedAt)],
+          ]} />
+          <p>{trimText(selectedArtifact.rawContent, 360)}</p>
+          {selectedArtifact.sourceRefs.length ? (
+            <div className="inspector-mini-list">
+              {selectedArtifact.sourceRefs.slice(0, 5).map((ref) => (
+                <span key={ref.id} title={ref.sourcePath ?? ref.url ?? ref.label}>{ref.label}</span>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {selectedApproval ? (
+        <section className="inspector-detail-card" data-inspector-kind="approval">
+          <InspectorTitle label={approvalToolId(selectedApproval) ?? "Approval request"} status="waiting" />
+          <InspectorMetadata rows={[
+            ["Call", approvalCallId(selectedApproval) ?? selectedApproval.id],
+            ["Requested", formatTime(selectedApproval.timestamp)],
+            ["Session", selectedApproval.sessionId],
+          ]} />
+          <p>{selectedApproval.message}</p>
+          <div className="inspector-action-row">
+            <button className="primary" data-action-id={`inspector.approval.approve.${approvalCallId(selectedApproval) ?? selectedApproval.id}`} type="button" onClick={() => void props.onResolveApproval(approvalCallId(selectedApproval) ?? selectedApproval.id, "approve")}>Approve</button>
+            <button data-action-id={`inspector.approval.deny.${approvalCallId(selectedApproval) ?? selectedApproval.id}`} type="button" onClick={() => void props.onResolveApproval(approvalCallId(selectedApproval) ?? selectedApproval.id, "deny")}>Deny</button>
+          </div>
+          <InspectorData data={selectedApproval.data} />
+        </section>
+      ) : null}
+
+      {selectedEvent ? (
+        <section className="inspector-detail-card" data-inspector-kind="event">
+          <InspectorTitle label={formatEventName(selectedEvent.type)} status={selectedEvent.type.includes("fail") ? "failed" : "event"} />
+          <InspectorMetadata rows={[
+            ["Time", formatTime(selectedEvent.timestamp)],
+            ["Session", selectedEvent.sessionId],
+          ]} />
+          <p>{selectedEvent.message}</p>
+          <InspectorData data={selectedEvent.data} />
+        </section>
+      ) : null}
+
+      {selection && !hasResolvedSelection ? (
+        <section className="inspector-summary-card" data-inspector-empty="missing-selection">
+          <p>The selected item is no longer in the active trace.</p>
+          <button data-action-id="inspector.clear-missing" type="button" onClick={props.onClearSelection}>Show summary</button>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function InspectorTitle(props: { label: string; status: string }) {
+  return (
+    <header className="inspector-detail-title">
+      <strong title={props.label}>{trimText(props.label, 96)}</strong>
+      <span>{props.status}</span>
+    </header>
+  );
+}
+
+function InspectorMetadata(props: { rows: Array<[string, string]> }) {
+  return (
+    <dl className="inspector-metadata">
+      {props.rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd title={value}>{trimText(value, 96)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function InspectorCode(props: { title: string; value: string; onCopy?: (value: string) => void }) {
+  return (
+    <details className="inspector-code-block" open={props.title === "Path" || props.title === "Command"}>
+      <summary>
+        <span>{props.title}</span>
+        {props.onCopy ? <button data-action-id={`inspector.copy.${props.title.toLowerCase()}`} type="button" onClick={(event) => { event.preventDefault(); props.onCopy?.(props.value); }}>Copy</button> : null}
+      </summary>
+      <pre>{props.value}</pre>
+    </details>
+  );
+}
+
+function InspectorData(props: { data: unknown }) {
+  if (props.data === undefined || props.data === null) return null;
+  return <InspectorCode title="Data" value={safeInspectorJson(props.data)} />;
+}
+
+function pendingApprovalEvents(events: StudioEvent[]): StudioEvent[] {
+  const resolved = new Set<string>();
+  for (const event of events) {
+    if (event.type === "approval_resolved") {
+      const callId = approvalCallId(event);
+      if (callId) resolved.add(callId);
+    }
+  }
+  return events.filter((event) => {
+    if (event.type !== "approval_request") return false;
+    const callId = approvalCallId(event);
+    return Boolean(callId && !resolved.has(callId));
+  });
+}
+
+function approvalCallId(event: StudioEvent): string | null {
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : null;
+  return typeof data?.callId === "string" ? data.callId : null;
+}
+
+function approvalToolId(event: StudioEvent): string | null {
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : null;
+  return typeof data?.toolId === "string" ? data.toolId : null;
+}
+
+function inspectorSelectionTitle(selection: InspectorSelection | null): string {
+  if (!selection) return "Runtime and session";
+  if (selection.kind === "activity") return "Run event";
+  if (selection.kind === "process") return "Live process";
+  if (selection.kind === "file") return "Changed file";
+  if (selection.kind === "artifact") return "Artifact";
+  if (selection.kind === "approval") return "Approval";
+  return "Event";
+}
+
+function safeInspectorJson(data: unknown): string {
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data);
+  }
+}
+
+function runSpineActivityReceipt(activity: StudioActivityItem, onSelect: () => void) {
   return {
     id: activity.id,
     label: runSpineActivityLabel(activity),
     detail: runSpineActivityMeta(activity),
     status: activity.status === "failed" ? "warn" : activity.status === "running" ? "running" : "done",
     title: activity.command ?? activity.targetPath ?? activity.summary,
+    onSelect,
   };
 }
 
@@ -4513,6 +4754,7 @@ function ConversationGoalRow(props: {
 function ApprovalBanner(props: {
   events: StudioEvent[];
   onResolve: (callId: string, decision: "approve" | "deny") => Promise<void> | void;
+  onSelect?: (event: StudioEvent) => void;
 }) {
   const resolved = new Set<string>();
   for (const event of props.events) {
@@ -4544,6 +4786,15 @@ function ApprovalBanner(props: {
                 <span title={event.message}>{event.message}</span>
               </div>
               <div className="approval-banner-row-actions">
+                {props.onSelect ? (
+                  <button
+                    type="button"
+                    data-action-id={`approval.inspect.${callId}`}
+                    onClick={() => props.onSelect?.(event)}
+                  >
+                    Inspect
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="primary"

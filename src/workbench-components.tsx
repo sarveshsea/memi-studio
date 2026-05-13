@@ -29,6 +29,7 @@ import {
   type StudioBrowserStatus,
   type StudioComputerStatus,
   type StudioDesignSystemTrace,
+  type StudioDesignSystemTraceFile,
   type StudioDownloadJob,
   type DesignChangelogCreateInput,
   type DesignChangelogEntry,
@@ -390,12 +391,14 @@ export function CreationStrip(props: {
   onOpenPacket: () => void;
   onPinMemory: () => void;
   onSearchChange: (query: string) => void;
+  onSelectArtifact?: (artifact: DesignSystemArtifact) => void;
 }) {
   const followUps = deriveChatFollowUps(props);
   const verification = deriveVerificationSignals(props);
   const cards = artifactCardsFromPacket(props.packet, props.events);
   const objective = props.packet?.objective || props.session?.prompt || "Draft agent work";
   const latestArtifact = cards[0] ?? null;
+  const latestDesignArtifact = props.artifacts[0] ?? null;
   const evidenceCount = props.packet?.evidence.length ?? props.events.filter((event) => /research|artifact|screenshot|snapshot|result/i.test(event.type)).length;
   const decisionCount = props.packet?.decisions.length ?? props.events.filter((event) => event.type === "design_decision").length;
   const visualCount = cards.filter((card) => card.kind === "visual").length || props.events.filter((event) => event.type === "screenshot" || event.type === "browser_snapshot" || event.type === "design_preview").length;
@@ -411,7 +414,13 @@ export function CreationStrip(props: {
         </button>
       </div>
       <div className="creation-strip-metrics">
-        <span title={latestArtifact?.title ?? "No artifact yet"}>{latestArtifact ? trimText(latestArtifact.title, 42) : "No artifact yet"}</span>
+        {latestDesignArtifact && props.onSelectArtifact ? (
+          <button data-action-id={`artifact.inspect.${latestDesignArtifact.id}`} title={latestDesignArtifact.title} type="button" onClick={() => props.onSelectArtifact?.(latestDesignArtifact)}>
+            {trimText(latestDesignArtifact.title, 42)}
+          </button>
+        ) : (
+          <span title={latestArtifact?.title ?? "No artifact yet"}>{latestArtifact ? trimText(latestArtifact.title, 42) : "No artifact yet"}</span>
+        )}
         <span>{evidenceCount} evidence</span>
         <span>{decisionCount} decisions</span>
         <span>{visualCount} visuals</span>
@@ -1506,6 +1515,7 @@ function SidebarIcon({ name }: { name: "new-chat" | "search" | "plugins" | "chan
 export function ChangedFilesPanel(props: {
   trace: StudioDesignSystemTrace | null;
   onReview: () => void;
+  onSelectFile?: (file: StudioDesignSystemTraceFile) => void;
 }) {
   const [showFiles, setShowFiles] = useState(false);
   const files = props.trace?.files ?? [];
@@ -1539,7 +1549,10 @@ export function ChangedFilesPanel(props: {
                     <small>+{file.insertions} -{file.deletions}</small>
                   </summary>
                   <p>{file.kind} / {file.status}{file.designSystem ? " / design-system" : ""}</p>
-                  <button data-action-id={`changed-file.copy.${file.path}`} type="button" onClick={() => void copyText(file.path)}>Copy path</button>
+                  <div className="changed-file-actions">
+                    {props.onSelectFile ? <button data-action-id={`changed-file.inspect.${file.path}`} type="button" onClick={() => props.onSelectFile?.(file)}>Inspect</button> : null}
+                    <button data-action-id={`changed-file.copy.${file.path}`} type="button" onClick={() => void copyText(file.path)}>Copy path</button>
+                  </div>
                 </details>
               ))}
             </div>
