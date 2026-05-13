@@ -1205,8 +1205,9 @@ button.active,
 .run-spine-receipt {
   min-width: 0;
   max-width: 100%;
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: var(--space-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-default);
@@ -1216,10 +1217,21 @@ button.active,
   cursor: pointer;
 }
 .run-spine-receipt:hover { border-color: var(--line-strong); background: var(--surface); }
+.run-spine-receipt-fields {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-0-5);
+}
 .run-spine-receipt strong {
   color: var(--ink);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+}
+.run-spine-receipt b {
+  color: var(--ink-faint);
+  font-weight: var(--font-weight-regular);
+  margin-right: 2px;
 }
 .run-spine-receipt[data-status="running"] { border-color: var(--accent); }
 .run-spine-receipt[data-status="warn"] { border-color: var(--danger); }

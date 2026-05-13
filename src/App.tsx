@@ -2941,11 +2941,13 @@ export function App() {
             actionLabel={effectiveActionLabel}
             activities={traceModel.activities}
             activeProcesses={traceModel.activeProcesses}
+            events={events}
             agentThinkingState={agentThinkingState}
             terminalBlocks={visibleTerminalBlocks}
             totalTerminalBlockCount={terminalBlocks.length}
             designTrace={designTrace}
             lastFailure={lastFailure}
+            usageSnapshot={usageSnapshot}
             collapsedBlockIds={collapsedBlockIds}
             onStart={() => void run()}
             onCopyBlock={(block) => void copyText(block.messages.join(""))}
@@ -4139,11 +4141,13 @@ function RunSpine(props: {
   actionLabel: string;
   activities: StudioActivityItem[];
   activeProcesses: StudioActiveProcess[];
+  events: StudioEvent[];
   agentThinkingState: "thinking" | "running" | "idle" | "failed";
   terminalBlocks: TerminalBlock[];
   totalTerminalBlockCount: number;
   designTrace: StudioDesignSystemTrace | null;
   lastFailure: StudioEvent | null;
+  usageSnapshot: StudioUsageSnapshot | null;
   collapsedBlockIds: Set<string>;
   onStart: () => void;
   onCopyBlock: (block: TerminalBlock) => void;
@@ -4164,18 +4168,21 @@ function RunSpine(props: {
     ...props.activeProcesses.map((process) => ({
       id: `process-${process.id}`,
       label: "Running",
-      detail: trimText(process.command, 86),
+      fields: runSpineProcessReceiptFields(process),
       status: "running",
       title: process.cwd ?? process.command,
       onSelect: () => props.onSelectProcess(process),
     })),
-    ...toolActivities.map((activity) => runSpineActivityReceipt(activity, () => props.onSelectActivity(activity))),
+    ...toolActivities.map((activity) => runSpineActivityReceipt(activity, props.events, props.session, () => props.onSelectActivity(activity))),
   ].slice(-6);
   const changedFiles = props.designTrace?.files ?? [];
   const fileReceipts = changedFiles.slice(0, 5).map((file) => ({
     id: file.path,
     label: file.status,
-    detail: `${runSpineCompactPath(file.path)} +${file.insertions} -${file.deletions}`,
+    fields: [
+      { label: "file", value: runSpineCompactPath(file.path) },
+      { label: "delta", value: `+${file.insertions} -${file.deletions}` },
+    ],
     status: file.status === "deleted" ? "warn" : "done",
     title: file.path,
     onSelect: () => props.onSelectFile(file),
@@ -4185,6 +4192,7 @@ function RunSpine(props: {
     || block.events.some((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)),
   ) ?? null;
   const resultSelectEvent = props.lastFailure ?? resultBlock?.events.find((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)) ?? null;
+  const sessionReceipt = props.session ? runSpineSessionReceipt(props.session, props.events, props.usageSnapshot, resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined) : null;
   const rows = [
     {
       id: "prompt",
@@ -4230,6 +4238,7 @@ function RunSpine(props: {
         ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Awaiting run"),
       meta: resultBlock?.title ?? props.session?.status ?? "standby",
       onSelect: resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined,
+      receipts: sessionReceipt ? [sessionReceipt] : undefined,
     },
   ];
   return (
@@ -4252,9 +4261,16 @@ function RunSpine(props: {
             {row.receipts?.length ? (
               <div className="run-spine-receipts" data-run-spine-receipts={row.id}>
                 {row.receipts.map((receipt) => (
-                  <button className="run-spine-receipt" data-status={receipt.status} key={receipt.id} onClick={receipt.onSelect} title={receipt.title ?? receipt.detail} type="button">
+                  <button className="run-spine-receipt" data-status={receipt.status} key={receipt.id} onClick={receipt.onSelect} title={runSpineReceiptTitle(receipt)} type="button">
                     <strong>{receipt.label}</strong>
-                    <small>{receipt.detail}</small>
+                    <span className="run-spine-receipt-fields">
+                      {receipt.fields.map((field) => (
+                        <small key={field.label}>
+                          <b>{field.label}</b>
+                          {field.value}
+                        </small>
+                      ))}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -4581,15 +4597,125 @@ function safeInspectorJson(data: unknown): string {
   }
 }
 
-function runSpineActivityReceipt(activity: StudioActivityItem, onSelect: () => void) {
+function runSpineProcessReceiptFields(process: StudioActiveProcess): Array<{ label: string; value: string }> {
+  return compactReceiptFields([
+    ["cmd", runSpineCompactCommand(process.command)],
+    ["cwd", process.cwd ? runSpineCompactPath(process.cwd) : null],
+    ["dur", runSpineDurationLabel(process.startedAt, null)],
+  ]);
+}
+
+function runSpineActivityReceipt(activity: StudioActivityItem, events: StudioEvent[], session: SessionSummary | null, onSelect: () => void) {
+  const sourceEvents = runSpineSourceEvents(activity.sourceEventIds, events);
+  const cwd = runSpineStringFromEvents(sourceEvents, ["cwd", "workingDirectory", "working_directory"]) ?? session?.cwd ?? null;
+  const exitCode = runSpineNumberFromEvents(sourceEvents, ["exit_code", "exitCode"]);
+  const fields = compactReceiptFields([
+    ["cmd", activity.command ? runSpineCompactCommand(activity.command) : null],
+    ["cwd", cwd ? runSpineCompactPath(cwd) : null],
+    ["dur", runSpineDurationLabel(activity.startedAt, activity.completedAt ?? null)],
+    ["exit", typeof exitCode === "number" ? String(exitCode) : null],
+    ["file", activity.targetPath ? runSpineCompactPath(activity.targetPath) : null],
+  ]);
   return {
     id: activity.id,
     label: runSpineActivityLabel(activity),
-    detail: runSpineActivityMeta(activity),
+    fields: fields.length ? fields : [{ label: "event", value: runSpineActivityMeta(activity) }],
     status: activity.status === "failed" ? "warn" : activity.status === "running" ? "running" : "done",
     title: activity.command ?? activity.targetPath ?? activity.summary,
     onSelect,
   };
+}
+
+function runSpineSessionReceipt(session: SessionSummary, events: StudioEvent[], usageSnapshot: StudioUsageSnapshot | null, onSelect?: () => void) {
+  const usage = runSpineUsageSummary(events, usageSnapshot);
+  const fields = compactReceiptFields([
+    ["dur", runSpineDurationLabel(session.startedAt, session.completedAt)],
+    ["exit", session.exitCode === null ? null : String(session.exitCode)],
+    ["tokens", usage?.tokens ?? null],
+    ["cost", usage?.cost ?? null],
+  ]);
+  return {
+    id: `session-${session.id}`,
+    label: compactSessionStatusLabel(session.status),
+    fields: fields.length ? fields : [{ label: "events", value: String(session.eventCount) }],
+    status: session.status === "failed" ? "warn" : session.status === "running" || session.status === "queued" ? "running" : "done",
+    title: session.id,
+    onSelect,
+  };
+}
+
+function compactReceiptFields(fields: Array<[string, string | null | undefined]>): Array<{ label: string; value: string }> {
+  return fields
+    .filter((field): field is [string, string] => Boolean(field[1]))
+    .map(([label, value]) => ({ label, value }));
+}
+
+function runSpineSourceEvents(sourceEventIds: string[], events: StudioEvent[]): StudioEvent[] {
+  const idSet = new Set(sourceEventIds);
+  return events.filter((event) => idSet.has(event.id));
+}
+
+function runSpineStringFromEvents(events: StudioEvent[], keys: string[]): string | null {
+  for (const event of [...events].reverse()) {
+    const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : null;
+    for (const key of keys) {
+      const value = data?.[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return null;
+}
+
+function runSpineNumberFromEvents(events: StudioEvent[], keys: string[]): number | null {
+  for (const event of [...events].reverse()) {
+    const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : null;
+    for (const key of keys) {
+      const value = data?.[key];
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+  }
+  return null;
+}
+
+function runSpineUsageSummary(events: StudioEvent[], usageSnapshot: StudioUsageSnapshot | null): { tokens: string; cost: string } | null {
+  const tokenEvent = [...events].reverse().find((event) => event.type === "token_usage");
+  const data = tokenEvent?.data && typeof tokenEvent.data === "object" ? tokenEvent.data as Record<string, unknown> : null;
+  const totalTokens = numberFromRecord(data, ["totalTokens", "total_tokens", "tokens"]) ?? usageSnapshot?.totals.totalTokens ?? null;
+  const cost = numberFromRecord(data, ["estimatedCostUsd", "estimated_cost_usd", "costUsd", "cost_usd"]) ?? usageSnapshot?.totals.estimatedCostUsd ?? null;
+  if (totalTokens === null && cost === null) return null;
+  return {
+    tokens: totalTokens === null ? "--" : formatTokenCount(totalTokens),
+    cost: cost === null ? "--" : formatCostEstimate(cost),
+  };
+}
+
+function numberFromRecord(record: Record<string, unknown> | null, keys: string[]): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function runSpineCompactCommand(command: string): string {
+  return trimText(command.replace(/\s+/g, " ").trim(), 52);
+}
+
+function runSpineDurationLabel(startedAt: string, completedAt: string | null): string | null {
+  const start = Date.parse(startedAt);
+  const end = completedAt ? Date.parse(completedAt) : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  const ms = end - start;
+  if (ms < 1_000) return `${Math.max(1, Math.round(ms))}ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.round((ms % 60_000) / 1_000);
+  return `${minutes}m ${seconds}s`;
+}
+
+function runSpineReceiptTitle(receipt: { title?: string; fields: Array<{ label: string; value: string }> }): string {
+  return receipt.title ?? receipt.fields.map((field) => `${field.label}: ${field.value}`).join(" · ");
 }
 
 function runSpineActivityLabel(activity: StudioActivityItem): string {
