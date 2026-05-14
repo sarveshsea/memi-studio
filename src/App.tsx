@@ -849,9 +849,9 @@ export function App() {
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
     {
       id: "runtime",
-      label: `Runtime ${runtimeHealthLabel(runtimeHealth)}`,
+      label: `Runtime ${runtimeHealthDisplayLabel(runtimeHealth, status?.runtime?.runtimeSource)}`,
       status: runtimeTruthStatus(runtimeHealth),
-      title: status?.projectRoot ?? runtimeRecoveryMessage ?? "Runtime status",
+      title: runtimeTruthTitle(status, runtimeRecoveryMessage),
     },
     {
       id: "codex",
@@ -871,7 +871,7 @@ export function App() {
       status: worktreeTruthStatus(designTrace, lastFailure),
       title: worktreeTruthTitle(designTrace, lastFailure),
     },
-  ], [claudeHarness, codexHarness, designTrace, lastFailure, runtimeHealth, runtimeRecoveryMessage, status?.projectRoot]);
+  ], [claudeHarness, codexHarness, designTrace, lastFailure, runtimeHealth, runtimeRecoveryMessage, status?.projectRoot, status?.runtime?.runtimeCacheRoot, status?.runtime?.runtimeSource]);
   useEffect(() => {
     if (runtimeHealth !== "ready") return undefined;
     const needsAuthRefresh = [codexHarness, claudeHarness].some((harness) => !harness || !harness.authStatus);
@@ -4565,6 +4565,21 @@ function runtimeHealthLabel(health: RuntimeHealth): string {
   return "Offline";
 }
 
+function runtimeHealthDisplayLabel(health: RuntimeHealth, source?: string | null): string {
+  if (source === "attached-existing-runtime") return "Attached";
+  return runtimeHealthLabel(health);
+}
+
+function runtimeTruthTitle(status: StudioStatus | null, recoveryMessage?: string | null): string {
+  if (status?.runtime?.runtimeSource === "attached-existing-runtime") {
+    return "Using an existing runtime on 127.0.0.1:8765. Restart runtime after quitting that process to replace it.";
+  }
+  if (status?.runtime?.runtimeCacheRoot) {
+    return `Runtime cache: ${status.runtime.runtimeCacheRoot}`;
+  }
+  return status?.projectRoot ?? recoveryMessage ?? "Runtime status";
+}
+
 function queueDockItemsFromRuntime(metrics: StudioRuntimeMetrics | null | undefined, health: RuntimeHealth): Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> {
   if (health !== "ready") return [{ id: "runtime", label: health === "starting" ? "Starting" : health === "degraded" ? "Blocked" : "Offline", detail: "Runtime", status: "blocked" }];
   if (!metrics) return [];
@@ -4904,7 +4919,7 @@ function ContextualInspectorPane(props: {
           <dl>
             <div>
               <dt>Runtime</dt>
-              <dd>{runtimeHealthLabel(props.runtimeHealth)}</dd>
+              <dd>{runtimeHealthDisplayLabel(props.runtimeHealth, props.status?.runtime?.runtimeSource)}</dd>
             </div>
             <div>
               <dt>Workspace</dt>

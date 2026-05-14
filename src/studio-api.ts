@@ -394,13 +394,16 @@ export interface StudioRuntimeMetrics {
 }
 
 export interface StudioRuntimeStatus {
-  status: "running" | "starting" | "stopped" | "error";
+  status: "running" | "starting" | "stopping" | "stopped" | "error";
   port: number;
   url: string;
   pid?: number | null;
   workspaceRoot: string;
   apiToken?: string | null;
   packageRoot?: string | null;
+  runtimeBinary?: string | null;
+  runtimeSource?: string | null;
+  runtimeCacheRoot?: string | null;
   error?: string | null;
 }
 

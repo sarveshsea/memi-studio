@@ -140,6 +140,12 @@ pub struct StudioRuntimeStatus {
     pub api_token: Option<String>,
     #[serde(rename = "packageRoot", skip_serializing_if = "Option::is_none")]
     pub package_root: Option<String>,
+    #[serde(rename = "runtimeBinary", skip_serializing_if = "Option::is_none")]
+    pub runtime_binary: Option<String>,
+    #[serde(rename = "runtimeSource", skip_serializing_if = "Option::is_none")]
+    pub runtime_source: Option<String>,
+    #[serde(rename = "runtimeCacheRoot", skip_serializing_if = "Option::is_none")]
+    pub runtime_cache_root: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
