@@ -32,6 +32,7 @@ const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 40;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
 const MANAGED_RUNTIME_PID_FILE: &str = "managed-runtime.json";
 const RUNTIME_SIGNATURE_MANIFEST: &str = "source-signatures.json";
+const RUNTIME_LIFECYCLE_LOG_FILE: &str = "lifecycle.jsonl";
 
 #[derive(Debug, serde::Deserialize)]
 struct RuntimeHarnessesPayload {
@@ -547,6 +548,14 @@ fn request_studio_runtime_restart(
     status.supervisor_phase = Some("queued".to_string());
     status.startup_started_at = Some(studio::unix_millis().to_string());
     let generation = begin_runtime_supervisor(state, status.clone());
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.supervisor.queued",
+        json!({
+            "generation": generation,
+            "workspaceRoot": workspace_root.to_string_lossy().to_string()
+        }),
+    );
     let app = app.clone();
     let workspace_root = workspace_root.to_path_buf();
     thread::spawn(move || {
@@ -607,6 +616,14 @@ fn restart_studio_runtime_process(
     preparing.startup_started_at = Some(startup_started_at.clone());
     preparing.startup_ms = Some(elapsed_ms(supervisor_started));
     let _ = set_runtime_status_for_generation(state, preparing, None, generation);
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.supervisor.preparing",
+        json!({
+            "generation": generation,
+            "workspaceRoot": workspace_root.to_string_lossy().to_string()
+        }),
+    );
 
     for _ in 0..20 {
         if !local_port_open(STUDIO_RUNTIME_PORT) {
@@ -641,6 +658,15 @@ fn restart_studio_runtime_process(
             status.startup_started_at = Some(startup_started_at.clone());
             status.startup_ms = Some(elapsed_ms(supervisor_started));
             let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+            append_runtime_lifecycle_log(
+                app,
+                "runtime.attached-existing",
+                json!({
+                    "generation": generation,
+                    "port": STUDIO_RUNTIME_PORT,
+                    "startupMs": status.startup_ms
+                }),
+            );
             let _ = app.emit(
                 "studio-runtime-log",
                 json!({
@@ -666,6 +692,15 @@ fn restart_studio_runtime_process(
         status.startup_started_at = Some(startup_started_at.clone());
         status.startup_ms = Some(elapsed_ms(supervisor_started));
         let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.port-blocked",
+            json!({
+                "generation": generation,
+                "port": STUDIO_RUNTIME_PORT,
+                "startupMs": status.startup_ms
+            }),
+        );
         return status;
     }
 
@@ -677,6 +712,15 @@ fn restart_studio_runtime_process(
             status.startup_started_at = Some(startup_started_at.clone());
             status.startup_ms = Some(elapsed_ms(supervisor_started));
             let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+            append_runtime_lifecycle_log(
+                app,
+                "runtime.resolve-failed",
+                json!({
+                    "generation": generation,
+                    "startupMs": status.startup_ms,
+                    "error": status.error.clone()
+                }),
+            );
             return status;
         }
     };
@@ -708,10 +752,32 @@ fn restart_studio_runtime_process(
             status.cache_prepare_ms = Some(elapsed_ms(cache_started));
             status.startup_ms = Some(elapsed_ms(supervisor_started));
             let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+            append_runtime_lifecycle_log(
+                app,
+                "runtime.cache-failed",
+                json!({
+                    "generation": generation,
+                    "sourceKind": status.runtime_source.clone(),
+                    "runtimeCacheRoot": status.runtime_cache_root.clone(),
+                    "cachePrepareMs": status.cache_prepare_ms,
+                    "startupMs": status.startup_ms,
+                    "error": status.error.clone()
+                }),
+            );
             return status;
         }
     };
     let cache_prepare_ms = elapsed_ms(cache_started);
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.cache-prepared",
+        json!({
+            "generation": generation,
+            "runtimeCacheRoot": materialized.runtime_root.to_string_lossy().to_string(),
+            "sourceKind": materialized.source_kind.clone(),
+            "cachePrepareMs": cache_prepare_ms
+        }),
+    );
     let package_root = materialized.package_root.clone();
     let binary = materialized.binary.clone();
 
@@ -752,6 +818,18 @@ fn restart_studio_runtime_process(
             status.cache_prepare_ms = Some(cache_prepare_ms);
             status.startup_ms = Some(elapsed_ms(supervisor_started));
             let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+            append_runtime_lifecycle_log(
+                app,
+                "runtime.spawn-failed",
+                json!({
+                    "generation": generation,
+                    "runtimeBinary": status.runtime_binary.clone(),
+                    "runtimeCacheRoot": status.runtime_cache_root.clone(),
+                    "cachePrepareMs": status.cache_prepare_ms,
+                    "startupMs": status.startup_ms,
+                    "error": status.error.clone()
+                }),
+            );
             return status;
         }
     };
@@ -768,6 +846,15 @@ fn restart_studio_runtime_process(
     if let Err(error) =
         write_managed_runtime_pid_file(app, pid, &api_token, workspace_root, &materialized)
     {
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.pid-file-failed",
+            json!({
+                "generation": generation,
+                "pid": pid,
+                "error": error.clone()
+            }),
+        );
         let _ = app.emit(
             "studio-runtime-log",
             json!({
@@ -792,6 +879,18 @@ fn restart_studio_runtime_process(
     status.startup_ms = Some(elapsed_ms(supervisor_started));
     let _ =
         set_runtime_status_for_generation(state, status.clone(), Some(child.clone()), generation);
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.spawned",
+        json!({
+            "generation": generation,
+            "pid": pid,
+            "runtimeBinary": status.runtime_binary.clone(),
+            "runtimeCacheRoot": status.runtime_cache_root.clone(),
+            "cachePrepareMs": status.cache_prepare_ms,
+            "startupMs": status.startup_ms
+        }),
+    );
     spawn_runtime_ready_watcher(
         app.clone(),
         child.clone(),
@@ -820,6 +919,15 @@ fn stop_studio_runtime(app: &AppHandle, state: &AppState) {
     let child = take_runtime_child_for_stop(state);
     if let Some(pid) = stop_runtime_child(child) {
         clear_managed_runtime_pid_file(app, Some(pid));
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.stop",
+            json!({
+                "pid": pid,
+                "signal": "SIGTERM",
+                "fallback": "SIGKILL"
+            }),
+        );
     }
     mark_runtime_stopped_after_stop(state);
 }
@@ -942,6 +1050,55 @@ fn managed_runtime_pid_file_path_for_cache_root(cache_root: &Path) -> PathBuf {
     cache_root.join(MANAGED_RUNTIME_PID_FILE)
 }
 
+fn runtime_lifecycle_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_cache_root(app)?.join(RUNTIME_LIFECYCLE_LOG_FILE))
+}
+
+fn append_runtime_lifecycle_log(app: &AppHandle, event: &str, payload: Value) {
+    let Ok(path) = runtime_lifecycle_log_path(app) else {
+        return;
+    };
+    let _ = append_runtime_lifecycle_log_at(&path, event, payload);
+}
+
+fn append_runtime_lifecycle_log_at(path: &Path, event: &str, payload: Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Failed to create Studio runtime lifecycle log directory {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    let entry = json!({
+        "schemaVersion": 1,
+        "timestamp": studio::unix_millis().to_string(),
+        "event": event,
+        "payload": payload
+    });
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| {
+            format!(
+                "Failed to open Studio runtime lifecycle log {}: {err}",
+                path.display()
+            )
+        })?;
+    writeln!(
+        file,
+        "{}",
+        serde_json::to_string(&entry).map_err(|err| err.to_string())?
+    )
+    .map_err(|err| {
+        format!(
+            "Failed to write Studio runtime lifecycle log {}: {err}",
+            path.display()
+        )
+    })
+}
+
 fn write_managed_runtime_pid_file(
     app: &AppHandle,
     pid: u32,
@@ -1035,6 +1192,14 @@ fn replace_managed_orphan_runtime(app: &AppHandle, workspace_root: &Path) -> Res
     };
     if !process_exists(pid_file.pid) {
         clear_managed_runtime_pid_file(app, Some(pid_file.pid));
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.orphan.stale-pid-file",
+            json!({
+                "pid": pid_file.pid,
+                "port": pid_file.port
+            }),
+        );
         return Ok(false);
     }
     let token_status_ok = matches!(
@@ -1042,6 +1207,15 @@ fn replace_managed_orphan_runtime(app: &AppHandle, workspace_root: &Path) -> Res
         Some((200, _))
     );
     if !should_replace_managed_runtime_pid_file(&pid_file, true, token_status_ok) {
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.orphan.not-owned",
+            json!({
+                "pid": pid_file.pid,
+                "port": pid_file.port,
+                "tokenStatusOk": token_status_ok
+            }),
+        );
         return Ok(false);
     }
     if !terminate_pid_gracefully(pid_file.pid, Duration::from_secs(2)) {
@@ -1052,6 +1226,16 @@ fn replace_managed_orphan_runtime(app: &AppHandle, workspace_root: &Path) -> Res
         ));
     }
     clear_managed_runtime_pid_file(app, Some(pid_file.pid));
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.orphan.replaced",
+        json!({
+            "pid": pid_file.pid,
+            "port": pid_file.port,
+            "workspaceRoot": pid_file.workspace_root,
+            "runtimeCacheRoot": pid_file.runtime_cache_root
+        }),
+    );
     Ok(true)
 }
 
@@ -1996,26 +2180,39 @@ fn spawn_runtime_ready_watcher(
         for _ in 0..RUNTIME_STARTUP_POLL_ATTEMPTS {
             if runtime_answers_status(STUDIO_RUNTIME_PORT) {
                 if let Some(state) = app.try_state::<AppState>() {
-                    let mut runtime_state = state.runtime.lock().expect("runtime state lock");
-                    let current_pid = runtime_state
-                        .child
-                        .as_ref()
-                        .and_then(|current| current.lock().ok().map(|child| child.id()));
-                    if runtime_state.generation == timing.generation && current_pid == Some(pid) {
-                        let mut status = runtime_status(
-                            "running",
-                            Some(pid),
-                            &workspace_root,
-                            api_token.clone(),
-                            Some(runtime_launch.package_root.to_string_lossy().to_string()),
-                            None,
-                        );
-                        apply_runtime_diagnostics(&mut status, &runtime_launch);
-                        status.supervisor_phase = Some("running".to_string());
-                        status.startup_started_at = Some(timing.startup_started_at.clone());
-                        status.cache_prepare_ms = Some(timing.cache_prepare_ms);
-                        status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
-                        runtime_state.status = Some(status);
+                    let mut ready_payload = None;
+                    {
+                        let mut runtime_state = state.runtime.lock().expect("runtime state lock");
+                        let current_pid = runtime_state
+                            .child
+                            .as_ref()
+                            .and_then(|current| current.lock().ok().map(|child| child.id()));
+                        if runtime_state.generation == timing.generation && current_pid == Some(pid) {
+                            let mut status = runtime_status(
+                                "running",
+                                Some(pid),
+                                &workspace_root,
+                                api_token.clone(),
+                                Some(runtime_launch.package_root.to_string_lossy().to_string()),
+                                None,
+                            );
+                            apply_runtime_diagnostics(&mut status, &runtime_launch);
+                            status.supervisor_phase = Some("running".to_string());
+                            status.startup_started_at = Some(timing.startup_started_at.clone());
+                            status.cache_prepare_ms = Some(timing.cache_prepare_ms);
+                            status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
+                            ready_payload = Some(json!({
+                                "generation": timing.generation,
+                                "pid": pid,
+                                "runtimeCacheRoot": status.runtime_cache_root.clone(),
+                                "cachePrepareMs": status.cache_prepare_ms,
+                                "startupMs": status.startup_ms
+                            }));
+                            runtime_state.status = Some(status);
+                        }
+                    }
+                    if let Some(payload) = ready_payload {
+                        append_runtime_lifecycle_log(&app, "runtime.ready", payload);
                     }
                 }
                 return;
@@ -2046,6 +2243,19 @@ fn spawn_runtime_ready_watcher(
             if runtime_state.generation == timing.generation && current_pid == Some(pid) {
                 runtime_state.status = Some(status.clone());
             }
+            drop(runtime_state);
+            append_runtime_lifecycle_log(
+                &app,
+                "runtime.status-timeout",
+                json!({
+                    "generation": timing.generation,
+                    "pid": pid,
+                    "runtimeCacheRoot": status.runtime_cache_root.clone(),
+                    "cachePrepareMs": status.cache_prepare_ms,
+                    "startupMs": status.startup_ms,
+                    "error": status.error.clone()
+                }),
+            );
             let _ = app.emit(
                 "studio-runtime-log",
                 json!({ "stream": "system", "message": status.error }),
@@ -2108,6 +2318,17 @@ fn spawn_runtime_waiter(
                     if clear_pid_file {
                         clear_managed_runtime_pid_file(&app, Some(pid));
                     }
+                    append_runtime_lifecycle_log(
+                        &app,
+                        "runtime.exit",
+                        json!({
+                            "generation": generation,
+                            "pid": pid,
+                            "success": status.success(),
+                            "code": status.code(),
+                            "shouldRestart": should_restart
+                        }),
+                    );
                     let _ = app.emit(
                         "studio-runtime-log",
                         json!({ "stream": "system", "message": runtime_status.error }),
@@ -2494,5 +2715,28 @@ mod runtime_cache_tests {
 
         assert!(!staging.exists());
         let _ = fs::remove_dir_all(cache_root);
+    }
+
+    #[test]
+    fn lifecycle_log_writes_jsonl_entries_without_runtime_tokens() {
+        let root = temp_runtime_dir("lifecycle-log");
+        let path = root.join("runtime").join("lifecycle.jsonl");
+
+        append_runtime_lifecycle_log_at(
+            &path,
+            "runtime.cache-prepared",
+            json!({
+                "pid": 123,
+                "runtimeCacheRoot": "/tmp/runtime-cache"
+            }),
+        )
+        .expect("write lifecycle log");
+
+        let contents = fs::read_to_string(&path).expect("read lifecycle log");
+        let line = contents.lines().next().expect("first lifecycle line");
+        let entry: Value = serde_json::from_str(line).expect("parse lifecycle log entry");
+        assert_eq!(entry.get("event").and_then(Value::as_str), Some("runtime.cache-prepared"));
+        assert!(entry.get("payload").and_then(|payload| payload.get("apiToken")).is_none());
+        let _ = fs::remove_dir_all(root);
     }
 }
