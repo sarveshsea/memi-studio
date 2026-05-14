@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::{
+    collections::BTreeMap,
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpStream},
@@ -19,7 +20,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
@@ -30,6 +31,7 @@ const STUDIO_RUNTIME_RESOURCE_DIR: &str = "resources/memoire-runtime";
 const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 40;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
 const MANAGED_RUNTIME_PID_FILE: &str = "managed-runtime.json";
+const RUNTIME_SIGNATURE_MANIFEST: &str = "source-signatures.json";
 
 #[derive(Debug, serde::Deserialize)]
 struct RuntimeHarnessesPayload {
@@ -85,6 +87,13 @@ struct ManagedRuntimePidFile {
     runtime_binary: String,
     runtime_cache_root: String,
     started_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeSignatureManifest {
+    schema_version: u8,
+    signatures: BTreeMap<String, String>,
 }
 
 #[tauri::command]
@@ -1156,23 +1165,15 @@ fn materialize_runtime_in_cache(
     source: &RuntimeLaunchSource,
     cache_root: &Path,
 ) -> Result<MaterializedRuntime, String> {
-    let fingerprint = runtime_source_fingerprint(&source.binary, &source.package_root)?;
-    let runtime_root = cache_root.join(&fingerprint);
-    let binary_name = source
-        .binary
-        .file_name()
-        .map(|name| name.to_owned())
-        .unwrap_or_else(|| STUDIO_RUNTIME_BIN.into());
-    let binary = runtime_root.join("bin").join(binary_name);
-    let package_root = runtime_root.join("package");
-    let materialized = MaterializedRuntime {
-        binary: binary.clone(),
-        package_root: package_root.clone(),
-        runtime_root: runtime_root.clone(),
-        source_kind: source.source_kind.clone(),
-    };
+    let (fingerprint, source_signature) = runtime_source_fingerprint_for_cache(source, cache_root)?;
+    let materialized = materialized_runtime_from_fingerprint(source, cache_root, &fingerprint);
+    let runtime_root = materialized.runtime_root.clone();
 
-    if runtime_cache_is_ready(&binary, &package_root) {
+    if runtime_cache_is_ready(&materialized.binary, &materialized.package_root) {
+        if let Some(signature) = source_signature {
+            let _ = upsert_runtime_signature_manifest(cache_root, &signature, &fingerprint);
+        }
+        let _ = cleanup_runtime_cache(cache_root, Some(&runtime_root));
         return Ok(materialized);
     }
 
@@ -1231,6 +1232,10 @@ fn materialize_runtime_in_cache(
                 runtime_root.display()
             )
         })?;
+        if let Some(signature) = source_signature.as_deref() {
+            let _ = upsert_runtime_signature_manifest(cache_root, signature, &fingerprint);
+        }
+        let _ = cleanup_runtime_cache(cache_root, Some(&runtime_root));
         Ok(materialized)
     })();
 
@@ -1238,6 +1243,198 @@ fn materialize_runtime_in_cache(
         let _ = fs::remove_dir_all(&staging);
     }
     result
+}
+
+fn materialized_runtime_from_fingerprint(
+    source: &RuntimeLaunchSource,
+    cache_root: &Path,
+    fingerprint: &str,
+) -> MaterializedRuntime {
+    let runtime_root = cache_root.join(fingerprint);
+    let binary_name = source
+        .binary
+        .file_name()
+        .map(|name| name.to_owned())
+        .unwrap_or_else(|| STUDIO_RUNTIME_BIN.into());
+    MaterializedRuntime {
+        binary: runtime_root.join("bin").join(binary_name),
+        package_root: runtime_root.join("package"),
+        runtime_root,
+        source_kind: source.source_kind.clone(),
+    }
+}
+
+fn runtime_source_fingerprint_for_cache(
+    source: &RuntimeLaunchSource,
+    cache_root: &Path,
+) -> Result<(String, Option<String>), String> {
+    let source_signature =
+        runtime_source_signature_key(&source.binary, &source.package_root).ok();
+    if let Some(signature) = source_signature.as_deref() {
+        if let Some(fingerprint) = read_runtime_signature_manifest(cache_root)
+            .signatures
+            .get(signature)
+            .cloned()
+        {
+            let materialized =
+                materialized_runtime_from_fingerprint(source, cache_root, &fingerprint);
+            if runtime_cache_is_ready(&materialized.binary, &materialized.package_root) {
+                return Ok((fingerprint, source_signature));
+            }
+        }
+    }
+    Ok((
+        runtime_source_fingerprint(&source.binary, &source.package_root)?,
+        source_signature,
+    ))
+}
+
+fn runtime_source_signature_key(binary: &Path, package_root: &Path) -> Result<String, String> {
+    if !binary.is_file() {
+        return Err(format!(
+            "Studio runtime binary is missing: {}",
+            binary.display()
+        ));
+    }
+    if !package_root.join("package.json").is_file() {
+        return Err(format!(
+            "Studio runtime package root is missing package.json: {}",
+            package_root.display()
+        ));
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"memoire-studio-runtime-source-signature-v1");
+    hash_file_metadata(&mut hasher, Path::new("runtime-binary"), binary)?;
+    hash_dir_metadata(&mut hasher, package_root, package_root)?;
+    Ok(hex_bytes(&hasher.finalize()))
+}
+
+fn hash_dir_metadata(hasher: &mut Sha256, base: &Path, dir: &Path) -> Result<(), String> {
+    let mut entries = fs::read_dir(dir)
+        .map_err(|err| {
+            format!(
+                "Failed to read Studio runtime resource dir metadata {}: {err}",
+                dir.display()
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("Failed to read Studio runtime resource metadata entry: {err}"))?;
+    entries.sort_by_key(|entry| entry.path());
+    for entry in entries {
+        let path = entry.path();
+        let relative = path.strip_prefix(base).unwrap_or(&path);
+        let metadata = fs::symlink_metadata(&path).map_err(|err| {
+            format!(
+                "Failed to inspect Studio runtime resource metadata {}: {err}",
+                path.display()
+            )
+        })?;
+        let file_type = metadata.file_type();
+        if file_type.is_symlink() {
+            let target = fs::read_link(&path).map_err(|err| {
+                format!(
+                    "Failed to read Studio runtime resource symlink metadata {}: {err}",
+                    path.display()
+                )
+            })?;
+            hasher.update(b"symlink");
+            hasher.update(relative.to_string_lossy().as_bytes());
+            hasher.update(target.to_string_lossy().as_bytes());
+            hasher.update(metadata_millis(&metadata)?.to_le_bytes());
+        } else if metadata.is_dir() {
+            hasher.update(b"dir");
+            hasher.update(relative.to_string_lossy().as_bytes());
+            hasher.update(metadata_millis(&metadata)?.to_le_bytes());
+            hash_dir_metadata(hasher, base, &path)?;
+        } else if metadata.is_file() {
+            hash_file_metadata(hasher, relative, &path)?;
+        }
+    }
+    Ok(())
+}
+
+fn hash_file_metadata(hasher: &mut Sha256, relative: &Path, path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path).map_err(|err| {
+        format!(
+            "Failed to inspect Studio runtime file metadata {}: {err}",
+            path.display()
+        )
+    })?;
+    hasher.update(b"file");
+    hasher.update(relative.to_string_lossy().as_bytes());
+    hasher.update(metadata.len().to_le_bytes());
+    hasher.update(metadata_millis(&metadata)?.to_le_bytes());
+    Ok(())
+}
+
+fn metadata_millis(metadata: &fs::Metadata) -> Result<u128, String> {
+    system_time_millis(
+        metadata
+            .modified()
+            .map_err(|err| format!("Failed to read Studio runtime metadata timestamp: {err}"))?,
+    )
+}
+
+fn system_time_millis(time: SystemTime) -> Result<u128, String> {
+    Ok(time
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("Studio runtime metadata timestamp predates Unix epoch: {err}"))?
+        .as_millis())
+}
+
+fn runtime_signature_manifest_path(cache_root: &Path) -> PathBuf {
+    cache_root.join(RUNTIME_SIGNATURE_MANIFEST)
+}
+
+fn read_runtime_signature_manifest(cache_root: &Path) -> RuntimeSignatureManifest {
+    let path = runtime_signature_manifest_path(cache_root);
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<RuntimeSignatureManifest>(&contents).ok())
+        .filter(|manifest| manifest.schema_version == 1)
+        .unwrap_or_else(|| RuntimeSignatureManifest {
+            schema_version: 1,
+            signatures: BTreeMap::new(),
+        })
+}
+
+fn upsert_runtime_signature_manifest(
+    cache_root: &Path,
+    source_signature: &str,
+    fingerprint: &str,
+) -> Result<(), String> {
+    fs::create_dir_all(cache_root).map_err(|err| {
+        format!(
+            "Failed to create Studio runtime signature cache {}: {err}",
+            cache_root.display()
+        )
+    })?;
+    let mut manifest = read_runtime_signature_manifest(cache_root);
+    manifest
+        .signatures
+        .insert(source_signature.to_string(), fingerprint.to_string());
+    let path = runtime_signature_manifest_path(cache_root);
+    let staging = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    fs::write(
+        &staging,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&manifest).map_err(|err| err.to_string())?
+        ),
+    )
+    .map_err(|err| {
+        format!(
+            "Failed to write Studio runtime signature manifest {}: {err}",
+            staging.display()
+        )
+    })?;
+    fs::rename(&staging, &path).map_err(|err| {
+        let _ = fs::remove_file(&staging);
+        format!(
+            "Failed to activate Studio runtime signature manifest {}: {err}",
+            path.display()
+        )
+    })
 }
 
 fn runtime_cache_is_ready(binary: &Path, package_root: &Path) -> bool {
@@ -1471,6 +1668,64 @@ fn write_runtime_cache_manifest(
             runtime_root.display()
         )
     })
+}
+
+fn cleanup_runtime_cache(cache_root: &Path, active_runtime_root: Option<&Path>) -> Result<(), String> {
+    if !cache_root.is_dir() {
+        return Ok(());
+    }
+    let active_runtime_root = active_runtime_root.and_then(|path| path.canonicalize().ok());
+    let mut inactive_caches = Vec::new();
+    for entry in fs::read_dir(cache_root).map_err(|err| {
+        format!(
+            "Failed to read Studio runtime cache root {}: {err}",
+            cache_root.display()
+        )
+    })? {
+        let entry = entry.map_err(|err| format!("Failed to read Studio runtime cache entry: {err}"))?;
+        let path = entry.path();
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if file_name.starts_with('.') && file_name.contains(".staging-") {
+            let _ = fs::remove_dir_all(&path);
+            continue;
+        }
+        if !path.is_dir() || !path.join("runtime-cache.json").is_file() {
+            continue;
+        }
+        if active_runtime_root
+            .as_ref()
+            .is_some_and(|active| path.canonicalize().ok().as_ref() == Some(active))
+        {
+            continue;
+        }
+        inactive_caches.push((runtime_cache_created_at(&path), path));
+    }
+    inactive_caches.sort_by(|(left_created_at, _), (right_created_at, _)| {
+        right_created_at.cmp(left_created_at)
+    });
+    for (_, path) in inactive_caches.into_iter().skip(2) {
+        let _ = fs::remove_dir_all(path);
+    }
+    Ok(())
+}
+
+fn runtime_cache_created_at(runtime_root: &Path) -> u128 {
+    fs::read_to_string(runtime_root.join("runtime-cache.json"))
+        .ok()
+        .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+        .and_then(|manifest| {
+            manifest
+                .get("createdAt")
+                .and_then(Value::as_str)
+                .and_then(|value| value.parse::<u128>().ok())
+        })
+        .unwrap_or_else(|| {
+            fs::metadata(runtime_root)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| system_time_millis(modified).ok())
+                .unwrap_or(0)
+        })
 }
 
 fn resolve_runtime_binary(app: &AppHandle) -> Result<PathBuf, String> {
@@ -1927,6 +2182,16 @@ mod runtime_cache_tests {
         fs::write(path, contents).expect("write test file");
     }
 
+    fn write_cache_dir(root: &Path, name: &str, created_at: u128) -> PathBuf {
+        let dir = root.join(name);
+        fs::create_dir_all(&dir).expect("create runtime cache dir");
+        write_file(
+            &dir.join("runtime-cache.json"),
+            &format!(r#"{{"createdAt":"{created_at}"}}"#),
+        );
+        dir
+    }
+
     fn runtime_source(root: &Path) -> RuntimeLaunchSource {
         let binary = root.join("memi-studio-runtime");
         let package_root = root.join("package");
@@ -2159,5 +2424,75 @@ mod runtime_cache_tests {
         assert!(!should_replace_managed_runtime_pid_file(&pid_file, false, true));
         assert!(!should_replace_managed_runtime_pid_file(&pid_file, true, false));
         assert!(!should_replace_managed_runtime_pid_file(&wrong_port, true, true));
+    }
+
+    #[test]
+    fn source_signature_manifest_reuses_ready_cache_fingerprint() {
+        let root = temp_runtime_dir("signature-reuse");
+        let cache_root = temp_runtime_dir("signature-cache");
+        let source = runtime_source(&root);
+
+        let materialized =
+            materialize_runtime_in_cache(&source, &cache_root).expect("materialize runtime");
+        let (fingerprint, source_signature) =
+            runtime_source_fingerprint_for_cache(&source, &cache_root).expect("fingerprint");
+
+        assert_eq!(materialized.runtime_root, cache_root.join(&fingerprint));
+        assert_eq!(
+            source_signature,
+            Some(
+                runtime_source_signature_key(&source.binary, &source.package_root)
+                    .expect("source signature")
+            )
+        );
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(cache_root);
+    }
+
+    #[test]
+    fn source_signature_changes_when_resource_metadata_changes() {
+        let root = temp_runtime_dir("signature-change");
+        let source = runtime_source(&root);
+
+        let first = runtime_source_signature_key(&source.binary, &source.package_root)
+            .expect("first signature");
+        write_file(
+            &source.package_root.join("skills").join("SUPERPOWER.md"),
+            "ship it much harder\n",
+        );
+        let second = runtime_source_signature_key(&source.binary, &source.package_root)
+            .expect("second signature");
+
+        assert_ne!(first, second);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cleanup_runtime_cache_preserves_active_and_two_newest_inactive_caches() {
+        let cache_root = temp_runtime_dir("cache-cleanup");
+        let active = write_cache_dir(&cache_root, "active", 1);
+        let old = write_cache_dir(&cache_root, "old", 2);
+        let newest = write_cache_dir(&cache_root, "newest", 4);
+        let second_newest = write_cache_dir(&cache_root, "second-newest", 3);
+
+        cleanup_runtime_cache(&cache_root, Some(&active)).expect("cleanup cache");
+
+        assert!(active.exists());
+        assert!(newest.exists());
+        assert!(second_newest.exists());
+        assert!(!old.exists());
+        let _ = fs::remove_dir_all(cache_root);
+    }
+
+    #[test]
+    fn cleanup_runtime_cache_removes_stale_staging_dirs() {
+        let cache_root = temp_runtime_dir("cache-staging-cleanup");
+        let staging = cache_root.join(".abc.staging-1-2");
+        fs::create_dir_all(&staging).expect("create staging dir");
+
+        cleanup_runtime_cache(&cache_root, None).expect("cleanup staging");
+
+        assert!(!staging.exists());
+        let _ = fs::remove_dir_all(cache_root);
     }
 }
