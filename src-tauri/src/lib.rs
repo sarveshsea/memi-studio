@@ -1163,9 +1163,7 @@ fn resolve_runtime_binary(app: &AppHandle) -> Result<PathBuf, String> {
         .into_iter()
         .find(|path| path.is_file())
         .ok_or_else(|| {
-            format!(
-                "Bundled Studio runtime is missing. Run `node scripts/build-studio-runtime.mjs --target=darwin-arm64` before building the app."
-            )
+            "Bundled Studio runtime is missing. Run `node scripts/build-studio-runtime.mjs --target=darwin-arm64` before building the app.".to_string()
         })
 }
 

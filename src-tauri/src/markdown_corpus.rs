@@ -729,9 +729,7 @@ fn bullet_text(trimmed: &str) -> Option<String> {
     if let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
         return Some(rest.trim().to_string()).filter(|value| !value.is_empty());
     }
-    let Some((number, rest)) = trimmed.split_once(". ") else {
-        return None;
-    };
+    let (number, rest) = trimmed.split_once(". ")?;
     if number.chars().all(|ch| ch.is_ascii_digit()) {
         Some(rest.trim().to_string()).filter(|value| !value.is_empty())
     } else {

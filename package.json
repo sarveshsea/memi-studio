@@ -22,6 +22,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 1421",
     "fetch:runtime": "node scripts/fetch-runtime.mjs",
+    "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "license:check": "node scripts/apply-license-headers.mjs --check",
     "license:apply": "node scripts/apply-license-headers.mjs",
     "tauri": "tauri",
