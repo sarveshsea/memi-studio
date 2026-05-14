@@ -29,6 +29,7 @@ const STUDIO_RUNTIME_BIN: &str = "memi-studio-runtime";
 const STUDIO_RUNTIME_RESOURCE_DIR: &str = "resources/memoire-runtime";
 const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 40;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
+const MANAGED_RUNTIME_PID_FILE: &str = "managed-runtime.json";
 
 #[derive(Debug, serde::Deserialize)]
 struct RuntimeHarnessesPayload {
@@ -70,6 +71,20 @@ struct RuntimeSupervisorTiming {
     supervisor_started: Instant,
     startup_started_at: String,
     cache_prepare_ms: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ManagedRuntimePidFile {
+    schema_version: u8,
+    pid: u32,
+    port: u16,
+    api_token: String,
+    workspace_root: String,
+    package_root: String,
+    runtime_binary: String,
+    runtime_cache_root: String,
+    started_at: String,
 }
 
 #[tauri::command]
@@ -571,7 +586,9 @@ fn restart_studio_runtime_process(
         return current_runtime_status(state, workspace_root);
     }
     let child = take_runtime_child_for_stop(state);
-    stop_runtime_child(child);
+    if let Some(pid) = stop_runtime_child(child) {
+        clear_managed_runtime_pid_file(app, Some(pid));
+    }
     if current_runtime_generation(state) != generation {
         return current_runtime_status(state, workspace_root);
     }
@@ -582,6 +599,24 @@ fn restart_studio_runtime_process(
     preparing.startup_ms = Some(elapsed_ms(supervisor_started));
     let _ = set_runtime_status_for_generation(state, preparing, None, generation);
 
+    for _ in 0..20 {
+        if !local_port_open(STUDIO_RUNTIME_PORT) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    if local_port_open(STUDIO_RUNTIME_PORT) {
+        if let Err(error) = replace_managed_orphan_runtime(app, workspace_root) {
+            let _ = app.emit(
+                "studio-runtime-log",
+                json!({
+                    "stream": "system",
+                    "message": error,
+                    "timestamp": studio::unix_millis().to_string()
+                }),
+            );
+        }
+    }
     for _ in 0..20 {
         if !local_port_open(STUDIO_RUNTIME_PORT) {
             break;
@@ -721,6 +756,18 @@ fn restart_studio_runtime_process(
     }
 
     let child = Arc::new(Mutex::new(child));
+    if let Err(error) =
+        write_managed_runtime_pid_file(app, pid, &api_token, workspace_root, &materialized)
+    {
+        let _ = app.emit(
+            "studio-runtime-log",
+            json!({
+                "stream": "system",
+                "message": error,
+                "timestamp": studio::unix_millis().to_string()
+            }),
+        );
+    }
     let mut status = runtime_status(
         "starting",
         Some(pid),
@@ -760,9 +807,11 @@ fn restart_studio_runtime_process(
     status
 }
 
-fn stop_studio_runtime(state: &AppState) {
+fn stop_studio_runtime(app: &AppHandle, state: &AppState) {
     let child = take_runtime_child_for_stop(state);
-    stop_runtime_child(child);
+    if let Some(pid) = stop_runtime_child(child) {
+        clear_managed_runtime_pid_file(app, Some(pid));
+    }
     mark_runtime_stopped_after_stop(state);
 }
 
@@ -775,15 +824,29 @@ fn take_runtime_child_for_stop(state: &AppState) -> Option<Arc<Mutex<std::proces
     runtime.child.take()
 }
 
-fn stop_runtime_child(child: Option<Arc<Mutex<std::process::Child>>>) {
-    let Some(child) = child else {
-        return;
-    };
+fn stop_runtime_child(child: Option<Arc<Mutex<std::process::Child>>>) -> Option<u32> {
+    let child = child?;
     let Ok(mut child) = child.lock() else {
-        return;
+        return None;
     };
-    let _ = child.kill();
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let pid = child.id();
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return Some(pid);
+    }
+    terminate_child_gracefully(&mut child, Duration::from_secs(2));
+    Some(pid)
+}
+
+fn terminate_child_gracefully(child: &mut std::process::Child, grace_period: Duration) {
+    #[cfg(unix)]
+    {
+        let _ = send_process_signal(child.id(), libc::SIGTERM);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+    }
+    let deadline = Instant::now() + grace_period;
     while Instant::now() < deadline {
         match child.try_wait() {
             Ok(Some(_)) => return,
@@ -792,6 +855,7 @@ fn stop_runtime_child(child: Option<Arc<Mutex<std::process::Child>>>) {
         }
     }
     let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn mark_runtime_stopped_after_stop(state: &AppState) {
@@ -859,6 +923,193 @@ fn generate_runtime_api_token() -> String {
 
 fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn managed_runtime_pid_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(managed_runtime_pid_file_path_for_cache_root(&runtime_cache_root(app)?))
+}
+
+fn managed_runtime_pid_file_path_for_cache_root(cache_root: &Path) -> PathBuf {
+    cache_root.join(MANAGED_RUNTIME_PID_FILE)
+}
+
+fn write_managed_runtime_pid_file(
+    app: &AppHandle,
+    pid: u32,
+    api_token: &str,
+    workspace_root: &Path,
+    runtime: &MaterializedRuntime,
+) -> Result<(), String> {
+    let path = managed_runtime_pid_file_path(app)?;
+    write_managed_runtime_pid_file_at(
+        &path,
+        &ManagedRuntimePidFile {
+            schema_version: 1,
+            pid,
+            port: STUDIO_RUNTIME_PORT,
+            api_token: api_token.to_string(),
+            workspace_root: workspace_root.to_string_lossy().to_string(),
+            package_root: runtime.package_root.to_string_lossy().to_string(),
+            runtime_binary: runtime.binary.to_string_lossy().to_string(),
+            runtime_cache_root: runtime.runtime_root.to_string_lossy().to_string(),
+            started_at: studio::unix_millis().to_string(),
+        },
+    )
+}
+
+fn write_managed_runtime_pid_file_at(
+    path: &Path,
+    pid_file: &ManagedRuntimePidFile,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Failed to create Studio runtime pid directory {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    let staging = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    fs::write(
+        &staging,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(pid_file).map_err(|err| err.to_string())?
+        ),
+    )
+    .map_err(|err| {
+        format!(
+            "Failed to write Studio runtime pid file {}: {err}",
+            staging.display()
+        )
+    })?;
+    fs::rename(&staging, path).map_err(|err| {
+        let _ = fs::remove_file(&staging);
+        format!(
+            "Failed to activate Studio runtime pid file {}: {err}",
+            path.display()
+        )
+    })
+}
+
+fn read_managed_runtime_pid_file(app: &AppHandle) -> Option<ManagedRuntimePidFile> {
+    let path = managed_runtime_pid_file_path(app).ok()?;
+    read_managed_runtime_pid_file_at(&path)
+}
+
+fn read_managed_runtime_pid_file_at(path: &Path) -> Option<ManagedRuntimePidFile> {
+    serde_json::from_str::<ManagedRuntimePidFile>(&fs::read_to_string(path).ok()?).ok()
+}
+
+fn clear_managed_runtime_pid_file(app: &AppHandle, expected_pid: Option<u32>) {
+    let Ok(path) = managed_runtime_pid_file_path(app) else {
+        return;
+    };
+    clear_managed_runtime_pid_file_at(&path, expected_pid);
+}
+
+fn clear_managed_runtime_pid_file_at(path: &Path, expected_pid: Option<u32>) {
+    if let Some(expected_pid) = expected_pid {
+        if read_managed_runtime_pid_file_at(path)
+            .map(|pid_file| pid_file.pid != expected_pid)
+            .unwrap_or(false)
+        {
+            return;
+        }
+    }
+    let _ = fs::remove_file(path);
+}
+
+fn replace_managed_orphan_runtime(app: &AppHandle, workspace_root: &Path) -> Result<bool, String> {
+    let Some(pid_file) = read_managed_runtime_pid_file(app) else {
+        return Ok(false);
+    };
+    if !process_exists(pid_file.pid) {
+        clear_managed_runtime_pid_file(app, Some(pid_file.pid));
+        return Ok(false);
+    }
+    let token_status_ok = matches!(
+        local_http_get_with_token(pid_file.port, "/api/status", Some(&pid_file.api_token)),
+        Some((200, _))
+    );
+    if !should_replace_managed_runtime_pid_file(&pid_file, true, token_status_ok) {
+        return Ok(false);
+    }
+    if !terminate_pid_gracefully(pid_file.pid, Duration::from_secs(2)) {
+        return Err(format!(
+            "Managed Studio runtime pid {} did not stop cleanly for workspace {}",
+            pid_file.pid,
+            workspace_root.display()
+        ));
+    }
+    clear_managed_runtime_pid_file(app, Some(pid_file.pid));
+    Ok(true)
+}
+
+fn should_replace_managed_runtime_pid_file(
+    pid_file: &ManagedRuntimePidFile,
+    process_alive: bool,
+    token_status_ok: bool,
+) -> bool {
+    pid_file.schema_version == 1
+        && pid_file.port == STUDIO_RUNTIME_PORT
+        && process_alive
+        && token_status_ok
+}
+
+fn terminate_pid_gracefully(pid: u32, grace_period: Duration) -> bool {
+    #[cfg(unix)]
+    {
+        let _ = send_process_signal(pid, libc::SIGTERM);
+        let deadline = Instant::now() + grace_period;
+        while Instant::now() < deadline {
+            if !process_exists(pid) {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        let _ = send_process_signal(pid, libc::SIGKILL);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline {
+            if !process_exists(pid) {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        !process_exists(pid)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (pid, grace_period);
+        false
+    }
+}
+
+fn process_exists(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        if pid == 0 {
+            return false;
+        }
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if result == 0 {
+            return true;
+        }
+        std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+#[cfg(unix)]
+fn send_process_signal(pid: u32, signal: libc::c_int) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    unsafe { libc::kill(pid as libc::pid_t, signal) == 0 }
 }
 
 fn resolve_runtime_launch_source(app: &AppHandle) -> Result<RuntimeLaunchSource, String> {
@@ -1439,7 +1690,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::CloseRequested { .. }) {
                 if let Some(state) = window.try_state::<AppState>() {
-                    stop_studio_runtime(&state);
+                    stop_studio_runtime(window.app_handle(), &state);
                 }
             }
         })
@@ -1451,7 +1702,7 @@ pub fn run() {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
                 if let Some(state) = app.try_state::<AppState>() {
-                    stop_studio_runtime(&state);
+                    stop_studio_runtime(app, &state);
                 }
             }
         });
@@ -1570,6 +1821,7 @@ fn spawn_runtime_waiter(
             Ok(Some(status)) => {
                 if let Some(state) = app.try_state::<AppState>() {
                     let mut should_restart = false;
+                    let mut clear_pid_file = false;
                     let mut runtime_status = runtime_status(
                         if status.success() { "stopped" } else { "error" },
                         None,
@@ -1594,9 +1846,13 @@ fn spawn_runtime_waiter(
                     if runtime.generation == generation && current_pid == Some(pid) {
                         runtime.child = None;
                         runtime.status = Some(runtime_status.clone());
+                        clear_pid_file = true;
                         should_restart = !status.success() && should_restart_managed_runtime(&state);
                     }
                     drop(runtime);
+                    if clear_pid_file {
+                        clear_managed_runtime_pid_file(&app, Some(pid));
+                    }
                     let _ = app.emit(
                         "studio-runtime-log",
                         json!({ "stream": "system", "message": runtime_status.error }),
@@ -1853,5 +2109,55 @@ mod runtime_cache_tests {
                 .map(|status| status.workspace_root.as_str()),
             Some("/tmp/second-workspace")
         );
+    }
+
+    #[test]
+    fn managed_runtime_pid_file_round_trips_and_clears_only_matching_pid() {
+        let root = temp_runtime_dir("managed-pid");
+        let path = managed_runtime_pid_file_path_for_cache_root(&root);
+        let pid_file = ManagedRuntimePidFile {
+            schema_version: 1,
+            pid: 12345,
+            port: STUDIO_RUNTIME_PORT,
+            api_token: "token".to_string(),
+            workspace_root: "/tmp/workspace".to_string(),
+            package_root: "/tmp/runtime/package".to_string(),
+            runtime_binary: "/tmp/runtime/bin/memi-studio-runtime".to_string(),
+            runtime_cache_root: "/tmp/runtime".to_string(),
+            started_at: "1".to_string(),
+        };
+
+        write_managed_runtime_pid_file_at(&path, &pid_file).expect("write pid file");
+        assert_eq!(read_managed_runtime_pid_file_at(&path), Some(pid_file.clone()));
+
+        clear_managed_runtime_pid_file_at(&path, Some(67890));
+        assert!(path.is_file());
+        clear_managed_runtime_pid_file_at(&path, Some(12345));
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn managed_runtime_replacement_requires_live_owned_runtime() {
+        let pid_file = ManagedRuntimePidFile {
+            schema_version: 1,
+            pid: 12345,
+            port: STUDIO_RUNTIME_PORT,
+            api_token: "token".to_string(),
+            workspace_root: "/tmp/workspace".to_string(),
+            package_root: "/tmp/runtime/package".to_string(),
+            runtime_binary: "/tmp/runtime/bin/memi-studio-runtime".to_string(),
+            runtime_cache_root: "/tmp/runtime".to_string(),
+            started_at: "1".to_string(),
+        };
+        let wrong_port = ManagedRuntimePidFile {
+            port: STUDIO_RUNTIME_PORT + 1,
+            ..pid_file.clone()
+        };
+
+        assert!(should_replace_managed_runtime_pid_file(&pid_file, true, true));
+        assert!(!should_replace_managed_runtime_pid_file(&pid_file, false, true));
+        assert!(!should_replace_managed_runtime_pid_file(&pid_file, true, false));
+        assert!(!should_replace_managed_runtime_pid_file(&wrong_port, true, true));
     }
 }
