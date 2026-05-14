@@ -46,6 +46,7 @@ struct AppState {
 struct RuntimeProcessState {
     child: Option<Arc<Mutex<std::process::Child>>>,
     status: Option<studio::StudioRuntimeStatus>,
+    generation: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,14 @@ struct MaterializedRuntime {
     package_root: PathBuf,
     runtime_root: PathBuf,
     source_kind: String,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeSupervisorTiming {
+    generation: u64,
+    supervisor_started: Instant,
+    startup_started_at: String,
+    cache_prepare_ms: u64,
 }
 
 #[tauri::command]
@@ -92,7 +101,7 @@ fn restart_studio_runtime_command(
     workspace_root: &Path,
 ) -> studio::StudioRuntimeStatus {
     reset_runtime_restart_attempts(state);
-    restart_studio_runtime_process(app, state, workspace_root)
+    request_studio_runtime_restart(app, state, workspace_root)
 }
 
 #[tauri::command]
@@ -120,7 +129,7 @@ fn save_app_config(
     studio::save_desktop_app_config(&app_config_dir(&app)?, &next)?;
     if previous.workspace_root != next.workspace_root {
         reset_runtime_restart_attempts(&state);
-        restart_studio_runtime_process(&app, &state, Path::new(&next.workspace_root));
+        request_studio_runtime_restart(&app, &state, Path::new(&next.workspace_root));
     }
     Ok(next)
 }
@@ -505,14 +514,73 @@ fn current_runtime_status(state: &AppState, workspace_root: &Path) -> studio::St
     })
 }
 
-fn restart_studio_runtime_process(
+fn request_studio_runtime_restart(
     app: &AppHandle,
     state: &AppState,
     workspace_root: &Path,
 ) -> studio::StudioRuntimeStatus {
+    let mut status = runtime_status("starting", None, workspace_root, None, None, None);
+    status.supervisor_phase = Some("queued".to_string());
+    status.startup_started_at = Some(studio::unix_millis().to_string());
+    let generation = begin_runtime_supervisor(state, status.clone());
+    let app = app.clone();
+    let workspace_root = workspace_root.to_path_buf();
+    thread::spawn(move || {
+        if let Some(state) = app.try_state::<AppState>() {
+            let _ = restart_studio_runtime_process(&app, &state, &workspace_root, generation);
+        }
+    });
+    status
+}
+
+fn begin_runtime_supervisor(state: &AppState, status: studio::StudioRuntimeStatus) -> u64 {
+    let mut runtime = state.runtime.lock().expect("runtime state lock");
+    runtime.generation = runtime.generation.wrapping_add(1);
+    runtime.status = Some(status);
+    runtime.generation
+}
+
+fn current_runtime_generation(state: &AppState) -> u64 {
+    state.runtime.lock().expect("runtime state lock").generation
+}
+
+fn set_runtime_status_for_generation(
+    state: &AppState,
+    status: studio::StudioRuntimeStatus,
+    child: Option<Arc<Mutex<std::process::Child>>>,
+    generation: u64,
+) -> bool {
+    let mut runtime = state.runtime.lock().expect("runtime state lock");
+    if runtime.generation != generation {
+        return false;
+    }
+    runtime.status = Some(status);
+    runtime.child = child;
+    true
+}
+
+fn restart_studio_runtime_process(
+    app: &AppHandle,
+    state: &AppState,
+    workspace_root: &Path,
+    generation: u64,
+) -> studio::StudioRuntimeStatus {
+    let supervisor_started = Instant::now();
+    let startup_started_at = studio::unix_millis().to_string();
+    if current_runtime_generation(state) != generation {
+        return current_runtime_status(state, workspace_root);
+    }
     let child = take_runtime_child_for_stop(state);
     stop_runtime_child(child);
-    mark_runtime_stopped_after_stop(state);
+    if current_runtime_generation(state) != generation {
+        return current_runtime_status(state, workspace_root);
+    }
+
+    let mut preparing = runtime_status("starting", None, workspace_root, None, None, None);
+    preparing.supervisor_phase = Some("preparing-runtime".to_string());
+    preparing.startup_started_at = Some(startup_started_at.clone());
+    preparing.startup_ms = Some(elapsed_ms(supervisor_started));
+    let _ = set_runtime_status_for_generation(state, preparing, None, generation);
 
     for _ in 0..20 {
         if !local_port_open(STUDIO_RUNTIME_PORT) {
@@ -525,7 +593,10 @@ fn restart_studio_runtime_process(
         if runtime_answers_status(STUDIO_RUNTIME_PORT) {
             let mut status = runtime_status("running", None, workspace_root, None, None, None);
             status.runtime_source = Some("attached-existing-runtime".to_string());
-            set_runtime_status(state, status.clone(), None);
+            status.supervisor_phase = Some("attached".to_string());
+            status.startup_started_at = Some(startup_started_at.clone());
+            status.startup_ms = Some(elapsed_ms(supervisor_started));
+            let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
             let _ = app.emit(
                 "studio-runtime-log",
                 json!({
@@ -546,18 +617,26 @@ fn restart_studio_runtime_process(
                 "Port {STUDIO_RUNTIME_PORT} is already in use by a process that does not expose the Mémoire Studio runtime status API. Quit that process or free 127.0.0.1:{STUDIO_RUNTIME_PORT}."
             )),
         );
-        set_runtime_status(state, status.clone(), None);
+        let mut status = status;
+        status.supervisor_phase = Some("port-blocked".to_string());
+        status.startup_started_at = Some(startup_started_at.clone());
+        status.startup_ms = Some(elapsed_ms(supervisor_started));
+        let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
         return status;
     }
 
     let source = match resolve_runtime_launch_source(app) {
         Ok(source) => source,
         Err(error) => {
-            let status = runtime_status("error", None, workspace_root, None, None, Some(error));
-            set_runtime_status(state, status.clone(), None);
+            let mut status = runtime_status("error", None, workspace_root, None, None, Some(error));
+            status.supervisor_phase = Some("resolve-failed".to_string());
+            status.startup_started_at = Some(startup_started_at.clone());
+            status.startup_ms = Some(elapsed_ms(supervisor_started));
+            let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
             return status;
         }
     };
+    let cache_started = Instant::now();
     let materialized = match materialize_runtime_for_app(app, &source) {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -580,10 +659,15 @@ fn restart_studio_runtime_process(
             status.runtime_binary = Some(source.binary.to_string_lossy().to_string());
             status.runtime_source = Some(source.source_kind.clone());
             status.runtime_cache_root = Some(cache_root);
-            set_runtime_status(state, status.clone(), None);
+            status.supervisor_phase = Some("cache-failed".to_string());
+            status.startup_started_at = Some(startup_started_at.clone());
+            status.cache_prepare_ms = Some(elapsed_ms(cache_started));
+            status.startup_ms = Some(elapsed_ms(supervisor_started));
+            let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
             return status;
         }
     };
+    let cache_prepare_ms = elapsed_ms(cache_started);
     let package_root = materialized.package_root.clone();
     let binary = materialized.binary.clone();
 
@@ -619,7 +703,11 @@ fn restart_studio_runtime_process(
                 )),
             );
             apply_runtime_diagnostics(&mut status, &materialized);
-            set_runtime_status(state, status.clone(), None);
+            status.supervisor_phase = Some("spawn-failed".to_string());
+            status.startup_started_at = Some(startup_started_at.clone());
+            status.cache_prepare_ms = Some(cache_prepare_ms);
+            status.startup_ms = Some(elapsed_ms(supervisor_started));
+            let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
             return status;
         }
     };
@@ -642,13 +730,24 @@ fn restart_studio_runtime_process(
         None,
     );
     apply_runtime_diagnostics(&mut status, &materialized);
-    set_runtime_status(state, status.clone(), Some(child.clone()));
+    status.supervisor_phase = Some("spawned".to_string());
+    status.startup_started_at = Some(startup_started_at.clone());
+    status.cache_prepare_ms = Some(cache_prepare_ms);
+    status.startup_ms = Some(elapsed_ms(supervisor_started));
+    let _ =
+        set_runtime_status_for_generation(state, status.clone(), Some(child.clone()), generation);
     spawn_runtime_ready_watcher(
         app.clone(),
         child.clone(),
         workspace_root.to_path_buf(),
         materialized.clone(),
         Some(api_token.clone()),
+        RuntimeSupervisorTiming {
+            generation,
+            supervisor_started,
+            startup_started_at,
+            cache_prepare_ms,
+        },
     );
     spawn_runtime_waiter(
         app.clone(),
@@ -656,6 +755,7 @@ fn restart_studio_runtime_process(
         workspace_root.to_path_buf(),
         materialized,
         Some(api_token),
+        generation,
     );
     status
 }
@@ -715,16 +815,6 @@ fn apply_runtime_diagnostics(
     status.runtime_cache_root = Some(runtime.runtime_root.to_string_lossy().to_string());
 }
 
-fn set_runtime_status(
-    state: &AppState,
-    status: studio::StudioRuntimeStatus,
-    child: Option<Arc<Mutex<std::process::Child>>>,
-) {
-    let mut runtime = state.runtime.lock().expect("runtime state lock");
-    runtime.status = Some(status);
-    runtime.child = child;
-}
-
 fn runtime_status(
     status: &str,
     pid: Option<u32>,
@@ -744,8 +834,16 @@ fn runtime_status(
         runtime_binary: None,
         runtime_source: None,
         runtime_cache_root: None,
+        supervisor_phase: None,
+        startup_started_at: None,
+        startup_ms: None,
+        cache_prepare_ms: None,
         error,
     }
+}
+
+fn elapsed_ms(start: Instant) -> u64 {
+    start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
 }
 
 fn generate_runtime_api_token() -> String {
@@ -1299,7 +1397,7 @@ pub fn run() {
                 Ok(config) => {
                     let state = app.state::<AppState>();
                     reset_runtime_restart_attempts(&state);
-                    let status = restart_studio_runtime_process(
+                    let status = request_studio_runtime_restart(
                         app.handle(),
                         &state,
                         Path::new(&config.workspace_root),
@@ -1385,6 +1483,7 @@ fn spawn_runtime_ready_watcher(
     workspace_root: PathBuf,
     runtime_launch: MaterializedRuntime,
     api_token: Option<String>,
+    timing: RuntimeSupervisorTiming,
 ) {
     let pid = child.lock().map(|child| child.id()).unwrap_or_default();
     thread::spawn(move || {
@@ -1396,7 +1495,7 @@ fn spawn_runtime_ready_watcher(
                         .child
                         .as_ref()
                         .and_then(|current| current.lock().ok().map(|child| child.id()));
-                    if current_pid == Some(pid) {
+                    if runtime_state.generation == timing.generation && current_pid == Some(pid) {
                         let mut status = runtime_status(
                             "running",
                             Some(pid),
@@ -1406,6 +1505,10 @@ fn spawn_runtime_ready_watcher(
                             None,
                         );
                         apply_runtime_diagnostics(&mut status, &runtime_launch);
+                        status.supervisor_phase = Some("running".to_string());
+                        status.startup_started_at = Some(timing.startup_started_at.clone());
+                        status.cache_prepare_ms = Some(timing.cache_prepare_ms);
+                        status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
                         runtime_state.status = Some(status);
                     }
                 }
@@ -1425,12 +1528,16 @@ fn spawn_runtime_ready_watcher(
             );
             let mut status = status;
             apply_runtime_diagnostics(&mut status, &runtime_launch);
+            status.supervisor_phase = Some("status-timeout".to_string());
+            status.startup_started_at = Some(timing.startup_started_at.clone());
+            status.cache_prepare_ms = Some(timing.cache_prepare_ms);
+            status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
             let mut runtime_state = state.runtime.lock().expect("runtime state lock");
             let current_pid = runtime_state
                 .child
                 .as_ref()
                 .and_then(|current| current.lock().ok().map(|child| child.id()));
-            if current_pid == Some(pid) {
+            if runtime_state.generation == timing.generation && current_pid == Some(pid) {
                 runtime_state.status = Some(status.clone());
             }
             let _ = app.emit(
@@ -1447,6 +1554,7 @@ fn spawn_runtime_waiter(
     workspace_root: PathBuf,
     runtime_launch: MaterializedRuntime,
     api_token: Option<String>,
+    generation: u64,
 ) {
     let pid = child.lock().map(|child| child.id()).unwrap_or_default();
     thread::spawn(move || loop {
@@ -1483,7 +1591,7 @@ fn spawn_runtime_waiter(
                         .child
                         .as_ref()
                         .and_then(|current| current.lock().ok().map(|child| child.id()));
-                    if current_pid == Some(pid) {
+                    if runtime.generation == generation && current_pid == Some(pid) {
                         runtime.child = None;
                         runtime.status = Some(runtime_status.clone());
                         should_restart = !status.success() && should_restart_managed_runtime(&state);
@@ -1498,7 +1606,7 @@ fn spawn_runtime_waiter(
                             "studio-runtime-log",
                             json!({ "stream": "system", "message": "Restarting Studio runtime after unexpected exit." }),
                         );
-                        restart_studio_runtime_process(&app, &state, &workspace_root);
+                        request_studio_runtime_restart(&app, &state, &workspace_root);
                     }
                 }
                 return;
@@ -1516,7 +1624,7 @@ fn spawn_runtime_waiter(
                     );
                     let mut status = status;
                     apply_runtime_diagnostics(&mut status, &runtime_launch);
-                    set_runtime_status(&state, status, None);
+                    let _ = set_runtime_status_for_generation(&state, status, None, generation);
                 }
                 return;
             }
@@ -1676,6 +1784,74 @@ mod runtime_cache_tests {
         assert_eq!(
             runtime.status.as_ref().map(|status| status.status.as_str()),
             Some("stopping")
+        );
+    }
+
+    #[test]
+    fn runtime_supervisor_generation_rejects_stale_status_updates() {
+        let state = AppState::default();
+        let first = begin_runtime_supervisor(
+            &state,
+            runtime_status(
+                "starting",
+                None,
+                Path::new("/tmp/first-workspace"),
+                None,
+                None,
+                None,
+            ),
+        );
+        let second = begin_runtime_supervisor(
+            &state,
+            runtime_status(
+                "starting",
+                None,
+                Path::new("/tmp/second-workspace"),
+                None,
+                None,
+                None,
+            ),
+        );
+
+        let stale_status = runtime_status(
+            "error",
+            None,
+            Path::new("/tmp/first-workspace"),
+            None,
+            None,
+            Some("stale launch failed".to_string()),
+        );
+        let current_status = runtime_status(
+            "running",
+            None,
+            Path::new("/tmp/second-workspace"),
+            None,
+            None,
+            None,
+        );
+
+        assert!(second > first);
+        assert!(!set_runtime_status_for_generation(
+            &state,
+            stale_status,
+            None,
+            first
+        ));
+        assert!(set_runtime_status_for_generation(
+            &state,
+            current_status,
+            None,
+            second
+        ));
+        assert_eq!(
+            state
+                .runtime
+                .lock()
+                .expect("runtime lock")
+                .status
+                .as_ref()
+                .map(|status| status.workspace_root.as_str()),
+            Some("/tmp/second-workspace")
         );
     }
 }

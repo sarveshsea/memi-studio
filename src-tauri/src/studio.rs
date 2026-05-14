@@ -146,6 +146,14 @@ pub struct StudioRuntimeStatus {
     pub runtime_source: Option<String>,
     #[serde(rename = "runtimeCacheRoot", skip_serializing_if = "Option::is_none")]
     pub runtime_cache_root: Option<String>,
+    #[serde(rename = "supervisorPhase", skip_serializing_if = "Option::is_none")]
+    pub supervisor_phase: Option<String>,
+    #[serde(rename = "startupStartedAt", skip_serializing_if = "Option::is_none")]
+    pub startup_started_at: Option<String>,
+    #[serde(rename = "startupMs", skip_serializing_if = "Option::is_none")]
+    pub startup_ms: Option<u64>,
+    #[serde(rename = "cachePrepareMs", skip_serializing_if = "Option::is_none")]
+    pub cache_prepare_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

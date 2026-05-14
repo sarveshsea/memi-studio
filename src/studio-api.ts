@@ -404,6 +404,10 @@ export interface StudioRuntimeStatus {
   runtimeBinary?: string | null;
   runtimeSource?: string | null;
   runtimeCacheRoot?: string | null;
+  supervisorPhase?: string | null;
+  startupStartedAt?: string | null;
+  startupMs?: number | null;
+  cachePrepareMs?: number | null;
   error?: string | null;
 }
 
