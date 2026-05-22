@@ -3466,17 +3466,29 @@ export function App() {
                   ))}
                 </select>
               </label>
-              <label className="composer-select" data-composer-control="harness" title="Harness">
-                <StudioControlIcon name="harness" />
-                <span className="composer-control-text">{currentHarness?.label ?? selectedHarness}</span>
-                <select aria-label="Harness" data-action-id="harness.select" value={selectedHarness} onChange={(event) => chooseHarness(event.target.value as HarnessId)}>
-                  {visibleHarnesses.map((harness) => (
-                    <option key={harness.id} value={harness.id} disabled={!harness.enabled}>
-                      {harness.label}{harness.installed ? "" : " (missing)"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="harness-switcher" role="radiogroup" aria-label="Harness" data-composer-control="harness">
+                {visibleHarnesses.map((harness) => {
+                  const selected = selectedHarness === harness.id;
+                  return (
+                    <button
+                      key={harness.id}
+                      aria-checked={selected}
+                      aria-label={composerHarnessTitle(harness)}
+                      data-action-id={`harness.select.${harness.id}`}
+                      data-harness-id={harness.id}
+                      data-harness-ready={harnessAuthDot(harness)}
+                      disabled={!harness.enabled}
+                      role="radio"
+                      title={composerHarnessTitle(harness)}
+                      type="button"
+                      onClick={() => chooseHarness(harness.id)}
+                    >
+                      <StudioControlIcon name={composerHarnessIcon(harness.id)} />
+                      <i className="harness-switcher-status" data-auth-status={harnessAuthDot(harness)} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
               {showModelPicker ? (
                 <label className="composer-select" data-composer-control="model" title="Model">
                   <StudioControlIcon name="harness" />
@@ -5503,6 +5515,18 @@ function harnessAuthDot(harness: Harness | undefined): "ready" | "warn" | "missi
   if (harness.authStatus === "needs_login") return "warn";
   if (harness.authStatus === "signed_in" || harness.authStatus === "ready" || harness.authStatus === "not_required") return "ready";
   return harness.installed ? "ready" : "unknown";
+}
+
+function composerHarnessIcon(id: HarnessId): WorkbenchIconName {
+  if (id === "codex") return "codex";
+  if (id === "claude-code") return "claude";
+  if (id === "ollama") return "ollama";
+  return "harness";
+}
+
+function composerHarnessTitle(harness: Harness): string {
+  const state = harnessReadinessLabel(harness);
+  return state ? `${harness.label}: ${state}` : harness.label;
 }
 
 function ConversationGoalRow(props: {

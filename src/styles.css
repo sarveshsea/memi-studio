@@ -7,9 +7,10 @@
   --font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-size-xs: 12px;
   --font-size-sm: 13px;
-  --font-size-md: 19px;
+  --font-size-md: 15px;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
+  --font-weight-semibold: 600;
   --space-0: 0;
   --space-0-5: 2px;
   --space-1: 4px;
@@ -1571,6 +1572,58 @@ button.active,
 .composer-control-text { display: block; grid-column: 2; grid-row: 1; color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .composer-select select { position: absolute; inset: var(--space-0); width: 100%; height: 100%; border: 0; background: transparent; color: var(--ink); cursor: pointer; opacity: 0; padding: var(--space-0); }
 .composer-select select[data-action-id="harness.select"] { text-indent: -999px; overflow: hidden; }
+.harness-switcher {
+  min-height: var(--control-height);
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-compact);
+  background: var(--surface-muted);
+  padding: 2px;
+}
+.harness-switcher button {
+  position: relative;
+  width: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  height: var(--control-height-compact);
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: calc(var(--radius-compact) - 1px);
+  background: transparent;
+  color: var(--ink-muted);
+  padding: var(--space-0);
+  cursor: pointer;
+}
+.harness-switcher button:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+.harness-switcher button[aria-checked="true"] {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.harness-switcher button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+.harness-switcher-status {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--surface);
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+.harness-switcher-status[data-auth-status="ready"] { background: var(--ok); }
+.harness-switcher-status[data-auth-status="warn"] { background: var(--warning); }
+.harness-switcher-status[data-auth-status="missing"] { background: var(--ink-muted); }
+.harness-switcher-status[data-auth-status="unknown"] { background: var(--line-strong); }
 .icon-button {
   width: var(--control-height-compact);
   min-height: var(--control-height-compact);
@@ -1611,6 +1664,7 @@ button.active,
 .command-dock[data-composer-layout="single-toolbar"] .attachment-button { flex: 0 0 var(--control-height-compact); width: var(--control-height-compact); min-width: var(--control-height-compact); }
 .command-dock[data-composer-layout="single-toolbar"] .composer-icon-toggle { flex: 0 0 auto; min-width: 58px; }
 .command-dock[data-composer-layout="single-toolbar"] .composer-select { flex: 1 1 0; min-width: 64px; max-width: 132px; }
+.command-dock[data-composer-layout="single-toolbar"] .harness-switcher { flex: 0 0 auto; }
 .command-dock[data-composer-layout="single-toolbar"] .submit-button { flex: 0 0 var(--run-button-width); width: var(--run-button-width); margin-inline-start: auto; }
 .command-dock[data-composer-layout="single-toolbar"] .composer-controls > .danger { flex: 0 0 auto; min-width: 60px; }
 .usage-limit-chip { min-width: 76px; min-height: var(--control-height); display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); color: var(--ink-muted); padding: var(--space-1); font-size: var(--font-size-xs); }
