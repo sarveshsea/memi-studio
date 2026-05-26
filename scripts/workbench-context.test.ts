@@ -6,7 +6,7 @@ import {
   selectDesignArtifactsForSession,
   selectReviewPacketForSession,
 } from "../src/workbench-context.js";
-import { composerHarnesses, primaryHarnesses } from "../src/studio-workbench.js";
+import { composerHarnesses, composerHarnessShortLabel, composerHarnessTier, primaryHarnesses } from "../src/studio-workbench.js";
 import type { Harness, HarnessId } from "../src/studio-api.js";
 
 type TestEvent = {
@@ -137,4 +137,17 @@ assert(
 assert(
   composerHarnesses(allHarnesses).map((item) => item.id).join(",") === "codex,claude-code,ollama,opencode",
   "shows Codex, Claude, Ollama, and OpenCode in the compact composer switcher",
+);
+
+assert(
+  allHarnesses.map((item) => `${item.id}:${composerHarnessTier(item.id)}`).join(",") === "hermes:advanced,opencode:advanced,claude-code:primary,ollama:local,codex:primary",
+  "classifies composer harnesses into primary, local, and advanced tiers",
+);
+
+assert(
+  composerHarnessShortLabel("codex") === "CX"
+    && composerHarnessShortLabel("claude-code") === "CL"
+    && composerHarnessShortLabel("ollama") === "OL"
+    && composerHarnessShortLabel("opencode") === "OC",
+  "keeps provider affordances compact for icon-first switching",
 );

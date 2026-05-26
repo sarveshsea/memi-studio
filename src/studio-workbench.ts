@@ -9,12 +9,13 @@ export const COMPOSER_HARNESS_IDS = ["codex", "claude-code", "ollama", "opencode
 export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
 
 export type HarnessVisibility = "primary" | "advanced";
+export type ComposerHarnessTier = "primary" | "local" | "advanced";
 
 export const DEFAULT_RIGHT_PANE_TAB_IDS = ["run", "changes", "memory"] as const;
 export type WorkbenchRightPaneTab = (typeof WORKBENCH_COPY.rightPaneTabs)[number]["id"];
 
-export function isPrimaryHarness(id: HarnessId): boolean {
-  return (PRIMARY_HARNESS_IDS as readonly HarnessId[]).includes(id);
+export function isPrimaryHarness(id: string): boolean {
+  return (PRIMARY_HARNESS_IDS as readonly string[]).includes(id);
 }
 
 export function harnessVisibility(harness: Pick<Harness, "id" | "visibility">): HarnessVisibility {
@@ -29,6 +30,26 @@ export function primaryHarnesses(harnesses: Harness[]): Harness[] {
 export function composerHarnesses(harnesses: Harness[]): Harness[] {
   const byId = new Map(harnesses.map((harness) => [harness.id, harness]));
   return COMPOSER_HARNESS_IDS.map((id) => byId.get(id)).filter((harness): harness is Harness => Boolean(harness));
+}
+
+export function composerHarnessTier(id: string): ComposerHarnessTier {
+  if (isPrimaryHarness(id)) return "primary";
+  if (id === "ollama") return "local";
+  return "advanced";
+}
+
+export function composerHarnessShortLabel(id: string, label = id): string {
+  if (id === "codex") return "CX";
+  if (id === "claude-code") return "CL";
+  if (id === "ollama") return "OL";
+  if (id === "opencode") return "OC";
+  return label
+    .split(/[\s_-]+/u)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || id.slice(0, 2).toUpperCase();
 }
 
 export function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): HarnessId {

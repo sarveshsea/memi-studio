@@ -169,6 +169,7 @@ code, kbd, samp {
   overflow: hidden;
   background: var(--surface-bg);
   color: var(--ink);
+  font-family: var(--font-studio);
 }
 .studio-shell.theme-dark {
   color-scheme: dark;
@@ -204,6 +205,10 @@ code, kbd, samp {
   grid-template-columns: 100px minmax(0, 1fr);
   align-items: baseline;
   gap: var(--space-2);
+}
+.manager-view,
+.manager-view * {
+  font-family: var(--font-studio);
 }
 .manager-detail-label {
   color: var(--ink-muted);
@@ -1624,17 +1629,17 @@ button.active,
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   border: 1px solid var(--line);
   border-radius: var(--radius-compact);
   background: var(--surface-muted);
-  padding: 2px;
+  padding: 1px;
 }
 .harness-switcher button {
   position: relative;
-  width: var(--control-height-compact);
-  min-width: var(--control-height-compact);
-  height: var(--control-height-compact);
+  width: 28px;
+  min-width: 28px;
+  height: 26px;
   display: inline-grid;
   place-items: center;
   border: 0;
@@ -1643,6 +1648,17 @@ button.active,
   color: var(--ink-muted);
   padding: var(--space-0);
   cursor: pointer;
+}
+.harness-switcher button[data-harness-tier="local"] {
+  margin-inline-start: 4px;
+}
+.harness-switcher button[data-harness-tier="local"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 5px;
+  inset-inline-start: -3px;
+  width: 1px;
+  background: var(--line-strong);
 }
 .harness-switcher button:hover {
   color: var(--ink);
@@ -1653,13 +1669,18 @@ button.active,
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-.harness-switcher button[aria-disabled="true"] {
-  opacity: .62;
+.harness-switcher button[data-harness-state="setup"] {
+  color: var(--ink-faint);
+  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+}
+.harness-switcher button[data-harness-state="setup"]:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
 }
 .harness-switcher-status {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  right: 3px;
+  bottom: 3px;
   width: 5px;
   height: 5px;
   border: 1px solid var(--surface);

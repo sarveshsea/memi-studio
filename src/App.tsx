@@ -195,6 +195,8 @@ import {
   DEFAULT_PRIMARY_HARNESS_ID,
   DEFAULT_RIGHT_PANE_TAB_IDS,
   composerHarnesses,
+  composerHarnessShortLabel,
+  composerHarnessTier,
   normalizeComposerHarness,
   normalizePrimaryHarness,
   normalizeRightPaneTab,
@@ -1828,6 +1830,11 @@ export function App() {
     setSelectedHarness(nextId);
     setSettingsDraft((current) => current ? { ...current, defaultHarness: nextId } : current);
     setSelectedAction((current) => resolveHarnessAction(current, nextHarness));
+  }
+
+  function chooseComposerHarness(harness: Harness) {
+    chooseHarness(harness.id);
+    if (!harness.enabled) openSettingsPanel("Agents");
   }
 
   async function saveSettings() {
@@ -3510,22 +3517,26 @@ export function App() {
               <div className="harness-switcher" role="radiogroup" aria-label="Agent" data-composer-control="harness">
                 {visibleHarnesses.map((harness) => {
                   const selected = selectedHarness === harness.id;
+                  const readiness = harnessAuthDot(harness);
+                  const title = composerHarnessTitle(harness);
                   return (
                     <button
                       key={harness.id}
                       aria-checked={selected}
-                      aria-disabled={!harness.enabled}
-                      aria-label={composerHarnessTitle(harness)}
+                      aria-label={harness.enabled ? title : `Set up ${harness.label}`}
                       data-action-id={`harness.select.${harness.id}`}
                       data-harness-id={harness.id}
-                      data-harness-ready={harnessAuthDot(harness)}
+                      data-harness-ready={readiness}
+                      data-harness-short={composerHarnessShortLabel(harness.id, harness.label)}
+                      data-harness-state={harness.enabled ? selected ? "active" : "available" : "setup"}
+                      data-harness-tier={composerHarnessTier(harness.id)}
                       role="radio"
-                      title={composerHarnessTitle(harness)}
+                      title={title}
                       type="button"
-                      onClick={() => chooseHarness(harness.id)}
+                      onClick={() => chooseComposerHarness(harness)}
                     >
                       <StudioControlIcon name={composerHarnessIcon(harness.id)} />
-                      <i className="harness-switcher-status" data-auth-status={harnessAuthDot(harness)} aria-hidden="true" />
+                      <i className="harness-switcher-status" data-auth-status={readiness} aria-hidden="true" />
                     </button>
                   );
                 })}
@@ -5580,6 +5591,7 @@ function composerHarnessIcon(id: HarnessId): WorkbenchIconName {
 }
 
 function composerHarnessTitle(harness: Harness): string {
+  if (!harness.enabled) return `${harness.label}: setup required`;
   const state = harnessReadinessLabel(harness);
   return state ? `${harness.label}: ${state}` : harness.label;
 }
