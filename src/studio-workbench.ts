@@ -60,6 +60,14 @@ export function isVerificationRunText(value: string): boolean {
   return Boolean(runVerificationMarker(value)) || /smoke|e2e proof|verification/i.test(value);
 }
 
+export function isVerificationSession(session: Pick<SessionSummary, "prompt" | "conversationId">): boolean {
+  return isVerificationRunText(`${session.prompt} ${session.conversationId ?? ""}`);
+}
+
+export function defaultWorkbenchSession(sessions: SessionSummary[]): SessionSummary | null {
+  return sessions.find((session) => !isVerificationSession(session)) ?? null;
+}
+
 export function compactRunLabel(value: string, harness?: HarnessId, maxLength = 32): string {
   if (runVerificationMarker(value)) return `${shortHarnessName(harness)} check`;
   if (/live studio agent smoke/i.test(value)) return `${shortHarnessName(harness)} live check`;

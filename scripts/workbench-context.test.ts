@@ -12,6 +12,7 @@ import {
   composerHarnesses,
   composerHarnessShortLabel,
   composerHarnessTier,
+  defaultWorkbenchSession,
   isQueueDockSession,
   isVerificationRunText,
   primaryHarnesses,
@@ -62,6 +63,22 @@ function harness(id: HarnessId, label: string = id): Harness {
     supportsCancel: true,
     outputParser: "stdio",
   } as Harness;
+}
+
+function session(input: { id: string; prompt: string; harness?: HarnessId; status?: SessionSummary["status"] }): SessionSummary {
+  return {
+    id: input.id,
+    conversationId: input.id,
+    harness: input.harness ?? "codex",
+    action: "raw",
+    cwd: "/tmp/memi-studio",
+    prompt: input.prompt,
+    status: input.status ?? "completed",
+    exitCode: 0,
+    startedAt: timestamp,
+    completedAt: timestamp,
+    eventCount: 1,
+  };
 }
 
 const timestamp = "2026-05-26T00:00:00.000Z";
@@ -182,4 +199,12 @@ assert(
     && isQueueDockSession({ status: "failed" } as SessionSummary)
     && !isQueueDockSession({ status: "completed" } as SessionSummary),
   "keeps the center queue focused on active or actionable runs",
+);
+
+const realSession = session({ id: "real-run", prompt: "Audit the settings pane for hierarchy." });
+const smokeSession = session({ id: "check-run", prompt: "Live Studio agent smoke. Reply MEMI_CODEX_LIVE_OK_123." });
+assert(
+  defaultWorkbenchSession([smokeSession, realSession])?.id === "real-run"
+    && defaultWorkbenchSession([smokeSession]) === null,
+  "keeps verification runs from becoming the default workbench session",
 );

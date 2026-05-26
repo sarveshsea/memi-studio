@@ -199,6 +199,7 @@ import {
   composerHarnessTier,
   compactRunLabel,
   compactRunSummary,
+  defaultWorkbenchSession,
   isQueueDockSession,
   normalizeComposerHarness,
   normalizePrimaryHarness,
@@ -870,7 +871,7 @@ export function App() {
     }
     return null;
   }, [contextualDesignArtifact, iaBoardSync, iaBoardExports.length, mermaidBoard, mermaidBoardSync, mermaidBoardExports.length, scenarioDesignPackage?.mermaidArtifacts?.length, scenarioFigJamExports.length]);
-  const latestRun = session ?? recentSessions[0] ?? null;
+  const latestRun = session ?? defaultWorkbenchSession(recentSessions);
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
     {
@@ -1169,8 +1170,9 @@ export function App() {
       setUsageSnapshot(nextUsage);
       setRecentWorkspaces(nextRecentWorkspaces);
       setWorkspacePermissions(nextWorkspacePermissions);
-      if (!session && nextSessions[0]) {
-        await openSessionSummary(nextSessions[0], nextResolvedHarnesses);
+      if (!session) {
+        const initialSession = defaultWorkbenchSession(nextSessions);
+        if (initialSession) await openSessionSummary(initialSession, nextResolvedHarnesses);
       }
       const primaryHarnessStatusIncomplete = ["codex", "claude-code"].some((id) =>
         !nextResolvedHarnesses.find((harness) => harness.id === id)?.authStatus,
