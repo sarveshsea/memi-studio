@@ -4,7 +4,7 @@
 import type { Harness, HarnessId } from "./studio-api";
 import type { WORKBENCH_COPY } from "./workbench-copy";
 
-export const PRIMARY_HARNESS_IDS = ["codex", "claude-code", "ollama"] as const satisfies HarnessId[];
+export const PRIMARY_HARNESS_IDS = ["codex", "claude-code"] as const satisfies HarnessId[];
 export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
 
 export type HarnessVisibility = "primary" | "advanced";

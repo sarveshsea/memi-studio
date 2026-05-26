@@ -851,21 +851,21 @@ export function App() {
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
     {
       id: "runtime",
-      label: `Runtime ${runtimeHealthDisplayLabel(runtimeHealth, status?.runtime?.runtimeSource)}`,
+      label: "Runtime",
       status: runtimeTruthStatus(runtimeHealth),
       title: runtimeTruthTitle(status, runtimeRecoveryMessage),
     },
     {
       id: "codex",
-      label: truthHarnessLabel(codexHarness, "Codex"),
+      label: "Codex",
       status: truthHarnessStatus(codexHarness),
-      title: codexHarness?.authMessage ?? "Codex harness status",
+      title: truthHarnessLabel(codexHarness, "Codex"),
     },
     {
       id: "claude",
-      label: truthHarnessLabel(claudeHarness, "Claude"),
+      label: "Claude",
       status: truthHarnessStatus(claudeHarness),
-      title: claudeHarness?.authMessage ?? "Claude Code harness status",
+      title: truthHarnessLabel(claudeHarness, "Claude"),
     },
     {
       id: "workspace",
