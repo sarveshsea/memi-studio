@@ -2,6 +2,7 @@
 // Copyright 2026 Humyn LLC
 
 import { invoke } from "@tauri-apps/api/core";
+import { MEMOIRE_PACKAGE_NAME, MEMOIRE_PACKAGE_URL, MEMOIRE_PACKAGE_VERSION } from "./runtime/package-info";
 
 export type HarnessId =
   | "memoire"
@@ -2104,15 +2105,70 @@ function emptyUsageSnapshot(): StudioUsageSnapshot {
 }
 
 export async function getSessionEvents(id: string, limit = 160): Promise<{ session: SessionSummary; events: StudioEvent[] }> {
-  return fetchJSON<{ session: SessionSummary; events: StudioEvent[] }>(
+  const payload = await fetchJSON<{ session: SessionSummary; events: StudioEvent[] }>(
     `/api/sessions/${encodeURIComponent(id)}/events?limit=${encodeURIComponent(String(limit))}`,
   );
+  return { ...payload, events: payload.events.map(normalizeStudioEvent) };
 }
 
 export async function getSessionTrace(id: string): Promise<{ session: SessionSummary; trace: StudioTraceSnapshot }> {
-  return fetchJSON<{ session: SessionSummary; trace: StudioTraceSnapshot }>(
+  const payload = await fetchJSON<{ session: SessionSummary; trace: StudioTraceSnapshot }>(
     `/api/sessions/${encodeURIComponent(id)}/trace`,
   );
+  return { ...payload, trace: normalizeStudioTraceSnapshot(payload.trace) };
+}
+
+function normalizeStudioEvent(event: StudioEvent): StudioEvent {
+  if (event.type !== "reference_trace") return event;
+  if (!isPlainRecord(event.data) || !Array.isArray(event.data.references)) return event;
+  return {
+    ...event,
+    data: {
+      ...event.data,
+      references: event.data.references.map(normalizeReferenceTraceItem),
+    },
+  };
+}
+
+function normalizeStudioTraceSnapshot(trace: StudioTraceSnapshot): StudioTraceSnapshot {
+  return {
+    ...trace,
+    references: trace.references.map((reference) => normalizeReferenceTraceItem(reference) as StudioReferenceTraceItem),
+  };
+}
+
+function normalizeReferenceTraceItem(value: unknown): unknown {
+  if (!isPlainRecord(value)) return value;
+  const packageName = stringField(value, "packageName");
+  const packageVersion = stringField(value, "packageVersion");
+  const label = stringField(value, "label") ?? "";
+  const id = stringField(value, "id") ?? "";
+  const kind = stringField(value, "kind");
+  const legacyPackageName = packageName === "@sarveshsea/memoire" || label.includes("@sarveshsea/memoire");
+  const legacyVersion = Boolean(packageVersion?.startsWith("0.") || /@0\.\d+\.\d+/.test(label));
+  const memoirePackage = kind === "package"
+    && (legacyPackageName || packageName === MEMOIRE_PACKAGE_NAME || id === `package:${MEMOIRE_PACKAGE_NAME}`);
+  if (!memoirePackage || (!legacyPackageName && !legacyVersion)) return value;
+  return {
+    ...value,
+    id: `package:${MEMOIRE_PACKAGE_NAME}`,
+    label: `${MEMOIRE_PACKAGE_NAME}@${MEMOIRE_PACKAGE_VERSION}`,
+    summary: "Current public Mémoire CLI package for Studio harness metadata. Runtime assets are tracked separately by the Studio runtime release tag.",
+    packageName: MEMOIRE_PACKAGE_NAME,
+    packageVersion: MEMOIRE_PACKAGE_VERSION,
+    url: MEMOIRE_PACKAGE_URL,
+    sourcePackageName: packageName ?? null,
+    sourcePackageVersion: packageVersion ?? null,
+  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringField(value: Record<string, unknown>, key: string): string | null {
+  const field = value[key];
+  return typeof field === "string" ? field : null;
 }
 
 export async function cancelSession(id: string): Promise<boolean> {
@@ -2172,7 +2228,7 @@ export function subscribeSession(id: string, onEvent: (event: StudioEvent) => vo
   ];
   for (const type of types) {
     source.addEventListener(type, (message) => {
-      onEvent(JSON.parse((message as MessageEvent).data) as StudioEvent);
+      onEvent(normalizeStudioEvent(JSON.parse((message as MessageEvent).data) as StudioEvent));
     });
   }
   return () => source.close();

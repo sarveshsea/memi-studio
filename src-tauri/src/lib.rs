@@ -969,6 +969,21 @@ fn stop_runtime_child(child: Option<Arc<Mutex<std::process::Child>>>) -> Option<
     Some(pid)
 }
 
+fn current_runtime_child_pid(child: &Option<Arc<Mutex<std::process::Child>>>) -> Option<u32> {
+    child
+        .as_ref()
+        .and_then(|current| current.lock().ok().map(|child| child.id()))
+}
+
+fn should_recover_timed_out_runtime(
+    current_generation: u64,
+    expected_generation: u64,
+    current_pid: Option<u32>,
+    timed_out_pid: u32,
+) -> bool {
+    current_generation == expected_generation && current_pid == Some(timed_out_pid)
+}
+
 fn terminate_child_gracefully(child: &mut std::process::Child, grace_period: Duration) {
     #[cfg(unix)]
     {
@@ -2211,10 +2226,7 @@ fn spawn_runtime_ready_watcher(
                     let mut ready_payload = None;
                     {
                         let mut runtime_state = state.runtime.lock().expect("runtime state lock");
-                        let current_pid = runtime_state
-                            .child
-                            .as_ref()
-                            .and_then(|current| current.lock().ok().map(|child| child.id()));
+                        let current_pid = current_runtime_child_pid(&runtime_state.child);
                         if runtime_state.generation == timing.generation && current_pid == Some(pid) {
                             let mut status = runtime_status(
                                 "running",
@@ -2264,13 +2276,19 @@ fn spawn_runtime_ready_watcher(
             status.cache_prepare_ms = Some(timing.cache_prepare_ms);
             status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
             let mut runtime_state = state.runtime.lock().expect("runtime state lock");
-            let current_pid = runtime_state
-                .child
-                .as_ref()
-                .and_then(|current| current.lock().ok().map(|child| child.id()));
-            if runtime_state.generation == timing.generation && current_pid == Some(pid) {
+            let current_pid = current_runtime_child_pid(&runtime_state.child);
+            let should_recover = should_recover_timed_out_runtime(
+                runtime_state.generation,
+                timing.generation,
+                current_pid,
+                pid,
+            );
+            let child = if should_recover {
                 runtime_state.status = Some(status.clone());
-            }
+                runtime_state.child.take()
+            } else {
+                None
+            };
             drop(runtime_state);
             append_runtime_lifecycle_log(
                 &app,
@@ -2288,6 +2306,30 @@ fn spawn_runtime_ready_watcher(
                 "studio-runtime-log",
                 json!({ "stream": "system", "message": status.error }),
             );
+            if let Some(child) = child {
+                let stopped_pid = stop_runtime_child(Some(child));
+                if let Some(stopped_pid) = stopped_pid {
+                    clear_managed_runtime_pid_file(&app, Some(stopped_pid));
+                }
+                let should_restart = should_restart_managed_runtime(&state);
+                append_runtime_lifecycle_log(
+                    &app,
+                    "runtime.startup-timeout-recovery",
+                    json!({
+                        "generation": timing.generation,
+                        "pid": pid,
+                        "stoppedPid": stopped_pid,
+                        "shouldRestart": should_restart
+                    }),
+                );
+                if should_restart {
+                    let _ = app.emit(
+                        "studio-runtime-log",
+                        json!({ "stream": "system", "message": "Restarting Studio runtime after startup timeout." }),
+                    );
+                    request_studio_runtime_restart(&app, &state, &workspace_root);
+                }
+            }
         }
     });
 }
@@ -2640,6 +2682,14 @@ mod runtime_cache_tests {
                 .map(|status| status.workspace_root.as_str()),
             Some("/tmp/second-workspace")
         );
+    }
+
+    #[test]
+    fn timed_out_runtime_recovery_requires_current_generation_and_pid() {
+        assert!(should_recover_timed_out_runtime(3, 3, Some(97507), 97507));
+        assert!(!should_recover_timed_out_runtime(4, 3, Some(97507), 97507));
+        assert!(!should_recover_timed_out_runtime(3, 3, Some(97508), 97507));
+        assert!(!should_recover_timed_out_runtime(3, 3, None, 97507));
     }
 
     #[test]

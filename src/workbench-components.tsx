@@ -67,6 +67,7 @@ import {
   type WorkbenchIconName,
 } from "./workbench-copy";
 import { harnessVisibility, isPrimaryHarness } from "./studio-workbench";
+import { MEMOIRE_PACKAGE_NAME, MEMOIRE_PACKAGE_VERSION, MEMOIRE_STUDIO_VERSION } from "./runtime/package-info";
 
 export const OUTPUT_TABS = WORKBENCH_COPY.outputTabs;
 
@@ -4100,7 +4101,7 @@ export function SettingsPanel(props: {
           <span className="settings-row-icon"><StudioControlIcon name="settings" /></span>
           <div className="settings-row-copy">
             <span>Studio</span>
-            <strong>@memi-design/cli@1.0.1</strong>
+            <strong>{MEMOIRE_PACKAGE_NAME}@{MEMOIRE_PACKAGE_VERSION}</strong>
             <div className="settings-tag-row">
               <SettingsTag tone={props.status ? "ok" : "warn"}>{props.status?.status ?? "loading"}</SettingsTag>
               <SettingsTag>{compactName(workspaceRoot)}</SettingsTag>
@@ -4808,12 +4809,12 @@ export function figmaStatusLabel(status: FigmaStatus | null): string {
 
 export function expectedDmgPath(status: StudioStatus | null): string {
   const root = status?.projectRoot ?? "$PROJECT_ROOT";
-  return `${root}/src-tauri/target/release/bundle/dmg/Mémoire Studio_1.0.0_aarch64.dmg`;
+  return `${root}/src-tauri/target/release/bundle/dmg/Mémoire Studio_${MEMOIRE_STUDIO_VERSION}_aarch64.dmg`;
 }
 
 function buildDownloadReadyItems(input: { status: StudioStatus | null; config: StudioConfig | null }): Array<{ id: string; label: string; detail: string }> {
   return [
-    { id: "version", label: "Engine package", detail: "@memi-design/cli@1.0.1" },
+    { id: "version", label: "Engine package", detail: `${MEMOIRE_PACKAGE_NAME}@${MEMOIRE_PACKAGE_VERSION}` },
     { id: "dmg", label: "DMG", detail: expectedDmgPath(input.status) },
     { id: "icon", label: "Bundle icon", detail: "Mémoire flower assets in Tauri bundle metadata" },
     { id: "pack", label: "Package dry run", detail: "npm run pack:dry-run size gate" },
