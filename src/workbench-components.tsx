@@ -140,30 +140,6 @@ const FIGMA_ACTIONS: Array<{ id: FigmaAction; label: string; primary?: boolean }
   { id: "captureScreenshot", label: "Screenshot" },
 ];
 
-const FIGMA_MUTATING_ACTIONS: Array<{ label: string; request: FigmaActionRequest }> = [
-  {
-    label: "Create scratch frame",
-    request: {
-      action: "createNode",
-      type: "FRAME",
-      name: "Mémoire E2E Scratch Frame",
-      x: 120,
-      y: 120,
-      width: 320,
-      height: 180,
-    },
-  },
-  {
-    label: "Push scratch token",
-    request: {
-      action: "pushTokens",
-      createMissing: true,
-      collectionName: "Mémoire E2E Scratch",
-      tokens: [{ name: "memoire/e2e/color", values: { value: "#ff0066" } }],
-    },
-  },
-];
-
 const DEFAULT_CODEX_UI_CONFIG: StudioCodexConfig = {
   model: "gpt-5.5",
   reasoningEffort: "xhigh",
@@ -192,32 +168,8 @@ const AUTOMATION_TEMPLATE_ORDER = [
   "codex-app-build-review",
   "research-reference-refresh",
 ];
-const FALLBACK_AGENTIC_ROLES: NonNullable<DesignSystemArtifact["agentic"]>["roles"] = [
-  { id: "harness_status", label: "Harness Status", atomicLevel: "molecule", surface: "topbar", purpose: "Expose active agent state.", requiredSignals: ["harness_id", "auth_state"], commandIds: ["settings.open"], fallbackState: "Show blocked reason." },
-  { id: "message_composer", label: "Message Composer", atomicLevel: "organism", surface: "composer", purpose: "Capture prompt, attachments, action, and permission.", requiredSignals: ["prompt", "permission_mode"], commandIds: ["session.run"], fallbackState: "Show disabled reason." },
-  { id: "tool_trace", label: "Tool Trace", atomicLevel: "organism", surface: "output", purpose: "Render commands and tool calls.", requiredSignals: ["tool_id", "exit_state"], commandIds: ["tool.open"], fallbackState: "Show last output." },
-  { id: "artifact_review", label: "Artifact Review", atomicLevel: "organism", surface: "canvas", purpose: "Review generated design-system evidence.", requiredSignals: ["review_state", "source_refs"], commandIds: ["artifact.use-system"], fallbackState: "Show source refs." },
-  { id: "memory_context", label: "Memory Context", atomicLevel: "organism", surface: "drawer", purpose: "Expose memory and references.", requiredSignals: ["memory_kind", "source_path"], commandIds: ["context.open"], fallbackState: "Show refresh action." },
-  { id: "permission_control", label: "Permission Control", atomicLevel: "molecule", surface: "composer", purpose: "Make plan, guarded, and full-access explicit.", requiredSignals: ["permission_mode"], commandIds: ["codex.plan-mode.toggle"], fallbackState: "Show current sandbox." },
-];
-const FALLBACK_AGENTIC_OUTPUT_SECTIONS = ["research_note", "design_decision", "tool_call", "artifact", "acceptance_statement", "session_result"];
 type AgenticOpenSourceReferences = NonNullable<NonNullable<DesignSystemArtifact["agentic"]>["openSourceReferences"]>;
 type AgenticInteractionPatterns = NonNullable<NonNullable<DesignSystemArtifact["agentic"]>["interactionPatterns"]>;
-const FALLBACK_AGENTIC_OPEN_SOURCE_REFERENCES: AgenticOpenSourceReferences = [
-  { name: "GAIA UI", url: "https://github.com/theexperiencecompany/gaia-ui", license: "MIT", category: "shadcn-agent-components", mappedRoles: ["message_composer", "artifact_review", "memory_context"] },
-  { name: "assistant-ui", url: "https://github.com/assistant-ui/assistant-ui", license: "MIT", category: "composer-thread-ux", mappedRoles: ["message_composer", "memory_context", "permission_control"] },
-  { name: "tool-ui", url: "https://github.com/assistant-ui/tool-ui", license: "MIT", category: "tool-call-rendering", mappedRoles: ["tool_trace", "permission_control"] },
-  { name: "AG-UI", url: "https://github.com/ag-ui-protocol/ag-ui", license: "MIT", category: "agent-event-protocol", mappedRoles: ["harness_status", "tool_trace", "permission_control"] },
-  { name: "OpenGenerativeUI", url: "https://github.com/CopilotKit/OpenGenerativeUI", license: "MIT", category: "generative-ui-harness", mappedRoles: ["artifact_review", "tool_trace", "memory_context"] },
-  { name: "Magentic-UI", url: "https://github.com/microsoft/magentic-ui", license: "MIT", category: "human-in-the-loop-research", mappedRoles: ["harness_status", "permission_control", "memory_context"] },
-];
-const FALLBACK_AGENTIC_INTERACTION_PATTERNS: AgenticInteractionPatterns = [
-  { id: "composer_agent_state", label: "Composer Agent State", source: "assistant-ui", appliesTo: ["message_composer", "permission_control"], requiredSignals: ["prompt", "attachments", "model", "reasoning_effort", "permission_mode"] },
-  { id: "auditable_tool_trace_cards", label: "Auditable Tool Trace Cards", source: "tool-ui", appliesTo: ["tool_trace"], requiredSignals: ["tool_id", "status", "input", "output", "approval_state"] },
-  { id: "event_stream_state_sync", label: "Event Stream State Sync", source: "AG-UI", appliesTo: ["harness_status", "tool_trace"], requiredSignals: ["event_type", "run_state", "tool_status", "shared_context"] },
-  { id: "artifact_acceptance_state", label: "Artifact Acceptance State", source: "OpenGenerativeUI", appliesTo: ["artifact_review", "memory_context"], requiredSignals: ["source_refs", "review_state", "acceptance_statement", "design_decision"] },
-  { id: "human_review_checkpoint", label: "Human Review Checkpoint", source: "Magentic-UI", appliesTo: ["artifact_review", "permission_control"], requiredSignals: ["plan_state", "approval_state", "risk_level", "next_action"] },
-];
 
 function isCoreHarness(id: Harness["id"]): boolean {
   return isPrimaryHarness(id);
@@ -1959,19 +1911,6 @@ export function FigmaDriver(props: {
           </button>
         ))}
       </div>
-      <div className="figma-actions figma-mutation-actions" data-figma-mutating-actions="scratch-agent">
-        {FIGMA_MUTATING_ACTIONS.map((action) => (
-          <button
-            key={action.label}
-            data-action-id={`figma.action.${action.request.action}.scratch`}
-            type="button"
-            disabled={!isPluginConnected || figmaActionRunning}
-            onClick={() => props.onAction(action.request)}
-          >
-            {action.label}
-          </button>
-        ))}
-      </div>
       {props.figmaActionResult ? (
         <pre>{formatDataPreview(props.figmaActionResult).slice(0, 1800)}</pre>
       ) : null}
@@ -2262,15 +2201,17 @@ function DesignSystemSandbox({ artifact, figmaStatus }: { artifact: DesignSystem
 }
 
 function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtifact }) {
-  const roles = artifact.agentic?.roles ?? FALLBACK_AGENTIC_ROLES;
-  const references: AgenticOpenSourceReferences = artifact.agentic?.openSourceReferences ?? FALLBACK_AGENTIC_OPEN_SOURCE_REFERENCES;
-  const patterns: AgenticInteractionPatterns = artifact.agentic?.interactionPatterns ?? FALLBACK_AGENTIC_INTERACTION_PATTERNS;
+  const contract = artifact.agentic;
+  if (!contract) return null;
+  const roles = contract.roles;
+  const references: AgenticOpenSourceReferences = contract.openSourceReferences ?? [];
+  const patterns: AgenticInteractionPatterns = contract.interactionPatterns ?? [];
   if (roles.length === 0) return null;
   return (
     <section className="agentic-design-system" data-agentic-design-system="role-contract-collapsed">
       <header className="agentic-contract-summary">
         <strong>Agentic contract</strong>
-        <span>{artifact.agentic?.source.name ?? "Agentic UI"} / {artifact.agentic?.source.access ?? "local"}</span>
+        <span>{contract.source.name} / {contract.source.access}</span>
       </header>
       <div className="agentic-role-strip">
         {roles.map((role) => (
@@ -2281,30 +2222,34 @@ function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtif
           </article>
         ))}
       </div>
-      <div className="agentic-output-contract">
-        <span>{(artifact.agentic?.outputSections ?? FALLBACK_AGENTIC_OUTPUT_SECTIONS).join(" / ")}</span>
-      </div>
-      <details className="agentic-pattern-disclosure">
-        <summary>Sources</summary>
-        <div className="agentic-pattern-source-list" data-agentic-pattern-source="artifact-contract">
-          {references.slice(0, 6).map((reference) => (
-            <article className="agentic-pattern-source-card" data-agentic-pattern-source={reference.name} key={reference.name}>
-              <strong>{reference.name}</strong>
-              <span>{reference.license} / {reference.category}</span>
-              <small>{reference.mappedRoles.join(" / ")}</small>
-            </article>
-          ))}
+      {contract.outputSections.length ? (
+        <div className="agentic-output-contract">
+          <span>{contract.outputSections.join(" / ")}</span>
         </div>
-        <div className="agentic-interaction-pattern-list">
-          {patterns.slice(0, 5).map((pattern) => (
-            <article className="agentic-role-card" data-agentic-pattern={pattern.id} key={pattern.id}>
-              <strong>{pattern.label}</strong>
-              <span>{pattern.source}</span>
-              <small>{pattern.requiredSignals.join(" / ")}</small>
-            </article>
-          ))}
-        </div>
-      </details>
+      ) : null}
+      {references.length || patterns.length ? (
+        <details className="agentic-pattern-disclosure">
+          <summary>Sources</summary>
+          <div className="agentic-pattern-source-list" data-agentic-pattern-source="artifact-contract">
+            {references.slice(0, 6).map((reference) => (
+              <article className="agentic-pattern-source-card" data-agentic-pattern-source={reference.name} key={reference.name}>
+                <strong>{reference.name}</strong>
+                <span>{reference.license} / {reference.category}</span>
+                <small>{reference.mappedRoles.join(" / ")}</small>
+              </article>
+            ))}
+          </div>
+          <div className="agentic-interaction-pattern-list">
+            {patterns.slice(0, 5).map((pattern) => (
+              <article className="agentic-role-card" data-agentic-pattern={pattern.id} key={pattern.id}>
+                <strong>{pattern.label}</strong>
+                <span>{pattern.source}</span>
+                <small>{pattern.requiredSignals.join(" / ")}</small>
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -4046,15 +3991,6 @@ export function SettingsPanel(props: {
           <article><span>Browser</span><strong>{props.browserStatus?.enabled ? "enabled" : "disabled"}</strong><small>{props.browserStatus?.message ?? "Browser status unavailable"}</small></article>
           <article><span>Sessions</span><strong>{props.browserStatus?.activeSessions ?? 0}</strong><small>Browser automation sessions</small></article>
           <article><span>MCP</span><strong>{props.config?.enabledTools?.mcp ? "enabled" : "disabled"}</strong><small>External agent bridge tools</small></article>
-        </div>
-        <div className="agentic-pattern-source-list" data-agentic-pattern-source="settings-advanced">
-          {FALLBACK_AGENTIC_OPEN_SOURCE_REFERENCES.map((reference) => (
-            <article className="agentic-pattern-source-card" data-agentic-pattern-source={reference.name} key={reference.name}>
-              <strong>{reference.name}</strong>
-              <span>{reference.license} / {reference.category}</span>
-              <small>{reference.mappedRoles.join(" / ")}</small>
-            </article>
-          ))}
         </div>
         <div className="setup-list compact" data-advanced-tool-list="studio-tools">
           {props.studioTools.map((tool) => (
