@@ -388,6 +388,7 @@ const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeSt
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
 const TRACE_REFRESH_DELAY_MS = 350;
+const WORKTREE_TRACE_REFRESH_MS = 12_000;
 const PROJECT_SIDEBAR_COLLAPSED_KEY = "memoire.studio.projectSidebarCollapsed";
 const PROJECT_SIDEBAR_EXPANDED_KEY = "memoire.studio.expandedProjectIds";
 const CHAT_RAIL_WIDTH_KEY = "memoire.studio.chatRailWidthPercent";
@@ -426,6 +427,7 @@ export function App() {
   const harnessReadinessRefreshAttemptsRef = useRef(0);
   const runtimeStartupRefreshInFlightRef = useRef(false);
   const runtimeReadyHydrationRef = useRef<string | null>(null);
+  const worktreeTraceRefreshInFlightRef = useRef(false);
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
@@ -1093,6 +1095,23 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [runtimeHealth, status?.runtime?.pid, status?.runtime?.url]);
 
+  useEffect(() => {
+    if (runtimeHealth !== "ready" || !status?.projectRoot) return undefined;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "hidden") return;
+      void refreshWorktreeTrace();
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    const interval = window.setInterval(() => {
+      if (isSessionActive) return;
+      refreshIfVisible();
+    }, WORKTREE_TRACE_REFRESH_MS);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(interval);
+    };
+  }, [isSessionActive, runtimeHealth, status?.projectRoot]);
+
   async function refresh() {
     try {
       const nextStatus = await getStatus();
@@ -1245,6 +1264,18 @@ export function App() {
       setUsageSnapshot(await getUsageSnapshot());
     } catch {
       setUsageSnapshot(null);
+    }
+  }
+
+  async function refreshWorktreeTrace() {
+    if (worktreeTraceRefreshInFlightRef.current) return;
+    worktreeTraceRefreshInFlightRef.current = true;
+    try {
+      setDesignTrace(await getDesignSystemTrace());
+    } catch {
+      // Keep the last known trace instead of flashing a false unavailable state.
+    } finally {
+      worktreeTraceRefreshInFlightRef.current = false;
     }
   }
 
