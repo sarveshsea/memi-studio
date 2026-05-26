@@ -152,6 +152,11 @@ import {
   TerminalBlock as TerminalBlockSurface,
 } from "./studio-primitives";
 import {
+  mergeDesignArtifacts,
+  selectDesignArtifactsForSession,
+  selectReviewPacketForSession,
+} from "./workbench-context";
+import {
   BlockBody,
   AttachmentShelf,
   AutomationCenter,
@@ -725,27 +730,36 @@ export function App() {
         activeProcesses: (serverTrace as Partial<StudioTraceModel>).activeProcesses ?? localTraceModel.activeProcesses,
       }
     : localTraceModel;
+  const traceDesignArtifacts = useMemo(
+    () => (traceModel.artifacts ?? []) as DesignSystemArtifact[],
+    [traceModel.artifacts],
+  );
   const allDesignArtifacts = useMemo(() => {
-    const traceArtifacts = (traceModel.artifacts ?? []) as DesignSystemArtifact[];
-    return [...designArtifacts, ...traceArtifacts];
-  }, [designArtifacts, traceModel.artifacts]);
+    return mergeDesignArtifacts(designArtifacts, traceDesignArtifacts);
+  }, [designArtifacts, traceDesignArtifacts]);
+  const sessionDesignArtifacts = useMemo(() => {
+    return selectDesignArtifactsForSession({
+      storedArtifacts: designArtifacts,
+      traceArtifacts: traceDesignArtifacts,
+      sessionId: session?.id,
+      events,
+    });
+  }, [designArtifacts, events, session?.id, traceDesignArtifacts]);
+  const contextualDesignArtifact = sessionDesignArtifacts[0] ?? null;
   const activeDesignArtifact = useMemo(() => {
-    const traceArtifacts = (traceModel.artifacts ?? []) as DesignSystemArtifact[];
     return allDesignArtifacts.find((artifact) => artifact.id === selectedArtifactId)
-      ?? traceArtifacts[0]
+      ?? contextualDesignArtifact
       ?? designArtifacts[0]
       ?? null;
-  }, [allDesignArtifacts, designArtifacts, selectedArtifactId, traceModel.artifacts]);
+  }, [allDesignArtifacts, contextualDesignArtifact, designArtifacts, selectedArtifactId]);
   const activeReviewPacket = useMemo(() => {
-    return reviewPackets.find((packet) => packet.sessionId && packet.sessionId === session?.id)
-      ?? reviewPackets[0]
-      ?? null;
+    return selectReviewPacketForSession(reviewPackets, session?.id);
   }, [reviewPackets, session?.id]);
   const lastFailure = useMemo(() => findLatestFailureEvent(events), [events]);
   const hasChangedFileContext = (designTrace?.files.length ?? 0) > 0 || Boolean(designTrace?.error);
   const hasDesignSystemTraceContext = (designTrace?.designSystemFiles.length ?? 0) > 0;
-  const hasDesignArtifactContext = allDesignArtifacts.length > 0;
-  const hasPacketContext = Boolean(activeReviewPacket || allDesignArtifacts.length);
+  const hasDesignArtifactContext = sessionDesignArtifacts.length > 0;
+  const hasPacketContext = Boolean(activeReviewPacket || sessionDesignArtifacts.length);
   const hasCreationEventContext = events.some((event) =>
     /artifact|design|decision|acceptance|screenshot|snapshot|figma|research/i.test(event.type),
   );
@@ -800,8 +814,7 @@ export function App() {
     || hasCreationEventContext
     || chatSearchQuery.trim()
     || chatMemoryPins.length
-    || lastFailure
-    || (session && events.length > 0),
+    || lastFailure,
   );
   const shouldShowPacketTab = rightPaneTab === "work-packet" || hasPacketContext;
   const shouldShowDesignSystemTab = rightPaneTab === "design-system" || designLaneState.hasDesignSystem;
@@ -817,16 +830,16 @@ export function App() {
     return ALL_RIGHT_PANE_TABS.filter((tab) => visibleIds.has(tab.id));
   }, [rightPaneTab, shouldShowBoardTab, shouldShowDesignSystemTab, shouldShowFigmaTab, shouldShowPacketTab]);
   const designLaneReceipt = useMemo<RunSpineReceiptModel | null>(() => {
-    if (activeDesignArtifact) {
+    if (contextualDesignArtifact) {
       return {
-        id: `design-system-${activeDesignArtifact.id}`,
+        id: `design-system-${contextualDesignArtifact.id}`,
         label: "Design lane",
-        status: activeDesignArtifact.status === "draft" ? "warn" : "done",
-        title: activeDesignArtifact.title,
+        status: contextualDesignArtifact.status === "draft" ? "warn" : "done",
+        title: contextualDesignArtifact.title,
         fields: [
-          { label: "system", value: trimText(activeDesignArtifact.title, 28) },
-          { label: "sections", value: String(activeDesignArtifact.sections.length) },
-          { label: "review", value: activeDesignArtifact.status },
+          { label: "system", value: trimText(contextualDesignArtifact.title, 28) },
+          { label: "sections", value: String(contextualDesignArtifact.sections.length) },
+          { label: "review", value: contextualDesignArtifact.status },
         ],
         onSelect: () => chooseRightPane("design-system", "Design-system artifact opened from run spine"),
       };
@@ -850,7 +863,7 @@ export function App() {
       };
     }
     return null;
-  }, [activeDesignArtifact, iaBoardSync, iaBoardExports.length, mermaidBoard, mermaidBoardSync, mermaidBoardExports.length, scenarioDesignPackage?.mermaidArtifacts?.length, scenarioFigJamExports.length]);
+  }, [contextualDesignArtifact, iaBoardSync, iaBoardExports.length, mermaidBoard, mermaidBoardSync, mermaidBoardExports.length, scenarioDesignPackage?.mermaidArtifacts?.length, scenarioFigJamExports.length]);
   const latestRun = session ?? recentSessions[0] ?? null;
   const workspaceLabel = compactWorkspaceLabel(status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "");
   const truthStripItems = useMemo<TruthStripItemModel[]>(() => [
@@ -2292,7 +2305,7 @@ export function App() {
       `Session: ${session?.id ?? "draft"}`,
       `Status: ${visibleSessionStatus}`,
       `Files: ${designTrace?.files.length ?? 0}`,
-      `Artifacts: ${(traceModel.artifacts?.length ?? 0) + designArtifacts.length}`,
+      `Artifacts: ${sessionDesignArtifacts.length}`,
       `Events: ${events.length}`,
       lastFailure ? `Failure: ${lastFailure.message}` : "Failures: none",
     ].join("\n");
@@ -3264,7 +3277,7 @@ export function App() {
             traceModel={traceModel}
             events={events}
             terminalBlocks={terminalBlocks}
-            artifacts={allDesignArtifacts}
+            artifacts={sessionDesignArtifacts}
             designTrace={designTrace}
             memoryPins={chatMemoryPins}
             packet={activeReviewPacket}
@@ -3633,7 +3646,7 @@ export function App() {
         activities={traceModel.activities}
         activeProcesses={traceModel.activeProcesses}
         designTrace={designTrace}
-        artifacts={allDesignArtifacts}
+        artifacts={sessionDesignArtifacts}
         events={events}
         lastFailure={lastFailure}
         usageSnapshot={usageSnapshot}
