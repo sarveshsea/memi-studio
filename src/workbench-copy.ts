@@ -103,7 +103,7 @@ export const WORKBENCH_ACTIONS = {
   attach: { id: "attachment.add", label: "Attach", ariaLabel: "Attach context", title: "Attach context", icon: "attach", iconOnly: true },
   planToggle: { id: "codex.plan-mode.toggle", label: "Plan", ariaLabel: "Toggle plan mode", title: "Plan mode", icon: "plan", iconOnly: true },
   run: { id: "session.run", label: "Run", ariaLabel: "Run session", title: "Run", icon: "run", iconOnly: true },
-  continue: { id: "session.continue", label: "Continue", ariaLabel: "Continue conversation", title: "Continue conversation", icon: "run", iconOnly: false },
+  continue: { id: "session.continue", label: "Continue", ariaLabel: "Continue conversation", title: "Continue conversation", icon: "run", iconOnly: true },
   stop: { id: "session.cancel", label: "Stop", ariaLabel: "Stop session", title: "Stop", icon: "stop", iconOnly: true },
   latest: { id: "conversation.scroll-latest", label: "Latest", ariaLabel: "Scroll to latest output", title: "Latest output", icon: "latest", iconOnly: true },
   changeWorkspace: { id: "workspace.change", label: "Open folder", ariaLabel: "Open folder", title: "Open folder", icon: "workspace", iconOnly: true },

@@ -27,7 +27,7 @@
   --console-max-width: 1120px;
   --command-textarea-height: 52px;
   --drawer-width: 540px;
-  --run-button-width: 96px;
+  --run-button-width: 32px;
   --chat-rail-width: 48%;
   --project-sidebar-width: 280px;
   --project-sidebar-collapsed-width: 56px;
@@ -1636,9 +1636,8 @@ button.active,
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-.harness-switcher button:disabled {
-  cursor: not-allowed;
-  opacity: .42;
+.harness-switcher button[aria-disabled="true"] {
+  opacity: .62;
 }
 .harness-switcher-status {
   position: absolute;
@@ -1693,10 +1692,35 @@ button.active,
 .composer-icon-toggle { min-width: 58px; min-height: var(--control-height); display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-1); }
 .command-dock[data-composer-layout="single-toolbar"] .attachment-button { flex: 0 0 var(--control-height-compact); width: var(--control-height-compact); min-width: var(--control-height-compact); }
 .command-dock[data-composer-layout="single-toolbar"] .composer-icon-toggle { flex: 0 0 auto; min-width: 58px; }
-.command-dock[data-composer-layout="single-toolbar"] .composer-select { flex: 1 1 0; min-width: 64px; max-width: 132px; }
+.command-dock[data-composer-layout="single-toolbar"] .composer-select {
+  flex: 0 0 var(--control-height-compact);
+  width: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  max-width: var(--control-height-compact);
+  min-height: var(--control-height-compact);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: var(--space-0);
+}
+.command-dock[data-composer-layout="single-toolbar"] .composer-select .composer-control-text,
+.command-dock[data-composer-layout="single-toolbar"] .usage-limit-chip span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .command-dock[data-composer-layout="single-toolbar"] .harness-switcher { flex: 0 0 auto; }
 .command-dock[data-composer-layout="single-toolbar"] .submit-button { flex: 0 0 var(--run-button-width); width: var(--run-button-width); margin-inline-start: auto; }
 .command-dock[data-composer-layout="single-toolbar"] .composer-controls > .danger { flex: 0 0 auto; min-width: 60px; }
+.command-dock[data-composer-layout="single-toolbar"] .usage-limit-chip {
+  width: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  min-height: var(--control-height-compact);
+  padding: var(--space-0);
+}
 .usage-limit-chip { min-width: 76px; min-height: var(--control-height); display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); color: var(--ink-muted); padding: var(--space-1); font-size: var(--font-size-xs); }
 .usage-limit-chip.warning { border-color: var(--warning); color: var(--ink); }
 .usage-limit-chip.limited { border-color: var(--danger); color: var(--danger); }

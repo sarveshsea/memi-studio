@@ -189,9 +189,10 @@ import { WORKBENCH_COPY, workbenchAction, type WorkbenchIconName } from "./workb
 import {
   DEFAULT_PRIMARY_HARNESS_ID,
   DEFAULT_RIGHT_PANE_TAB_IDS,
+  composerHarnesses,
+  normalizeComposerHarness,
   normalizePrimaryHarness,
   normalizeRightPaneTab,
-  primaryHarnesses,
   type WorkbenchRightPaneTab,
 } from "./studio-workbench";
 
@@ -673,11 +674,13 @@ export function App() {
   );
   const codexHarness = useMemo(() => harnesses.find((harness) => harness.id === "codex"), [harnesses]);
   const claudeHarness = useMemo(() => harnesses.find((harness) => harness.id === "claude-code"), [harnesses]);
-  const visibleHarnesses = useMemo(() => primaryHarnesses(harnesses), [harnesses]);
+  const visibleHarnesses = useMemo(() => composerHarnesses(harnesses), [harnesses]);
 
   const harnessActions = useMemo(() => actionsForHarness(currentHarness), [currentHarness]);
   const effectiveAction: StudioAction = resolveHarnessAction(selectedAction, currentHarness);
   const effectiveActionLabel = harnessActions.find((action) => action.id === effectiveAction)?.label ?? effectiveAction;
+  const activeChatModeLabel = CHAT_MODES.find((mode) => mode.id === chatMode)?.label ?? chatMode;
+  const activePermissionModeLabel = PERMISSION_MODES.find((mode) => mode.id === permissionMode)?.label ?? permissionMode;
   const activeModePreset = MODE_PRESETS.find((preset) =>
     preset.action === selectedAction && preset.chatMode === chatMode && preset.permissionMode === permissionMode,
   )?.id ?? null;
@@ -693,7 +696,9 @@ export function App() {
   const isResumingInterrupted = Boolean(session?.status === "interrupted");
   const activeModelRegistry = harnessModelRegistries[selectedHarness] ?? null;
   const activeModelId = selectedModelByHarness[selectedHarness] ?? activeModelRegistry?.defaultModelId ?? null;
+  const activeModelLabel = activeModelRegistry?.models.find((model) => model.id === activeModelId)?.label ?? activeModelId ?? "Default";
   const effortOptions = effortOptionsForRegistry(activeModelRegistry, activeModelId);
+  const activeEffortLabel = selectedEffort ? selectedEffort[0].toUpperCase() + selectedEffort.slice(1) : "Default";
   const showModelPicker = Boolean(activeModelRegistry && activeModelRegistry.supportsModelPicker && activeModelRegistry.models.length > 0);
   const showEffortPicker = effortOptions.length > 0;
   const conversationTurnCount = activeConversationId
@@ -789,7 +794,7 @@ export function App() {
       reason,
     };
   }, [hasDesignArtifactContext, hasDesignPromptContext, hasDesignSystemTraceContext, hasFigJamContext, hasFigmaConnection]);
-  const showConversationGoalRow = Boolean(goalEditorOpen || conversationGoal.trim() || conversationTurnCount > 0);
+  const showConversationGoalRow = Boolean(goalEditorOpen || conversationGoal.trim());
   const showCreationStrip = Boolean(
     hasPacketContext
     || hasCreationEventContext
@@ -1130,7 +1135,7 @@ export function App() {
       setRecentWorkspaces(nextRecentWorkspaces);
       setWorkspacePermissions(nextWorkspacePermissions);
       if (!session && nextSessions[0]) {
-        await openSessionSummary(nextSessions[0]);
+        await openSessionSummary(nextSessions[0], nextResolvedHarnesses);
       }
       const primaryHarnessStatusIncomplete = ["codex", "claude-code"].some((id) =>
         !nextResolvedHarnesses.find((harness) => harness.id === id)?.authStatus,
@@ -1215,12 +1220,12 @@ export function App() {
     });
   }
 
-  async function openSessionSummary(nextSession: SessionSummary) {
+  async function openSessionSummary(nextSession: SessionSummary, availableHarnesses = harnesses) {
     setSession(nextSession);
     setServerTrace(null);
     setCollapsedBlockIds(new Set());
     setSelectedAction((nextSession.action as StudioAction | undefined) ?? "raw");
-    setSelectedHarness(normalizePrimaryHarness(nextSession.harness, harnesses));
+    setSelectedHarness(normalizeComposerHarness(nextSession.harness, availableHarnesses));
     setChatMode(nextSession.chatMode ?? "ideate");
     setPermissionMode(nextSession.permissionMode ?? "guarded");
     setActiveConversationId(nextSession.conversationId ?? nextSession.id);
@@ -1805,7 +1810,7 @@ export function App() {
   }
 
   function chooseHarness(id: HarnessId) {
-    const nextId = normalizePrimaryHarness(id, harnesses);
+    const nextId = normalizeComposerHarness(id, harnesses);
     const nextHarness = harnesses.find((harness) => harness.id === nextId);
     setSelectedHarness(nextId);
     setSettingsDraft((current) => current ? { ...current, defaultHarness: nextId } : current);
@@ -1817,7 +1822,7 @@ export function App() {
     try {
       const saved = await saveConfig(settingsDraft);
       setSettingsDraft(saved);
-      setSelectedHarness(saved.defaultHarness);
+      setSelectedHarness(normalizeComposerHarness(saved.defaultHarness, harnesses));
       setInputMode(saved.ui?.inputMode ?? "agent");
       setThemeMode(saved.ui?.theme === "light" ? "light" : "dark");
       setSettingsSavedAt(formatTime(new Date().toISOString()));
@@ -3462,36 +3467,36 @@ export function App() {
                 <StudioControlIcon name="attach" />
                 <input ref={fileInputRef} type="file" multiple onChange={handleAttachmentPick} />
               </label>
-              <label className="composer-select" data-composer-control="mode" title="Mode">
+              <label className="composer-select" data-composer-control="mode" title={`Mode: ${activeChatModeLabel}`}>
                 <StudioControlIcon name="mode" />
-                <span className="composer-control-text">{CHAT_MODES.find((mode) => mode.id === chatMode)?.label ?? chatMode}</span>
-                <select aria-label="Mode" data-action-id="chat-mode.select" value={chatMode} onChange={(event) => setChatMode(event.target.value as StudioChatMode)}>
+                <span className="composer-control-text">{activeChatModeLabel}</span>
+                <select aria-label={`Mode: ${activeChatModeLabel}`} data-action-id="chat-mode.select" value={chatMode} onChange={(event) => setChatMode(event.target.value as StudioChatMode)}>
                   {CHAT_MODES.map((mode) => (
                     <option key={mode.id} value={mode.id}>{mode.label}</option>
                   ))}
                 </select>
               </label>
-              <label className="composer-select" data-composer-control="access" title={permissionModePowerDetail(permissionMode)}>
+              <label className="composer-select" data-composer-control="access" title={`Access: ${activePermissionModeLabel} — ${permissionModePowerDetail(permissionMode)}`}>
                 <StudioControlIcon name="access" />
-                <span className="composer-control-text">{PERMISSION_MODES.find((mode) => mode.id === permissionMode)?.label ?? permissionMode}</span>
-                <select aria-label="Permission" data-action-id="permission-mode.select" value={permissionMode} onChange={(event) => setPermissionMode(event.target.value as StudioPermissionMode)}>
+                <span className="composer-control-text">{activePermissionModeLabel}</span>
+                <select aria-label={`Access: ${activePermissionModeLabel}`} data-action-id="permission-mode.select" value={permissionMode} onChange={(event) => setPermissionMode(event.target.value as StudioPermissionMode)}>
                   {PERMISSION_MODES.map((mode) => (
                     <option key={mode.id} value={mode.id}>{mode.label}</option>
                   ))}
                 </select>
               </label>
-              <div className="harness-switcher" role="radiogroup" aria-label="Harness" data-composer-control="harness">
+              <div className="harness-switcher" role="radiogroup" aria-label="Agent" data-composer-control="harness">
                 {visibleHarnesses.map((harness) => {
                   const selected = selectedHarness === harness.id;
                   return (
                     <button
                       key={harness.id}
                       aria-checked={selected}
+                      aria-disabled={!harness.enabled}
                       aria-label={composerHarnessTitle(harness)}
                       data-action-id={`harness.select.${harness.id}`}
                       data-harness-id={harness.id}
                       data-harness-ready={harnessAuthDot(harness)}
-                      disabled={!harness.enabled}
                       role="radio"
                       title={composerHarnessTitle(harness)}
                       type="button"
@@ -3514,11 +3519,11 @@ export function App() {
                 <StudioControlIcon name="pin" />
               </button>
               {showModelPicker ? (
-                <label className="composer-select" data-composer-control="model" title="Model">
+                <label className="composer-select" data-composer-control="model" title={`Model: ${activeModelLabel}`}>
                   <StudioControlIcon name="harness" />
-                  <span className="composer-control-text">{activeModelRegistry?.models.find((m) => m.id === activeModelId)?.label ?? activeModelId ?? "Default"}</span>
+                  <span className="composer-control-text">{activeModelLabel}</span>
                   <select
-                    aria-label="Model"
+                    aria-label={`Model: ${activeModelLabel}`}
                     data-action-id="harness.model.select"
                     value={activeModelId ?? ""}
                     onChange={(event) => setSelectedModelByHarness((current) => ({ ...current, [selectedHarness]: event.target.value }))}
@@ -3530,11 +3535,11 @@ export function App() {
                 </label>
               ) : null}
               {showEffortPicker ? (
-                <label className="composer-select" data-composer-control="effort" title="Reasoning effort">
+                <label className="composer-select" data-composer-control="effort" title={`Reasoning effort: ${activeEffortLabel}`}>
                   <StudioControlIcon name="plan" />
-                  <span className="composer-control-text">{selectedEffort ? selectedEffort[0].toUpperCase() + selectedEffort.slice(1) : "Default"}</span>
+                  <span className="composer-control-text">{activeEffortLabel}</span>
                   <select
-                    aria-label="Effort"
+                    aria-label={`Reasoning effort: ${activeEffortLabel}`}
                     data-action-id="harness.effort.select"
                     value={selectedEffort ?? ""}
                     onChange={(event) => setSelectedEffort(event.target.value === "" ? null : event.target.value as StudioEffort)}
@@ -3546,11 +3551,11 @@ export function App() {
                   </select>
                 </label>
               ) : null}
-              <label className="composer-select" data-composer-control="action" title="Action">
+              <label className="composer-select" data-composer-control="action" title={`Action: ${effectiveActionLabel}`}>
                 <StudioControlIcon name="action" />
-                <span className="composer-control-text">{harnessActions.find((action) => action.id === effectiveAction)?.label ?? effectiveAction}</span>
+                <span className="composer-control-text">{effectiveActionLabel}</span>
                 <select
-                  aria-label="Action"
+                  aria-label={`Action: ${effectiveActionLabel}`}
                   data-action-id="harness.action.select"
                   value={effectiveAction}
                   onChange={(event) => setSelectedAction(event.target.value as StudioAction)}
@@ -3595,7 +3600,7 @@ export function App() {
                       : workbenchAction("run").title
                   : runDisabledMessage}
               >
-                {isStartingSession ? <span aria-hidden="true">...</span> : isResumingInterrupted ? <span aria-hidden="true">Resume</span> : canContinueConversation ? <span aria-hidden="true">Continue</span> : null}
+                {isStartingSession ? <span aria-hidden="true">...</span> : null}
               </IconButton>
             </div>
             {runBlockedMessage ? (

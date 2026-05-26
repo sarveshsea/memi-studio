@@ -5,6 +5,7 @@ import type { Harness, HarnessId } from "./studio-api";
 import type { WORKBENCH_COPY } from "./workbench-copy";
 
 export const PRIMARY_HARNESS_IDS = ["codex", "claude-code"] as const satisfies HarnessId[];
+export const COMPOSER_HARNESS_IDS = ["codex", "claude-code", "ollama"] as const satisfies HarnessId[];
 export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
 
 export type HarnessVisibility = "primary" | "advanced";
@@ -25,10 +26,20 @@ export function primaryHarnesses(harnesses: Harness[]): Harness[] {
   return PRIMARY_HARNESS_IDS.map((id) => byId.get(id)).filter((harness): harness is Harness => Boolean(harness));
 }
 
+export function composerHarnesses(harnesses: Harness[]): Harness[] {
+  const byId = new Map(harnesses.map((harness) => [harness.id, harness]));
+  return COMPOSER_HARNESS_IDS.map((id) => byId.get(id)).filter((harness): harness is Harness => Boolean(harness));
+}
+
 export function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): HarnessId {
   if (isPrimaryHarness(id) && harnesses.some((harness) => harness.id === id)) return id;
   if (harnesses.some((harness) => harness.id === DEFAULT_PRIMARY_HARNESS_ID)) return DEFAULT_PRIMARY_HARNESS_ID;
   return primaryHarnesses(harnesses)[0]?.id ?? DEFAULT_PRIMARY_HARNESS_ID;
+}
+
+export function normalizeComposerHarness(id: HarnessId, harnesses: Harness[]): HarnessId {
+  if (composerHarnesses(harnesses).some((harness) => harness.id === id)) return id;
+  return normalizePrimaryHarness(id, harnesses);
 }
 
 export function isDefaultWorkbenchPane(tab: WorkbenchRightPaneTab): boolean {
