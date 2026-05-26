@@ -1004,9 +1004,9 @@ export function App() {
     ?? latestActivity?.summary
     ?? compactSessionStatusLabel(visibleSessionStatus);
   const runPanelTitle = latestRun
-    ? trimText(latestRun.prompt, 72)
+    ? queueDockPromptLabel(latestRun.prompt, latestRun.harness, 72)
     : prompt.trim()
-      ? trimText(prompt.trim(), 72)
+      ? queueDockPromptLabel(prompt.trim(), selectedHarness, 72)
       : "New run";
 
   useEffect(() => {
@@ -1037,14 +1037,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (runtimeHealth !== "starting") return undefined;
+    if (runtimeHealth !== "starting" && runtimeHealth !== "degraded") return undefined;
+    const delay = runtimeHealth === "starting" ? 750 : 2000;
     const interval = window.setInterval(() => {
       if (runtimeStartupRefreshInFlightRef.current) return;
       runtimeStartupRefreshInFlightRef.current = true;
       void refresh().finally(() => {
         runtimeStartupRefreshInFlightRef.current = false;
       });
-    }, 750);
+    }, delay);
     return () => {
       window.clearInterval(interval);
       runtimeStartupRefreshInFlightRef.current = false;
@@ -3359,7 +3360,7 @@ export function App() {
           {isStartingSession ? (
             <button className="agent-queue-chip" aria-label={WORKBENCH_COPY.queue.queuedLabel} data-agent-queue-chip data-status="queued" data-action-id="queue.starting" type="button" disabled={true} title={WORKBENCH_COPY.queue.queuedLabel}>
               <span aria-hidden="true">...</span>
-              <small>{trimText(startingPrompt || prompt.trim() || WORKBENCH_COPY.queue.fallbackPrompt, 32)}</small>
+              <small>{queueDockPromptLabel(startingPrompt || prompt.trim() || WORKBENCH_COPY.queue.fallbackPrompt, selectedHarness)}</small>
             </button>
           ) : null}
           {sessionInventory.slice(0, isStartingSession ? 4 : 5).map((recent) => (
@@ -3374,7 +3375,7 @@ export function App() {
               onClick={() => void openSessionSummary(recent)}
             >
               <span aria-hidden="true">{queueDockStatusGlyph(recent.status)}</span>
-              <small>{trimText(recent.prompt || recent.action || WORKBENCH_COPY.queue.fallbackPrompt, 32)}</small>
+              <small>{queueDockSessionLabel(recent)}</small>
             </button>
           ))}
           {!isStartingSession && sessionInventory.length === 0 ? (
@@ -4706,6 +4707,9 @@ function RunSpine(props: {
   onSelectEvent: (event: StudioEvent) => void;
 }) {
   const promptText = props.session?.prompt ?? props.prompt.trim();
+  const promptSummary = promptText
+    ? queueDockPromptLabel(promptText, props.session?.harness, 180)
+    : "Start with a prompt. The run spine will fill in as the agent works.";
   const latestPlan = [...props.activities].reverse().find((activity) =>
     activity.kind === "thinking" || /plan|intent|reason/i.test(`${activity.label} ${activity.summary}`),
   ) ?? null;
@@ -4744,7 +4748,7 @@ function RunSpine(props: {
       id: "prompt",
       label: "Prompt",
       status: promptText ? "done" : "idle",
-      summary: promptText ? trimText(promptText, 180) : "Start with a prompt. The run spine will fill in as the agent works.",
+      summary: promptSummary,
       meta: props.session ? `${props.session.harness} / ${props.session.action ?? "run"}` : props.actionLabel,
     },
     {
@@ -5751,6 +5755,27 @@ function queueDockStatusGlyph(status: SessionSummary["status"]): string {
   if (status === "completed") return "ok";
   if (status === "cancelled") return "x";
   return "!";
+}
+
+function queueDockSessionLabel(session: SessionSummary): string {
+  return queueDockPromptLabel(session.prompt || session.action || WORKBENCH_COPY.queue.fallbackPrompt, session.harness);
+}
+
+function queueDockPromptLabel(prompt: string, harness?: HarnessId, maxLength = 32): string {
+  const marker = prompt.match(/\bMEMI_[A-Z0-9_]+(?:_OK|_DONE)\b/);
+  if (marker) return `${shortHarnessLabel(harness)} verification`;
+  if (/live e2e proof/i.test(prompt)) return `${shortHarnessLabel(harness)} E2E proof`;
+  if (/lifecycle smoke/i.test(prompt)) return `${shortHarnessLabel(harness)} lifecycle`;
+  if (/smoke test/i.test(prompt)) return `${shortHarnessLabel(harness)} smoke`;
+  return trimText(prompt, maxLength);
+}
+
+function shortHarnessLabel(harness?: HarnessId): string {
+  if (harness === "codex") return "Codex";
+  if (harness === "claude-code") return "Claude";
+  if (harness === "ollama") return "Ollama";
+  if (harness === "opencode") return "OpenCode";
+  return "Run";
 }
 
 function readFileAsText(file: File): Promise<string> {

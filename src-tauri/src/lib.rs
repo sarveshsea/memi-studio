@@ -28,7 +28,7 @@ use tauri_plugin_dialog::DialogExt;
 const STUDIO_RUNTIME_PORT: u16 = 8765;
 const STUDIO_RUNTIME_BIN: &str = "memi-studio-runtime";
 const STUDIO_RUNTIME_RESOURCE_DIR: &str = "resources/memoire-runtime";
-const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 40;
+const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 120;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
 const MANAGED_RUNTIME_PID_FILE: &str = "managed-runtime.json";
 const RUNTIME_SIGNATURE_MANIFEST: &str = "source-signatures.json";
@@ -464,7 +464,13 @@ fn is_sensitive_workspace(path: &Path) -> bool {
     sensitive_workspace_paths()
         .into_iter()
         .map(PathBuf::from)
-        .any(|sensitive| path.starts_with(sensitive))
+        .any(|sensitive| {
+            if sensitive == Path::new("/Volumes") {
+                path == sensitive
+            } else {
+                path.starts_with(sensitive)
+            }
+        })
 }
 
 fn sensitive_workspace_paths() -> Vec<String> {
@@ -2452,6 +2458,23 @@ mod runtime_cache_tests {
             package_root,
             source_kind: "test".to_string(),
         }
+    }
+
+    #[test]
+    fn sensitive_workspace_allows_external_volume_project_paths() {
+        assert!(is_sensitive_workspace(Path::new("/Volumes")));
+        assert!(!is_sensitive_workspace(Path::new(
+            "/Volumes/ExtremeSSD/Projects/memi-studio"
+        )));
+    }
+
+    #[test]
+    fn sensitive_workspace_blocks_system_and_secret_paths() {
+        assert!(is_sensitive_workspace(Path::new("/Applications")));
+        assert!(is_sensitive_workspace(Path::new(
+            "/Applications/Mémoire Studio.app"
+        )));
+        assert!(is_sensitive_workspace(&home_root().join(".ssh")));
     }
 
     #[test]

@@ -431,6 +431,36 @@ button.active,
 .project-session-list { position: relative; margin: var(--space-1) var(--space-0) var(--space-1) var(--space-4); padding: var(--space-0) var(--space-0) var(--space-0) var(--space-1); }
 .project-session-list::before { content: ""; position: absolute; top: var(--space-0); bottom: var(--space-0); left: var(--space-0); width: 1px; background: var(--line); }
 .project-session-list button { position: relative; min-height: calc(var(--control-height) + var(--space-2)); grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+.project-session-archive {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.project-session-archive summary {
+  min-width: 0;
+  min-height: var(--control-height-compact);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-compact);
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  list-style: none;
+  padding: var(--space-0-5) var(--space-2);
+}
+.project-session-archive summary::-webkit-details-marker {
+  display: none;
+}
+.project-session-archive summary:hover {
+  background: var(--surface-muted);
+  color: var(--ink-muted);
+}
+.project-session-archive-list {
+  display: grid;
+  gap: var(--space-1);
+}
 .project-session-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-1); }
 .project-sidebar span,
 .project-sidebar small,

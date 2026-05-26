@@ -398,7 +398,9 @@ export function CreationStrip(props: {
   const followUps = deriveChatFollowUps(props);
   const verification = deriveVerificationSignals(props);
   const cards = artifactCardsFromPacket(props.packet, props.events);
-  const objective = props.packet?.objective || props.session?.prompt || "Draft agent work";
+  const sessionObjective = props.session ? projectSessionNavItem(props.session).title : "Draft agent work";
+  const objective = props.packet?.objective || sessionObjective;
+  const objectiveTitle = props.packet?.objective || props.session?.prompt || "Draft agent work";
   const latestArtifact = cards[0] ?? null;
   const latestDesignArtifact = props.artifacts[0] ?? null;
   const canOpenPacket = Boolean(props.packet || latestArtifact || latestDesignArtifact);
@@ -410,7 +412,7 @@ export function CreationStrip(props: {
       <div className="creation-strip-head">
         <div>
           <strong>Context</strong>
-          <span title={objective}>{trimText(objective, 96)}</span>
+          <span title={objectiveTitle}>{trimText(objective, 96)}</span>
         </div>
         {canOpenPacket ? (
           <button data-action-id="work-packet.open" data-creation-strip-action="open-packet" type="button" onClick={props.onOpenPacket}>
@@ -1237,6 +1239,12 @@ export function ProjectSidebar(props: {
           </div>
           {projects.map((project) => {
             const isExpanded = expanded.has(project.id) || project.sessions.some((session) => session.id === props.currentSessionId);
+            const navItems = project.sessions.map(projectSessionNavItem);
+            const primaryNavItems = navItems.filter((item) => !item.isVerification);
+            const verificationNavItems = navItems.filter((item) => item.isVerification);
+            const visiblePrimaryItems = primaryNavItems.slice(0, 8);
+            const visibleVerificationItems = verificationNavItems.slice(0, 8);
+            const currentSessionIsVerification = verificationNavItems.some((item) => item.session.id === props.currentSessionId);
             return (
               <section className="project-folder" key={project.id} data-project-folder={project.id}>
                 <button
@@ -1255,23 +1263,50 @@ export function ProjectSidebar(props: {
                 </button>
                 {isExpanded ? (
                   <div className="project-session-list">
-                    {project.sessions.slice(0, 12).map((session) => (
+                    {visiblePrimaryItems.map((item) => (
                       <button
-                        className={session.id === props.currentSessionId ? "active" : ""}
-                        data-action-id={`session.switch.${session.id}`}
+                        className={item.session.id === props.currentSessionId ? "active" : ""}
+                        data-action-id={`session.switch.${item.session.id}`}
                         data-project-session-row="true"
-                        key={session.id}
+                        key={item.session.id}
                         type="button"
-                        onClick={() => props.onOpenSession(session)}
-                        title={session.prompt}
+                        onClick={() => props.onOpenSession(item.session)}
+                        title={item.titleDetail}
                       >
-                        <i className="project-session-status" data-status={session.status} aria-hidden="true" />
+                        <i className="project-session-status" data-status={item.session.status} aria-hidden="true" />
                         <span className="project-session-copy">
-                          <span>{trimText(session.prompt, 54)}</span>
-                          <small>{session.harness} / {session.action ?? "run"} / {session.status}</small>
+                          <span>{item.title}</span>
+                          <small>{item.meta}</small>
                         </span>
                       </button>
                     ))}
+                    {verificationNavItems.length ? (
+                      <details className="project-session-archive" open={currentSessionIsVerification}>
+                        <summary>
+                          <span>Verification runs</span>
+                          <small>{verificationNavItems.length}</small>
+                        </summary>
+                        <div className="project-session-archive-list">
+                          {visibleVerificationItems.map((item) => (
+                            <button
+                              className={item.session.id === props.currentSessionId ? "active" : ""}
+                              data-action-id={`session.switch.${item.session.id}`}
+                              data-project-session-row="verification"
+                              key={item.session.id}
+                              type="button"
+                              onClick={() => props.onOpenSession(item.session)}
+                              title={item.titleDetail}
+                            >
+                              <i className="project-session-status" data-status={item.session.status} aria-hidden="true" />
+                              <span className="project-session-copy">
+                                <span>{item.title}</span>
+                                <small>{item.meta}</small>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
                 ) : null}
               </section>
@@ -1337,6 +1372,51 @@ export function groupSessionsByProject(sessions: SessionSummary[]): Array<{ id: 
     });
   }
   return Array.from(groups.values());
+}
+
+interface ProjectSessionNavItem {
+  session: SessionSummary;
+  title: string;
+  titleDetail: string;
+  meta: string;
+  isVerification: boolean;
+}
+
+function projectSessionNavItem(session: SessionSummary): ProjectSessionNavItem {
+  const marker = session.prompt.match(/\bMEMI_[A-Z0-9_]+(?:_OK|_DONE)\b/);
+  const harness = sessionHarnessLabel(session.harness);
+  const action = readableSessionAction(session.action);
+  const isVerification = Boolean(marker) || /smoke|e2e proof|verification/i.test(`${session.prompt} ${session.conversationId ?? ""}`);
+  let title = trimText(session.prompt.trim() || "Untitled run", 54);
+  if (marker) {
+    title = `${harness} verification`;
+  } else if (/live e2e proof/i.test(session.prompt)) {
+    title = `${harness} E2E proof`;
+  } else if (/lifecycle smoke/i.test(session.prompt)) {
+    title = `${harness} lifecycle smoke`;
+  } else if (/smoke test/i.test(session.prompt)) {
+    title = `${harness} smoke`;
+  }
+  return {
+    session,
+    title,
+    titleDetail: session.prompt,
+    meta: `${action} / ${session.status}`,
+    isVerification,
+  };
+}
+
+function sessionHarnessLabel(harness: SessionSummary["harness"]): string {
+  if (harness === "codex") return "Codex";
+  if (harness === "claude-code") return "Claude";
+  if (harness === "ollama") return "Ollama";
+  if (harness === "opencode") return "OpenCode";
+  return String(harness);
+}
+
+function readableSessionAction(action: SessionSummary["action"]): string {
+  if (!action) return "run";
+  return action.replace(/-/g, " ");
 }
 
 function StudioLineIcon({ children }: { children: ReactNode }) {
