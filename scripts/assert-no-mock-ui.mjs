@@ -81,6 +81,35 @@ if (runtimeVersion && runtimeTagVersion && runtimeVersion !== runtimeTagVersion)
   failures.push(`package.json: memoireRuntime.version ${runtimeVersion} must match release tag ${runtimeTagVersion}`);
 }
 
+const packageInfoSource = readFileSync(join(ROOT, "src/runtime/package-info.ts"), "utf8");
+function exportedConst(name) {
+  const match = packageInfoSource.match(new RegExp(`export\\s+const\\s+${name}\\s*=\\s*["']([^"']+)["']`));
+  if (!match) failures.push(`src/runtime/package-info.ts: missing ${name}`);
+  return match?.[1] ?? "";
+}
+
+const publicPackageName = exportedConst("MEMOIRE_PACKAGE_NAME");
+const publicPackageVersion = exportedConst("MEMOIRE_PACKAGE_VERSION");
+const publicPackageUrl = exportedConst("MEMOIRE_PACKAGE_URL");
+const runtimeResourcePackage = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/package.json"), "utf8"));
+const runtimeInfo = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/studio-runtime-info.json"), "utf8"));
+
+if (runtimeResourcePackage.name !== publicPackageName) {
+  failures.push(`src-tauri/resources/memoire-runtime/package.json: name must be ${publicPackageName}, got ${runtimeResourcePackage.name}`);
+}
+if (runtimeResourcePackage.version !== publicPackageVersion) {
+  failures.push(`src-tauri/resources/memoire-runtime/package.json: version must be ${publicPackageVersion}, got ${runtimeResourcePackage.version}`);
+}
+if (runtimeResourcePackage.homepage?.includes("m-moire") || runtimeResourcePackage.repository?.url?.includes("m-moire") || runtimeResourcePackage.bugs?.url?.includes("m-moire")) {
+  failures.push("src-tauri/resources/memoire-runtime/package.json: remove stale m-moire public URLs");
+}
+if (runtimeInfo.packageName !== publicPackageName || runtimeInfo.packageVersion !== publicPackageVersion || runtimeInfo.packageUrl !== publicPackageUrl) {
+  failures.push("src-tauri/resources/memoire-runtime/studio-runtime-info.json: public package metadata must match src/runtime/package-info.ts");
+}
+if (!runtimeInfo.releaseTag || runtimeInfo.releaseTag !== packageJson.memoireRuntime?.releaseTag) {
+  failures.push("src-tauri/resources/memoire-runtime/studio-runtime-info.json: releaseTag must match package.json memoireRuntime.releaseTag");
+}
+
 if (failures.length) {
   console.error(failures.join("\n"));
   process.exitCode = 1;
