@@ -1096,6 +1096,21 @@ export function App() {
   }, [runtimeHealth, status?.runtime?.pid, status?.runtime?.url]);
 
   useEffect(() => {
+    if (runtimeHealth !== "ready" || recentSessions.length > 0 || session || !status?.projectRoot) return undefined;
+    let attempts = 0;
+    const interval = window.setInterval(() => {
+      attempts += 1;
+      void listSessions()
+        .then((nextSessions) => {
+          if (nextSessions.length > 0) setRecentSessions(nextSessions);
+        })
+        .catch(() => undefined);
+      if (attempts >= 6) window.clearInterval(interval);
+    }, 750);
+    return () => window.clearInterval(interval);
+  }, [recentSessions.length, runtimeHealth, session, status?.projectRoot]);
+
+  useEffect(() => {
     if (runtimeHealth !== "ready" || !status?.projectRoot) return undefined;
     const refreshIfVisible = () => {
       if (document.visibilityState === "hidden") return;
@@ -4653,6 +4668,8 @@ function RuntimeRecoveryStrip(props: {
   onRestart: () => void;
   onOpenSettings: () => void;
 }) {
+  const message = props.message
+    ?? (props.health === "starting" ? "Starting local runtime..." : "Runtime unavailable");
   return (
     <section
       className="runtime-recovery-strip"
@@ -4661,7 +4678,7 @@ function RuntimeRecoveryStrip(props: {
       aria-label="Runtime recovery"
     >
       <strong>{runtimeHealthLabel(props.health)}</strong>
-      <span title={props.message ?? undefined}>{trimText(props.message ?? "Runtime unavailable", 96)}</span>
+      <span title={message}>{trimText(message, 96)}</span>
       <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>
       <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
       <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
@@ -4701,7 +4718,7 @@ function runtimeTruthTitle(status: StudioStatus | null, recoveryMessage?: string
 }
 
 function queueDockItemsFromRuntime(metrics: StudioRuntimeMetrics | null | undefined, health: RuntimeHealth): Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> {
-  if (health !== "ready") return [{ id: "runtime", label: health === "starting" ? "Starting" : health === "degraded" ? "Blocked" : "Offline", detail: "Runtime", status: "blocked" }];
+  if (health !== "ready") return [{ id: "runtime", label: health === "starting" ? "Starting" : health === "degraded" ? "Blocked" : "Offline", detail: "Runtime", status: health === "starting" ? "running" : "blocked" }];
   if (!metrics) return [];
   const items: Array<{ id: string; label: string; detail: string; status: "empty" | "queued" | "running" | "blocked" }> = [];
   if (metrics.activeRuns > 0) items.push({ id: "active", label: "Running", detail: String(metrics.activeRuns), status: "running" });

@@ -2623,6 +2623,7 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
 .note-fork-layout textarea { min-height: 260px; width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); color: var(--ink); padding: var(--space-2); font-family: var(--font-studio); font-size: var(--font-size-sm); }
 .note-fork-layout pre { max-height: 220px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); padding: var(--space-2); }
 .runtime-recovery-strip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: var(--space-2); border: 1px solid var(--accent); border-radius: var(--radius-default); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); padding: var(--space-2); }
+.runtime-recovery-strip[data-runtime-recovery="starting"] { border-color: var(--line-strong); background: var(--surface-muted); }
 .runtime-recovery-strip > span, .research-source-strip strong, .research-source-strip small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .research-source-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; }
 .research-source-strip > span, .research-source-strip > button, .research-source-strip > article { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); color: var(--ink); padding: var(--space-1) var(--space-2); }
