@@ -412,6 +412,7 @@ export function App() {
   const traceRefreshTimerRef = useRef<number | null>(null);
   const pendingTraceSessionIdRef = useRef<string | null>(null);
   const harnessReadinessRefreshAttemptsRef = useRef(0);
+  const runtimeStartupRefreshInFlightRef = useRef(false);
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
@@ -1037,10 +1038,17 @@ export function App() {
 
   useEffect(() => {
     if (runtimeHealth !== "starting") return undefined;
-    const timeout = window.setTimeout(() => {
-      void refresh();
+    const interval = window.setInterval(() => {
+      if (runtimeStartupRefreshInFlightRef.current) return;
+      runtimeStartupRefreshInFlightRef.current = true;
+      void refresh().finally(() => {
+        runtimeStartupRefreshInFlightRef.current = false;
+      });
     }, 750);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearInterval(interval);
+      runtimeStartupRefreshInFlightRef.current = false;
+    };
   }, [runtimeHealth]);
 
   async function refresh() {

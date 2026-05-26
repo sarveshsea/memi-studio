@@ -526,8 +526,11 @@ fn workspace_root(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn current_runtime_status(state: &AppState, workspace_root: &Path) -> studio::StudioRuntimeStatus {
-    let runtime = state.runtime.lock().expect("runtime state lock");
-    runtime.status.clone().unwrap_or_else(|| {
+    let cached_status = {
+        let runtime = state.runtime.lock().expect("runtime state lock");
+        runtime.status.clone()
+    };
+    let mut status = cached_status.unwrap_or_else(|| {
         runtime_status(
             "stopped",
             None,
@@ -536,7 +539,13 @@ fn current_runtime_status(state: &AppState, workspace_root: &Path) -> studio::St
             None,
             Some("Studio runtime has not started yet".to_string()),
         )
-    })
+    });
+    if status.status != "running" && runtime_status_matches_workspace(STUDIO_RUNTIME_PORT, workspace_root) {
+        status.status = "running".to_string();
+        status.error = None;
+        status.supervisor_phase = Some("runtime-api-reconciled".to_string());
+    }
+    status
 }
 
 fn request_studio_runtime_restart(
@@ -1487,8 +1496,8 @@ fn runtime_source_signature_key(binary: &Path, package_root: &Path) -> Result<St
         ));
     }
     let mut hasher = Sha256::new();
-    hasher.update(b"memoire-studio-runtime-source-signature-v1");
-    hash_file_metadata(&mut hasher, Path::new("runtime-binary"), binary)?;
+    hasher.update(b"memoire-studio-runtime-source-signature-v2");
+    hash_file(&mut hasher, Path::new("runtime-binary"), binary)?;
     hash_dir_metadata(&mut hasher, package_root, package_root)?;
     Ok(hex_bytes(&hasher.finalize()))
 }
@@ -1992,6 +2001,19 @@ fn local_port_open(port: u16) -> bool {
 
 fn runtime_answers_status(port: u16) -> bool {
     matches!(local_http_get(port, "/api/status"), Some((200, _)))
+}
+
+fn runtime_status_matches_workspace(port: u16, workspace_root: &Path) -> bool {
+    let Some((200, body)) = local_http_get(port, "/api/status") else {
+        return false;
+    };
+    let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return false;
+    };
+    payload
+        .get("projectRoot")
+        .and_then(|value| value.as_str())
+        .is_some_and(|project_root| project_root == workspace_root.to_string_lossy())
 }
 
 fn runtime_harnesses(api_token: Option<&str>) -> Option<Vec<studio::HarnessStatus>> {
@@ -2681,6 +2703,21 @@ mod runtime_cache_tests {
             &source.package_root.join("skills").join("SUPERPOWER.md"),
             "ship it much harder\n",
         );
+        let second = runtime_source_signature_key(&source.binary, &source.package_root)
+            .expect("second signature");
+
+        assert_ne!(first, second);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn source_signature_changes_when_binary_content_changes() {
+        let root = temp_runtime_dir("signature-binary-change");
+        let source = runtime_source(&root);
+
+        let first = runtime_source_signature_key(&source.binary, &source.package_root)
+            .expect("first signature");
+        write_file(&source.binary, "#!/bin/sh\necho updated\n");
         let second = runtime_source_signature_key(&source.binary, &source.package_root)
             .expect("second signature");
 

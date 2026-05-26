@@ -1519,8 +1519,51 @@ async function getRuntimeApiToken(): Promise<string | null> {
 }
 
 export async function getStatus(): Promise<StudioStatus> {
-  if (hasTauri()) return invoke<StudioStatus>("studio_status");
+  if (hasTauri()) {
+    const shellStatus = await invoke<StudioStatus>("studio_status");
+    if (shellStatus.runtime?.status === "running") return shellStatus;
+    const runtimeStatus = await fetchRuntimeStatusWithoutToken();
+    if (!runtimeStatus || !["ready", "running"].includes(runtimeStatus.status) || runtimeStatus.projectRoot !== shellStatus.projectRoot) {
+      return shellStatus;
+    }
+    const shellRuntime = shellStatus.runtime;
+    return {
+      ...shellStatus,
+      status: runtimeStatus.status,
+      config: runtimeStatus.config ?? shellStatus.config,
+      harnesses: runtimeStatus.harnesses ?? shellStatus.harnesses,
+      security: runtimeStatus.security ?? shellStatus.security,
+      metrics: runtimeStatus.metrics ?? shellStatus.metrics,
+      runtime: {
+        status: "running",
+        port: shellRuntime?.port ?? 8765,
+        url: shellRuntime?.url ?? "http://127.0.0.1:8765",
+        pid: shellRuntime?.pid ?? null,
+        workspaceRoot: shellRuntime?.workspaceRoot ?? runtimeStatus.projectRoot,
+        apiToken: shellRuntime?.apiToken ?? null,
+        packageRoot: shellRuntime?.packageRoot ?? null,
+        runtimeBinary: shellRuntime?.runtimeBinary ?? null,
+        runtimeSource: shellRuntime?.runtimeSource ?? "runtime-api",
+        runtimeCacheRoot: shellRuntime?.runtimeCacheRoot ?? null,
+        supervisorPhase: shellRuntime?.supervisorPhase ?? "runtime-api-reconciled",
+        startupStartedAt: shellRuntime?.startupStartedAt ?? null,
+        startupMs: shellRuntime?.startupMs ?? null,
+        cachePrepareMs: shellRuntime?.cachePrepareMs ?? null,
+        error: null,
+      },
+    };
+  }
   return fetchJSON<StudioStatus>("/api/status");
+}
+
+async function fetchRuntimeStatusWithoutToken(): Promise<StudioStatus | null> {
+  try {
+    const response = await fetch(`${runtimeBase}/api/status`);
+    if (!response.ok) return null;
+    return response.json() as Promise<StudioStatus>;
+  } catch {
+    return null;
+  }
 }
 
 export async function getRuntimeMetrics(): Promise<StudioRuntimeMetrics> {
