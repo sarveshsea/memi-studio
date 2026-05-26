@@ -40,6 +40,16 @@ const STUDIO_HARNESS_MANIFEST = join(ROOT, "src-tauri", "resources", "harness-ma
 
 const ALL_ARCHS = process.argv.includes("--all-archs");
 const OFFLINE = process.argv.includes("--offline");
+const TEXT_RESOURCE_EXTENSIONS = new Set([
+  ".css",
+  ".html",
+  ".js",
+  ".json",
+  ".md",
+  ".mjs",
+  ".txt",
+  ".xml",
+]);
 
 function archToken(node) {
   if (node === "arm64") return "aarch64";
@@ -92,6 +102,42 @@ async function readJson(path) {
 
 async function writeJson(path, value) {
   await fs.writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function walkTextResources(root) {
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      files.push(...await walkTextResources(path));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const dotIndex = entry.name.lastIndexOf(".");
+    const extension = dotIndex >= 0 ? entry.name.slice(dotIndex) : "";
+    if (TEXT_RESOURCE_EXTENSIONS.has(extension)) files.push(path);
+  }
+  return files;
+}
+
+async function normalizePublicResourceNames(cfg) {
+  if (!(await exists(RES_DIR))) return;
+  const replacements = [
+    [/sarveshsea\/m-moire/g, cfg.engineRepo],
+    [/MiroFish/g, "external board adapter"],
+    [/Mirofish/g, "external board adapter"],
+  ];
+  let changed = 0;
+  for (const path of await walkTextResources(RES_DIR)) {
+    const before = await fs.readFile(path, "utf8");
+    const after = replacements.reduce((source, [pattern, replacement]) => source.replace(pattern, replacement), before);
+    if (after === before) continue;
+    await fs.writeFile(path, after);
+    changed += 1;
+  }
+  if (changed > 0) console.log(`fetch-runtime: normalized stale public resource names in ${changed} files`);
 }
 
 async function overlayPublicPackageMetadata(cfg) {
@@ -206,6 +252,7 @@ async function main() {
     await fs.copyFile(STUDIO_HARNESS_MANIFEST, runtimeManifest);
     console.log("fetch-runtime: overlaid Studio harness manifest");
   }
+  await normalizePublicResourceNames(cfg);
   await overlayPublicPackageMetadata(cfg);
   console.log("fetch-runtime: done");
 }

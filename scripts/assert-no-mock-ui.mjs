@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 // Copyright 2026 Humyn LLC
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -58,6 +58,12 @@ const sourceHygieneChecks = [
     ],
   },
 ];
+const runtimeResourceTextExtensions = new Set([".css", ".html", ".js", ".json", ".md", ".mjs", ".txt", ".xml"]);
+const staleRuntimeResourceTokens = [
+  "sarveshsea/m-moire",
+  "MiroFish",
+  "Mirofish",
+];
 
 const failures = [];
 for (const check of checks) {
@@ -71,6 +77,34 @@ for (const check of sourceHygieneChecks) {
   const source = readFileSync(join(ROOT, check.file), "utf8");
   for (const item of check.forbiddenPatterns) {
     if (item.pattern.test(source)) failures.push(`${check.file}: ${item.message}`);
+  }
+}
+
+function walkRuntimeResourceFiles(root) {
+  const files = [];
+  for (const entry of readdirSync(root)) {
+    const path = join(root, entry);
+    const stats = statSync(path);
+    if (stats.isDirectory()) {
+      if (entry === "node_modules" || entry === ".git") continue;
+      files.push(...walkRuntimeResourceFiles(path));
+      continue;
+    }
+    if (!stats.isFile()) continue;
+    const dotIndex = entry.lastIndexOf(".");
+    const extension = dotIndex >= 0 ? entry.slice(dotIndex) : "";
+    if (runtimeResourceTextExtensions.has(extension)) files.push(path);
+  }
+  return files;
+}
+
+const runtimeResourceRoot = join(ROOT, "src-tauri", "resources", "memoire-runtime");
+if (existsSync(runtimeResourceRoot)) {
+  for (const file of walkRuntimeResourceFiles(runtimeResourceRoot)) {
+    const source = readFileSync(file, "utf8");
+    for (const token of staleRuntimeResourceTokens) {
+      if (source.includes(token)) failures.push(`${file.replace(`${ROOT}/`, "")}: remove stale public token ${token}`);
+    }
   }
 }
 
