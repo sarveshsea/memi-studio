@@ -3531,107 +3531,161 @@ export function SettingsPanel(props: {
       }));
     }
 
+    function providerCard(input: {
+      id: string;
+      icon: StudioControlIconName;
+      label: string;
+      enabled: boolean;
+      detail: string;
+      onChange: (enabled: boolean) => void;
+    }) {
+      return (
+        <label className="provider-card" data-provider-state={input.enabled ? "on" : "off"} data-provider-id={input.id}>
+          <span className="settings-row-icon"><StudioControlIcon name={input.icon} /></span>
+          <span className="provider-card-copy">
+            <strong>{input.label}</strong>
+            <small title={input.detail}>{input.detail}</small>
+          </span>
+          <input
+            aria-label={`${input.label} provider`}
+            checked={input.enabled}
+            className="settings-switch-input"
+            type="checkbox"
+            onChange={(event) => input.onChange(event.target.checked)}
+          />
+          <span className="settings-switch-track" aria-hidden="true" />
+        </label>
+      );
+    }
+
     return (
-      <div className="settings-field-grid" data-settings-section-content="providers">
-        <div className="settings-section-grid">
-          <SettingsMetricCard icon="receipt" label="Anthropic" value={providerConfig.anthropic.enabled ? "On" : "Off"} detail={providerConfig.anthropic.envKey} tone={providerConfig.anthropic.enabled ? "ok" : "neutral"} />
-          <SettingsMetricCard icon="command" label="OpenAI" value={providerConfig.openai.enabled ? "On" : "Off"} detail={providerConfig.openai.envKey} tone={providerConfig.openai.enabled ? "ok" : "neutral"} />
-          <SettingsMetricCard icon="harness" label="Ollama" value={providerConfig.ollama.enabled ? "On" : "Off"} detail={providerConfig.ollama.baseUrl} tone={providerConfig.ollama.enabled ? "ok" : "neutral"} />
-          <SettingsMetricCard icon="open" label="Compatible" value={providerConfig.openaiCompatible.enabled ? "On" : "Off"} detail={providerConfig.openaiCompatible.baseUrl ?? "Not set"} tone={providerConfig.openaiCompatible.enabled ? "ok" : "neutral"} />
+      <div className="providers-settings-surface" data-settings-section-content="providers">
+        <div className="provider-card-grid" aria-label="Model providers">
+          {providerCard({
+            id: "anthropic",
+            icon: "receipt",
+            label: "Anthropic",
+            enabled: providerConfig.anthropic.enabled,
+            detail: providerConfig.anthropic.envKey,
+            onChange: (enabled) => patchProviders({ anthropic: { enabled, envKey: "ANTHROPIC_API_KEY" } }),
+          })}
+          {providerCard({
+            id: "openai",
+            icon: "command",
+            label: "OpenAI",
+            enabled: providerConfig.openai.enabled,
+            detail: providerConfig.openai.envKey,
+            onChange: (enabled) => patchProviders({ openai: { enabled, envKey: "OPENAI_API_KEY" } }),
+          })}
+          {providerCard({
+            id: "ollama",
+            icon: "harness",
+            label: "Ollama",
+            enabled: providerConfig.ollama.enabled,
+            detail: providerConfig.ollama.defaultModel,
+            onChange: (enabled) => patchProviders({ ollama: { ...providerConfig.ollama, enabled } }),
+          })}
+          {providerCard({
+            id: "compatible",
+            icon: "open",
+            label: "Compatible",
+            enabled: providerConfig.openaiCompatible.enabled,
+            detail: providerConfig.openaiCompatible.baseUrl ?? "No endpoint",
+            onChange: (enabled) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, enabled } }),
+          })}
         </div>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={providerConfig.anthropic.enabled} onChange={(event) => patchProviders({ anthropic: { enabled: event.target.checked, envKey: "ANTHROPIC_API_KEY" } })} />
-          <span>Anthropic</span>
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={providerConfig.openai.enabled} onChange={(event) => patchProviders({ openai: { enabled: event.target.checked, envKey: "OPENAI_API_KEY" } })} />
-          <span>OpenAI</span>
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={providerConfig.ollama.enabled} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, enabled: event.target.checked } })} />
-          <span>Ollama</span>
-        </label>
-        <label>
-          <span>Ollama URL</span>
-          <input value={providerConfig.ollama.baseUrl} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, baseUrl: event.target.value } })} />
-        </label>
-        <label>
-          <span>Ollama model</span>
-          <input value={providerConfig.ollama.defaultModel} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, defaultModel: event.target.value } })} />
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={providerConfig.openaiCompatible.enabled} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, enabled: event.target.checked } })} />
-          <span>OpenAI-compatible</span>
-        </label>
-        <label>
-          <span>Compatible URL</span>
-          <input value={providerConfig.openaiCompatible.baseUrl ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, baseUrl: event.target.value || null } })} />
-        </label>
-        <label>
-          <span>Compatible key env</span>
-          <input value={providerConfig.openaiCompatible.envKey ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, envKey: event.target.value || null } })} placeholder="OPENAI_API_KEY" />
-        </label>
-        <label data-usage-budget-field="global-threshold">
-          <span>Usage warning threshold</span>
-          <input
-            min="0"
-            max="1"
-            step="0.05"
-            type="number"
-            value={numberInputValue(usageBudgets.warningThreshold)}
-            onChange={(event) => patchUsageWarningThreshold(parseNullableNumber(event.target.value))}
-          />
-        </label>
-        <label data-usage-budget-field="openai">
-          <span>OpenAI daily token warning</span>
-          <input
-            min="0"
-            step="1000"
-            type="number"
-            value={numberInputValue(usageBudgets.providers.openai?.dailyTokenLimit)}
-            onChange={(event) => patchUsageBudget("providers", "openai", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
-          />
-        </label>
-        <label data-usage-budget-field="anthropic">
-          <span>Anthropic daily token warning</span>
-          <input
-            min="0"
-            step="1000"
-            type="number"
-            value={numberInputValue(usageBudgets.providers.anthropic?.dailyTokenLimit)}
-            onChange={(event) => patchUsageBudget("providers", "anthropic", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
-          />
-        </label>
-        <label data-usage-budget-field="codex">
-          <span>Codex harness token warning</span>
-          <input
-            min="0"
-            step="1000"
-            type="number"
-            value={numberInputValue(usageBudgets.harnesses.codex?.dailyTokenLimit)}
-            onChange={(event) => patchUsageBudget("harnesses", "codex", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
-          />
-        </label>
-        <label data-usage-budget-field="claude-code">
-          <span>Claude Code token warning</span>
-          <input
-            min="0"
-            step="1000"
-            type="number"
-            value={numberInputValue(usageBudgets.harnesses["claude-code"]?.dailyTokenLimit)}
-            onChange={(event) => patchUsageBudget("harnesses", "claude-code", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
-          />
-        </label>
-        <label data-usage-budget-field="hermes">
-          <span>Advanced harness token warning</span>
-          <input
-            min="0"
-            step="1000"
-            type="number"
-            value={numberInputValue(usageBudgets.harnesses.hermes?.dailyTokenLimit)}
-            onChange={(event) => patchUsageBudget("harnesses", "hermes", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
-          />
-        </label>
+        <div className="settings-field-grid settings-secondary-fields">
+          {providerConfig.ollama.enabled ? (
+            <>
+              <label>
+                <span>Ollama URL</span>
+                <input value={providerConfig.ollama.baseUrl} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, baseUrl: event.target.value } })} />
+              </label>
+              <label>
+                <span>Ollama model</span>
+                <input value={providerConfig.ollama.defaultModel} onChange={(event) => patchProviders({ ollama: { ...providerConfig.ollama, defaultModel: event.target.value } })} />
+              </label>
+            </>
+          ) : null}
+          {providerConfig.openaiCompatible.enabled ? (
+            <>
+              <label>
+                <span>Compatible URL</span>
+                <input value={providerConfig.openaiCompatible.baseUrl ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, baseUrl: event.target.value || null } })} />
+              </label>
+              <label>
+                <span>Compatible key env</span>
+                <input value={providerConfig.openaiCompatible.envKey ?? ""} onChange={(event) => patchProviders({ openaiCompatible: { ...providerConfig.openaiCompatible, envKey: event.target.value || null } })} placeholder="OPENAI_API_KEY" />
+              </label>
+            </>
+          ) : null}
+        </div>
+        <details className="settings-budget-panel">
+          <summary>Usage warnings</summary>
+          <div className="settings-field-grid">
+            <label data-usage-budget-field="global-threshold">
+              <span>Warning threshold</span>
+              <input
+                min="0"
+                max="1"
+                step="0.05"
+                type="number"
+                value={numberInputValue(usageBudgets.warningThreshold)}
+                onChange={(event) => patchUsageWarningThreshold(parseNullableNumber(event.target.value))}
+              />
+            </label>
+            <label data-usage-budget-field="openai">
+              <span>OpenAI tokens</span>
+              <input
+                min="0"
+                step="1000"
+                type="number"
+                value={numberInputValue(usageBudgets.providers.openai?.dailyTokenLimit)}
+                onChange={(event) => patchUsageBudget("providers", "openai", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
+              />
+            </label>
+            <label data-usage-budget-field="anthropic">
+              <span>Anthropic tokens</span>
+              <input
+                min="0"
+                step="1000"
+                type="number"
+                value={numberInputValue(usageBudgets.providers.anthropic?.dailyTokenLimit)}
+                onChange={(event) => patchUsageBudget("providers", "anthropic", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
+              />
+            </label>
+            <label data-usage-budget-field="codex">
+              <span>Codex tokens</span>
+              <input
+                min="0"
+                step="1000"
+                type="number"
+                value={numberInputValue(usageBudgets.harnesses.codex?.dailyTokenLimit)}
+                onChange={(event) => patchUsageBudget("harnesses", "codex", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
+              />
+            </label>
+            <label data-usage-budget-field="claude-code">
+              <span>Claude tokens</span>
+              <input
+                min="0"
+                step="1000"
+                type="number"
+                value={numberInputValue(usageBudgets.harnesses["claude-code"]?.dailyTokenLimit)}
+                onChange={(event) => patchUsageBudget("harnesses", "claude-code", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
+              />
+            </label>
+            <label data-usage-budget-field="hermes">
+              <span>Advanced tokens</span>
+              <input
+                min="0"
+                step="1000"
+                type="number"
+                value={numberInputValue(usageBudgets.harnesses.hermes?.dailyTokenLimit)}
+                onChange={(event) => patchUsageBudget("harnesses", "hermes", { dailyTokenLimit: parseNullableNumber(event.target.value) })}
+              />
+            </label>
+          </div>
+        </details>
       </div>
     );
   }
