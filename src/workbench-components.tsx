@@ -66,7 +66,13 @@ import {
   type WorkbenchActionCopy,
   type WorkbenchIconName,
 } from "./workbench-copy";
-import { harnessVisibility, isPrimaryHarness } from "./studio-workbench";
+import {
+  compactRunLabel,
+  compactRunSummary,
+  harnessVisibility,
+  isPrimaryHarness,
+  isVerificationRunText,
+} from "./studio-workbench";
 import { MEMOIRE_PACKAGE_NAME, MEMOIRE_PACKAGE_VERSION, MEMOIRE_STUDIO_VERSION } from "./runtime/package-info";
 
 export const OUTPUT_TABS = WORKBENCH_COPY.outputTabs;
@@ -1336,26 +1342,18 @@ interface ProjectSessionNavItem {
 }
 
 function projectSessionNavItem(session: SessionSummary): ProjectSessionNavItem {
-  const marker = session.prompt.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/);
-  const harness = sessionHarnessLabel(session.harness);
   const action = readableSessionAction(session.action);
-  const isVerification = Boolean(marker) || /smoke|e2e proof|verification/i.test(`${session.prompt} ${session.conversationId ?? ""}`);
-  let title = trimText(session.prompt.trim() || "Untitled run", 54);
-  if (marker) {
-    title = `${harness} check`;
-  } else if (/live studio agent smoke/i.test(session.prompt)) {
-    title = `${harness} live check`;
-  } else if (/live e2e proof/i.test(session.prompt)) {
-    title = `${harness} E2E proof`;
-  } else if (/lifecycle smoke/i.test(session.prompt)) {
-    title = `${harness} lifecycle smoke`;
-  } else if (/smoke test/i.test(session.prompt)) {
-    title = `${harness} smoke`;
-  }
+  const isVerification = isVerificationRunText(`${session.prompt} ${session.conversationId ?? ""}`);
+  const title = isVerification
+    ? compactRunLabel(session.prompt.trim() || action, session.harness, 54)
+    : trimText(session.prompt.trim() || "Untitled run", 54);
+  const titleDetail = isVerification
+    ? compactRunSummary(session.prompt, session.harness, 96) ?? title
+    : session.prompt;
   return {
     session,
     title,
-    titleDetail: session.prompt,
+    titleDetail,
     meta: isVerification ? compactStatusLabel(session.status) : `${action} / ${session.status}`,
     isVerification,
   };

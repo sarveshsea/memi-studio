@@ -168,6 +168,15 @@ assert(
   "compacts verification markers instead of surfacing raw smoke text",
 );
 
+const smokeSummary = compactRunSummary(
+  "Live Studio agent smoke. Do not edit files. Reply with exactly MEMI_CODEX_LIVE_OK_123, then stop.",
+  "codex",
+);
+assert(
+  smokeSummary === "Codex check passed" && !smokeSummary.includes("MEMI_") && !smokeSummary.includes("Do not edit"),
+  "keeps verification titles safe for sidebar help text",
+);
+
 assert(
   isQueueDockSession({ status: "running" } as SessionSummary)
     && isQueueDockSession({ status: "failed" } as SessionSummary)
