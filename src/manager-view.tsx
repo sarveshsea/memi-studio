@@ -280,16 +280,9 @@ function DetailBody(props: {
 
 function DetailRow(props: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "100px minmax(0, 1fr)",
-        gap: "var(--space-2)",
-        alignItems: "baseline",
-      }}
-    >
-      <span style={{ color: "var(--ink-muted)", fontSize: "var(--font-size-xs)" }}>{props.label}</span>
-      <span style={{ color: "var(--ink)" }}>{props.value}</span>
+    <div className="manager-detail-row">
+      <span className="manager-detail-label">{props.label}</span>
+      <span className="manager-detail-value">{props.value}</span>
     </div>
   );
 }

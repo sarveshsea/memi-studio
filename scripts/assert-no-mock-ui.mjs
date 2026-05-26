@@ -37,12 +37,34 @@ const checks = [
     ],
   },
 ];
+const sourceHygieneChecks = [
+  {
+    file: "src/manager-view.tsx",
+    forbiddenPatterns: [
+      {
+        pattern: /\bfontSize\s*:/,
+        message: "move inline font sizing into Studio CSS tokens",
+      },
+      {
+        pattern: /\bfontFamily\s*:/,
+        message: "move inline font family into Studio CSS tokens",
+      },
+    ],
+  },
+];
 
 const failures = [];
 for (const check of checks) {
   const source = readFileSync(join(ROOT, check.file), "utf8");
   for (const token of check.forbidden) {
     if (source.includes(token)) failures.push(`${check.file}: remove user-facing mock token ${token}`);
+  }
+}
+
+for (const check of sourceHygieneChecks) {
+  const source = readFileSync(join(ROOT, check.file), "utf8");
+  for (const item of check.forbiddenPatterns) {
+    if (item.pattern.test(source)) failures.push(`${check.file}: ${item.message}`);
   }
 }
 
