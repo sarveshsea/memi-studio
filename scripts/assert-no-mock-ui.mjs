@@ -45,6 +45,32 @@ const checks = [
 ];
 const sourceHygieneChecks = [
   {
+    file: "src/App.tsx",
+    forbiddenPatterns: [
+      {
+        pattern: /\bfontSize\s*:/,
+        message: "move inline font sizing into Studio CSS tokens",
+      },
+      {
+        pattern: /\bfontFamily\s*:/,
+        message: "move inline font family into Studio CSS tokens",
+      },
+    ],
+  },
+  {
+    file: "src/workbench-components.tsx",
+    forbiddenPatterns: [
+      {
+        pattern: /\bfontSize\s*:/,
+        message: "move inline font sizing into Studio CSS tokens",
+      },
+      {
+        pattern: /\bfontFamily\s*:/,
+        message: "move inline font family into Studio CSS tokens",
+      },
+    ],
+  },
+  {
     file: "src/manager-view.tsx",
     forbiddenPatterns: [
       {
@@ -79,6 +105,13 @@ for (const check of sourceHygieneChecks) {
     if (item.pattern.test(source)) failures.push(`${check.file}: ${item.message}`);
   }
 }
+
+const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
+studioCssSource.split("\n").forEach((line, index) => {
+  if (!/font-family\s*:/.test(line)) return;
+  if (/var\(--font-(studio|mono)\)/.test(line)) return;
+  failures.push(`src/styles.css:${index + 1}: font-family must use --font-studio or --font-mono`);
+});
 
 function walkRuntimeResourceFiles(root) {
   const files = [];
