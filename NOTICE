@@ -13,7 +13,7 @@ Purpose section of the FSL. On 2028-05-09 — the second anniversary of the date
 of first publication — this Software automatically becomes available under the
 Apache License, Version 2.0.
 
-This product is distinct from the Mémoire engine (https://github.com/sarveshsea/m-moire),
+This product is distinct from the Mémoire engine (https://github.com/sarveshsea/memi),
 which remains available under the MIT License. Mémoire Studio bundles a
 pre-built sidecar binary built from the Mémoire engine repository at release
 tag time; that binary is governed by the engine repository's MIT License.

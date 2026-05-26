@@ -11,7 +11,7 @@
     "url": "git+https://github.com/sarveshsea/memi-studio.git"
   },
   "memoireRuntime": {
-    "version": "0.18.0",
+    "version": "0.18.2",
     "engineRepo": "sarveshsea/memi",
     "releaseTag": "runtime-v0.18.2",
     "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",

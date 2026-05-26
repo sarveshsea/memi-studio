@@ -36,6 +36,12 @@ const checks = [
       "timelineFallback",
     ],
   },
+  {
+    file: "NOTICE",
+    forbidden: [
+      "sarveshsea/m-moire",
+    ],
+  },
 ];
 const sourceHygieneChecks = [
   {
@@ -66,6 +72,13 @@ for (const check of sourceHygieneChecks) {
   for (const item of check.forbiddenPatterns) {
     if (item.pattern.test(source)) failures.push(`${check.file}: ${item.message}`);
   }
+}
+
+const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const runtimeVersion = packageJson.memoireRuntime?.version;
+const runtimeTagVersion = String(packageJson.memoireRuntime?.releaseTag ?? "").replace(/^runtime-v/, "");
+if (runtimeVersion && runtimeTagVersion && runtimeVersion !== runtimeTagVersion) {
+  failures.push(`package.json: memoireRuntime.version ${runtimeVersion} must match release tag ${runtimeTagVersion}`);
 }
 
 if (failures.length) {
