@@ -1217,7 +1217,7 @@ export function ProjectSidebar(props: {
                 >
                   <SidebarIcon name={isExpanded ? "folder-open" : "folder"} />
                   <span>{project.label}</span>
-                  <small>{project.sessions.length}</small>
+                  {primaryNavItems.length ? <small>{primaryNavItems.length}</small> : null}
                   <SidebarIcon name={isExpanded ? "chevron-down" : "chevron-right"} />
                 </button>
                 {isExpanded ? (
@@ -1241,9 +1241,8 @@ export function ProjectSidebar(props: {
                     ))}
                     {verificationNavItems.length ? (
                       <details className="project-session-archive" open={currentSessionIsVerification}>
-                        <summary>
+                        <summary title={`${verificationNavItems.length} verification check${verificationNavItems.length === 1 ? "" : "s"}`}>
                           <span>Checks</span>
-                          <small>{verificationNavItems.length}</small>
                         </summary>
                         <div className="project-session-archive-list">
                           {visibleVerificationItems.map((item) => (
