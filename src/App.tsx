@@ -459,6 +459,7 @@ export function App() {
   const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversationGoal, setConversationGoal] = useState<string>("");
+  const [goalEditorOpen, setGoalEditorOpen] = useState(false);
   const [queuedPrompt, setQueuedPrompt] = useState<string>("");
   const [startingPrompt, setStartingPrompt] = useState<string>("");
   const [runBlockedMessage, setRunBlockedMessage] = useState<string | null>(null);
@@ -787,7 +788,7 @@ export function App() {
       reason,
     };
   }, [hasDesignArtifactContext, hasDesignPromptContext, hasDesignSystemTraceContext, hasFigJamContext, hasFigmaConnection]);
-  const showConversationGoalRow = Boolean(conversationGoal.trim() || conversationTurnCount > 0);
+  const showConversationGoalRow = Boolean(goalEditorOpen || conversationGoal.trim() || conversationTurnCount > 0);
   const showCreationStrip = Boolean(
     hasPacketContext
     || hasCreationEventContext
@@ -1215,6 +1216,7 @@ export function App() {
     setPermissionMode(nextSession.permissionMode ?? "guarded");
     setActiveConversationId(nextSession.conversationId ?? nextSession.id);
     setConversationGoal(nextSession.goal ?? "");
+    setGoalEditorOpen(false);
     if (nextSession.status === "interrupted") {
       setPrompt(nextSession.prompt ?? "");
     }
@@ -2141,6 +2143,7 @@ export function App() {
       });
       setAttachments([]);
       setSession(nextSession);
+      setGoalEditorOpen(false);
       setActiveConversationId(nextSession.conversationId ?? nextSession.id);
       setRecentSessions((current) => [nextSession, ...current.filter((candidate) => candidate.id !== nextSession.id)].slice(0, 8));
       await refreshSessionTrace(nextSession.id);
@@ -3212,6 +3215,8 @@ export function App() {
             goal={conversationGoal}
             turnIndex={conversationTurnCount}
             onChange={setConversationGoal}
+            editing={goalEditorOpen}
+            onEditingChange={setGoalEditorOpen}
           />
         ) : null}
         {queuedPrompt.trim() ? (
@@ -3489,6 +3494,16 @@ export function App() {
                   );
                 })}
               </div>
+              <button
+                className={`icon-button goal-toggle${conversationGoal.trim() ? " active" : ""}`}
+                data-action-id="conversation.goal.toggle"
+                type="button"
+                title={conversationGoal.trim() ? `Goal: ${conversationGoal.trim()}` : "Set conversation goal"}
+                aria-label="Set conversation goal"
+                onClick={() => setGoalEditorOpen(true)}
+              >
+                <StudioControlIcon name="pin" />
+              </button>
               {showModelPicker ? (
                 <label className="composer-select" data-composer-control="model" title="Model">
                   <StudioControlIcon name="harness" />
@@ -5533,11 +5548,18 @@ function ConversationGoalRow(props: {
   goal: string;
   turnIndex: number;
   onChange: (next: string) => void;
+  editing?: boolean;
+  onEditingChange?: (next: boolean) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [localEditing, setLocalEditing] = useState(false);
   const [draft, setDraft] = useState(props.goal);
   useEffect(() => { setDraft(props.goal); }, [props.goal]);
   const summary = props.goal.trim();
+  const editing = props.editing ?? localEditing;
+  function setEditing(next: boolean) {
+    setLocalEditing(next);
+    props.onEditingChange?.(next);
+  }
   function commit() {
     props.onChange(draft.trim());
     setEditing(false);
@@ -5578,7 +5600,10 @@ function ConversationGoalRow(props: {
           className="conversation-goal-clear"
           data-action-id="conversation.goal.clear"
           title="Clear goal"
-          onClick={() => props.onChange("")}
+          onClick={() => {
+            props.onChange("");
+            setEditing(false);
+          }}
         >
           Clear
         </button>
