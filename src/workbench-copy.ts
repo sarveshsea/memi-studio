@@ -298,13 +298,6 @@ export const WORKBENCH_COPY = {
     { id: "references", label: "References" },
     { id: "handoff", label: "Handoff" },
   ] as const,
-  scenario: {
-    timelineFallback: [
-      { label: "Plan", text: "Research memory" },
-      { label: "Run", text: "Evidence strength" },
-      { label: "Report", text: "Spec impact" },
-    ],
-  },
   referenceTraceGroups: [
     { id: "package", label: "Package" },
     { id: "spec", label: "Specs" },

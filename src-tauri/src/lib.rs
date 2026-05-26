@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
+    env,
+    ffi::OsString,
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpStream},
@@ -795,6 +797,8 @@ fn restart_studio_runtime_process(
     );
     let package_root = materialized.package_root.clone();
     let binary = materialized.binary.clone();
+    let runtime_path = runtime_child_path_env();
+    let runtime_shell = runtime_child_shell_env();
 
     let api_token = generate_runtime_api_token();
     let mut child = match Command::new(&binary)
@@ -810,6 +814,8 @@ fn restart_studio_runtime_process(
         .env("MEMOIRE_STUDIO_API_TOKEN", &api_token)
         .env("MEMOIRE_STUDIO_MANAGED_BY", "tauri")
         .env("NODE_ENV", "production")
+        .env("PATH", &runtime_path)
+        .env("SHELL", &runtime_shell)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -851,10 +857,10 @@ fn restart_studio_runtime_process(
 
     let pid = child.id();
     if let Some(stdout) = child.stdout.take() {
-        spawn_runtime_reader(app.clone(), "stdout", stdout);
+        spawn_runtime_reader(app.clone(), "stdout", stdout, pid, generation);
     }
     if let Some(stderr) = child.stderr.take() {
-        spawn_runtime_reader(app.clone(), "stderr", stderr);
+        spawn_runtime_reader(app.clone(), "stderr", stderr, pid, generation);
     }
 
     let child = Arc::new(Mutex::new(child));
@@ -1127,6 +1133,16 @@ fn append_runtime_lifecycle_log_at(path: &Path, event: &str, payload: Value) -> 
             path.display()
         )
     })
+}
+
+fn runtime_log_excerpt(line: &str) -> String {
+    const MAX_RUNTIME_LOG_LINE: usize = 700;
+    let mut value = line.trim().to_string();
+    if value.len() > MAX_RUNTIME_LOG_LINE {
+        value.truncate(MAX_RUNTIME_LOG_LINE);
+        value.push_str("...");
+    }
+    value
 }
 
 fn write_managed_runtime_pid_file(
@@ -2020,6 +2036,37 @@ fn local_port_open(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(120)).is_ok()
 }
 
+fn runtime_child_path_env() -> OsString {
+    let mut paths: Vec<PathBuf> = env::var_os("PATH")
+        .map(|paths| env::split_paths(&paths).collect())
+        .unwrap_or_default();
+    if let Some(home) = env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")) {
+        let home = PathBuf::from(home);
+        paths.extend([
+            home.join(".local").join("bin"),
+            home.join(".npm-global").join("bin"),
+            home.join(".cargo").join("bin"),
+        ]);
+    }
+    paths.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ]);
+    let mut seen = BTreeSet::new();
+    paths.retain(|path| seen.insert(path.clone()));
+    env::join_paths(paths).unwrap_or_else(|_| {
+        OsString::from("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+    })
+}
+
+fn runtime_child_shell_env() -> OsString {
+    env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/zsh"))
+}
+
 fn runtime_answers_status(port: u16) -> bool {
     matches!(local_http_get(port, "/api/status"), Some((200, _)))
 }
@@ -2194,15 +2241,28 @@ fn spawn_runtime_reader<R: std::io::Read + Send + 'static>(
     app: AppHandle,
     stream: &'static str,
     output: R,
+    pid: u32,
+    generation: u64,
 ) {
     thread::spawn(move || {
         let reader = BufReader::new(output);
         for line in reader.lines().map_while(Result::ok) {
+            let message = runtime_log_excerpt(&studio::redact_secrets(&line));
+            append_runtime_lifecycle_log(
+                &app,
+                "runtime.output",
+                json!({
+                    "generation": generation,
+                    "pid": pid,
+                    "stream": stream,
+                    "message": message
+                }),
+            );
             let _ = app.emit(
                 "studio-runtime-log",
                 json!({
                     "stream": stream,
-                    "message": studio::redact_secrets(&line),
+                    "message": message,
                     "timestamp": studio::unix_millis().to_string()
                 }),
             );
@@ -2517,6 +2577,17 @@ mod runtime_cache_tests {
             "/Applications/Mémoire Studio.app"
         )));
         assert!(is_sensitive_workspace(&home_root().join(".ssh")));
+    }
+
+    #[test]
+    fn runtime_child_path_env_includes_gui_safe_tool_paths() {
+        let path_env = runtime_child_path_env();
+        let paths: Vec<PathBuf> = env::split_paths(&path_env).collect();
+
+        assert!(paths.contains(&PathBuf::from("/opt/homebrew/bin")));
+        assert!(paths.contains(&PathBuf::from("/usr/local/bin")));
+        assert!(paths.contains(&PathBuf::from("/usr/bin")));
+        assert!(paths.contains(&PathBuf::from("/bin")));
     }
 
     #[test]

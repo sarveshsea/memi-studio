@@ -2965,10 +2965,7 @@ export function App() {
     const selected = nodes.find((node) => node.id === selectedScenarioNode) ?? nodes[0];
     const timeline = latestMatrixRun?.rounds?.length
       ? latestMatrixRun.rounds.map((_, index) => ({ label: `Round ${index + 1}`, text: `${latestMatrixRun.transcripts?.length ?? 0} transcript turns captured.` }))
-      : WORKBENCH_COPY.scenario.timelineFallback.map((item) => ({
-        label: item.label,
-        text: item.label === WORKBENCH_COPY.queue.fallbackPrompt ? scenarioVariable.toLowerCase() : item.text,
-      }));
+      : [];
     const designSpecCount = scenarioDesignPackage?.specs
       ? Object.values(scenarioDesignPackage.specs).reduce((total, specs) => total + (Array.isArray(specs) ? specs.length : 0), 0)
       : 0;
@@ -3026,10 +3023,10 @@ export function App() {
         <div className="research-lab-surfaces" data-research-lab="pm-harness-study">
           <article data-harness-study="hermes">
             <span>Harness Study</span>
-            <strong>{harnessStudy ? `${harnessStudy.label} ${harnessStudy.available ? "ready" : "offline"}` : "Hermes pending"}</strong>
-            <small>{harnessStudy?.model ?? "Study Hermes CLI, skills, tools, profiles, sessions"}</small>
+            <strong>{harnessStudy ? `${harnessStudy.label} ${harnessStudy.available ? "ready" : "offline"}` : "Not run"}</strong>
+            <small>{harnessStudy?.model ?? "Run study"}</small>
             <div>
-              {(harnessStudy?.toolsets?.enabled ?? ["skills", "web", "terminal"]).slice(0, 4).map((toolset) => (
+              {harnessStudy?.toolsets?.enabled?.slice(0, 4).map((toolset) => (
                 <em key={toolset}>{toolset}</em>
               ))}
             </div>
@@ -3037,9 +3034,10 @@ export function App() {
           <article data-pm-pattern-library>
             <span>PM Pattern Library</span>
             <strong>{researchPatterns.length ? `${researchPatterns.length} patterns` : "No patterns"}</strong>
-            {(researchPatterns.length ? researchPatterns : [{ id: "pattern-empty", title: "Extract", category: "harness", sourceHarness: "hermes", summary: "Study Hermes to extract PM workflow patterns.", confidence: "medium" }]).slice(0, 3).map((pattern) => (
+            {researchPatterns.slice(0, 3).map((pattern) => (
               <small key={pattern.id} title={pattern.summary}>{pattern.category}: {trimText(pattern.title, 42)}</small>
             ))}
+            {!researchPatterns.length ? <small>Run patterns</small> : null}
           </article>
           <article data-research-evidence-source={researchSource}>
             <span>Evidence Intake</span>
@@ -3048,23 +3046,24 @@ export function App() {
           </article>
           <article data-scenario-compare-view="hypothesis-matrix-summary">
             <span>Hypothesis Matrix</span>
-            <strong>{scenarioMatrix?.runs?.length ? `${scenarioMatrix.runs.length} runs` : "Ready"}</strong>
-            <small>{scenarioMatrix?.comparison?.winnerRunId ?? "Run model-swarm comparisons"}</small>
+            <strong>{scenarioMatrix?.runs?.length ? `${scenarioMatrix.runs.length} runs` : "No runs"}</strong>
+            <small>{scenarioMatrix?.comparison?.winnerRunId ?? "Run matrix"}</small>
           </article>
         </div>
         <div className="scenario-model-matrix" data-scenario-model-matrix="codex-first">
-          {(scenarioModels.length ? scenarioModels : [
-            { id: "codex-gpt-5-5", label: "Codex GPT-5.5", provider: "codex", model: "gpt-5.5", available: false },
-            { id: "hermes-harness", label: "Hermes Harness", provider: "hermes", model: "default-profile", available: false },
-            { id: "claude-code-sonnet", label: "Claude Code", provider: "claude-code", model: "sonnet", available: false },
-            { id: "deterministic-product-simulator", label: "Fallback", provider: "deterministic", model: "memoire", available: true },
-          ]).slice(0, 5).map((profile) => (
+          {scenarioModels.length ? scenarioModels.slice(0, 5).map((profile) => (
             <article key={profile.id}>
               <span>{profile.provider}</span>
               <strong>{profile.label}</strong>
-              <small>{profile.available ? "ready" : "fallback"} / {profile.model}</small>
+              <small>{profile.available ? "ready" : "offline"} / {profile.model}</small>
             </article>
-          ))}
+          )) : (
+            <article>
+              <span>Models</span>
+              <strong>Not loaded</strong>
+              <small>Run matrix</small>
+            </article>
+          )}
         </div>
         <div className="scenario-grid">
           <section className="scenario-graph-panel" aria-label="Agent cohort graph" data-scenario-live-graph="round-state" data-scenario-cohort-editor="research-backed">
@@ -3103,7 +3102,7 @@ export function App() {
             </div>
           </section>
           <section className="scenario-timeline-panel" aria-label="Simulation timeline">
-            {timeline.map((item, index) => (
+            {timeline.length ? timeline.map((item, index) => (
               <article key={`${item.label}-${index}`}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div>
@@ -3111,7 +3110,15 @@ export function App() {
                   <p>{item.text}</p>
                 </div>
               </article>
-            ))}
+            )) : (
+              <article>
+                <span>00</span>
+                <div>
+                  <strong>No rounds</strong>
+                  <p>Run matrix</p>
+                </div>
+              </article>
+            )}
           </section>
           <section className="scenario-transcript-viewer" aria-label="Transcript memory" data-scenario-transcript-viewer="model-memory">
             <div>
@@ -3133,13 +3140,15 @@ export function App() {
           <section className="scenario-report-panel" aria-label="Spec impact report">
             <div>
               <span>Spec impact</span>
-              <strong>{scorecard ? `${Math.round((scorecard.confidence ?? 0) * 100)}% confidence` : "Recommendations"}</strong>
+              <strong>{scorecard ? `${Math.round((scorecard.confidence ?? 0) * 100)}% confidence` : "No scorecard"}</strong>
             </div>
-            <ul>
-              <li>Finding id</li>
-              <li>Outcome metric</li>
-              <li>Open assumptions</li>
-            </ul>
+            {scorecard ? (
+              <ul>
+                <li>Adoption {Math.round((scorecard.adoption ?? 0) * 100)}%</li>
+                <li>Resistance {Math.round((scorecard.resistance ?? 0) * 100)}%</li>
+                <li>Risk {Math.round((scorecard.risk ?? 0) * 100)}%</li>
+              </ul>
+            ) : <p>Run matrix</p>}
           </section>
           <section className="scenario-figjam-export" aria-label="FigJam export" data-scenario-figjam-export="mermaid-jam">
             <div>
@@ -4727,7 +4736,7 @@ function RunSpine(props: {
   const promptText = props.session?.prompt ?? props.prompt.trim();
   const promptSummary = promptText
     ? queueDockPromptLabel(promptText, props.session?.harness, 180)
-    : "Start with a prompt. The run spine will fill in as the agent works.";
+    : "Idle";
   const latestPlan = [...props.activities].reverse().find((activity) =>
     activity.kind === "thinking" || /plan|intent|reason/i.test(`${activity.label} ${activity.summary}`),
   ) ?? null;
@@ -4773,7 +4782,7 @@ function RunSpine(props: {
       id: "plan",
       label: "Plan",
       status: props.agentThinkingState === "thinking" ? "running" : latestPlan ? latestPlan.status : "idle",
-      summary: latestPlan?.summary ?? `${props.actionLabel} is ready. Plan and intent appear here once a run starts.`,
+      summary: latestPlan?.summary ?? (props.canStart ? "Ready" : props.startDisabledReason || "Blocked"),
       meta: latestPlan ? runSpineActivityMeta(latestPlan) : "intent",
     },
     {
@@ -4784,7 +4793,7 @@ function RunSpine(props: {
         ? `${props.activeProcesses.length} command${props.activeProcesses.length === 1 ? "" : "s"} running`
         : toolActivities.length
           ? `${toolActivities.length} recent action${toolActivities.length === 1 ? "" : "s"}`
-          : "No tool calls yet.",
+          : "None",
       receipts: toolReceipts,
     },
     {
@@ -4812,7 +4821,7 @@ function RunSpine(props: {
       status: props.lastFailure ? "warn" : props.session?.status === "completed" ? "done" : props.session?.status === "running" || props.session?.status === "queued" ? "running" : "idle",
       summary: props.lastFailure?.message
         ?? runSpineResultSummary(resultBlock)
-        ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Awaiting run"),
+        ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Idle"),
       meta: resultBlock?.title ?? props.session?.status ?? "standby",
       onSelect: resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined,
       receipts: sessionReceipt ? [sessionReceipt] : undefined,
