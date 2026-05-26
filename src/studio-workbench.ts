@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 // Copyright 2026 Humyn LLC
 
-import type { Harness, HarnessId } from "./studio-api";
+import type { Harness, HarnessId, SessionSummary } from "./studio-api";
 import type { WORKBENCH_COPY } from "./workbench-copy";
 
 export const PRIMARY_HARNESS_IDS = ["codex", "claude-code"] as const satisfies HarnessId[];
@@ -50,6 +50,51 @@ export function composerHarnessShortLabel(id: string, label = id): string {
     .join("")
     .slice(0, 2)
     .toUpperCase() || id.slice(0, 2).toUpperCase();
+}
+
+export function runVerificationMarker(value: string): string | null {
+  return value.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/)?.[0] ?? null;
+}
+
+export function isVerificationRunText(value: string): boolean {
+  return Boolean(runVerificationMarker(value)) || /smoke|e2e proof|verification/i.test(value);
+}
+
+export function compactRunLabel(value: string, harness?: HarnessId, maxLength = 32): string {
+  if (runVerificationMarker(value)) return `${shortHarnessName(harness)} check`;
+  if (/live studio agent smoke/i.test(value)) return `${shortHarnessName(harness)} live check`;
+  if (/live e2e proof/i.test(value)) return `${shortHarnessName(harness)} E2E proof`;
+  if (/lifecycle smoke/i.test(value)) return `${shortHarnessName(harness)} lifecycle`;
+  if (/smoke test/i.test(value)) return `${shortHarnessName(harness)} smoke`;
+  return trimRunText(value, maxLength);
+}
+
+export function compactRunSummary(value: string | null | undefined, harness?: HarnessId, maxLength = 180): string | null {
+  if (!value?.trim()) return null;
+  if (runVerificationMarker(value)) return `${shortHarnessName(harness)} check passed`;
+  if (/live studio agent smoke/i.test(value)) return `${shortHarnessName(harness)} live check`;
+  if (/live e2e proof/i.test(value)) return `${shortHarnessName(harness)} E2E proof`;
+  if (/lifecycle smoke/i.test(value)) return `${shortHarnessName(harness)} lifecycle check`;
+  if (/smoke test/i.test(value)) return `${shortHarnessName(harness)} smoke check`;
+  return trimRunText(value, maxLength);
+}
+
+export function isQueueDockSession(session: Pick<SessionSummary, "status">): boolean {
+  return session.status === "running" || session.status === "queued" || session.status === "failed" || session.status === "cancelled";
+}
+
+function shortHarnessName(harness?: HarnessId): string {
+  if (harness === "codex") return "Codex";
+  if (harness === "claude-code") return "Claude";
+  if (harness === "ollama") return "Ollama";
+  if (harness === "opencode") return "OpenCode";
+  return "Run";
+}
+
+function trimRunText(value: string, maxLength: number): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 export function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): HarnessId {

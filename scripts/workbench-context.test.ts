@@ -6,8 +6,17 @@ import {
   selectDesignArtifactsForSession,
   selectReviewPacketForSession,
 } from "../src/workbench-context.js";
-import { composerHarnesses, composerHarnessShortLabel, composerHarnessTier, primaryHarnesses } from "../src/studio-workbench.js";
-import type { Harness, HarnessId } from "../src/studio-api.js";
+import {
+  compactRunLabel,
+  compactRunSummary,
+  composerHarnesses,
+  composerHarnessShortLabel,
+  composerHarnessTier,
+  isQueueDockSession,
+  isVerificationRunText,
+  primaryHarnesses,
+} from "../src/studio-workbench.js";
+import type { Harness, HarnessId, SessionSummary } from "../src/studio-api.js";
 
 type TestEvent = {
   id: string;
@@ -150,4 +159,18 @@ assert(
     && composerHarnessShortLabel("ollama") === "OL"
     && composerHarnessShortLabel("opencode") === "OC",
   "keeps provider affordances compact for icon-first switching",
+);
+
+assert(
+  compactRunLabel("Live Studio agent smoke. Reply MEMI_CODEX_LIVE_OK_123.", "codex") === "Codex check"
+    && compactRunSummary("MEMI_CLAUDE_CODE_LIVE_OK_456", "claude-code") === "Claude check passed"
+    && isVerificationRunText("MEMI_CODEX_E2E_DONE_789"),
+  "compacts verification markers instead of surfacing raw smoke text",
+);
+
+assert(
+  isQueueDockSession({ status: "running" } as SessionSummary)
+    && isQueueDockSession({ status: "failed" } as SessionSummary)
+    && !isQueueDockSession({ status: "completed" } as SessionSummary),
+  "keeps the center queue focused on active or actionable runs",
 );

@@ -197,6 +197,9 @@ import {
   composerHarnesses,
   composerHarnessShortLabel,
   composerHarnessTier,
+  compactRunLabel,
+  compactRunSummary,
+  isQueueDockSession,
   normalizeComposerHarness,
   normalizePrimaryHarness,
   normalizeRightPaneTab,
@@ -913,10 +916,12 @@ export function App() {
   const sessionInventory = session && !visibleRecentSessions.some((recent) => recent.id === session.id)
     ? [session, ...visibleRecentSessions]
     : visibleRecentSessions;
+  const queueDockSessions = sessionInventory.filter(isQueueDockSession);
   const localRunningSessionCount = sessionInventory.filter((recent) => recent.status === "running" || recent.status === "queued").length + (isStartingSession ? 1 : 0);
   const runtimeRunningSessionCount = (effectiveRuntimeMetrics?.activeRuns ?? 0) + (effectiveRuntimeMetrics?.queuedRuns ?? 0);
   const runningSessionCount = Math.max(localRunningSessionCount, runtimeRunningSessionCount);
   const runtimeQueueDockItems = queueDockItemsFromRuntime(effectiveRuntimeMetrics, runtimeHealth);
+  const showAgentQueueDock = runtimeQueueDockItems.length > 0 || isStartingSession || queueDockSessions.length > 0;
   const sessionQueueState = runtimeHealth !== "ready"
     ? runtimeHealth
     : (effectiveRuntimeMetrics?.queuedRuns ?? 0) > 0
@@ -1020,9 +1025,9 @@ export function App() {
             : "Ready";
   const agentLiveSummary = lastFailure?.message
     ?? traceModel.activeProcesses[0]?.command
-    ?? latestRunningActivity?.summary
-    ?? latestThinkingActivity?.summary
-    ?? latestActivity?.summary
+    ?? compactRunSummary(latestRunningActivity?.summary, session?.harness ?? selectedHarness, 88)
+    ?? compactRunSummary(latestThinkingActivity?.summary, session?.harness ?? selectedHarness, 88)
+    ?? compactRunSummary(latestActivity?.summary, session?.harness ?? selectedHarness, 88)
     ?? compactSessionStatusLabel(visibleSessionStatus);
   const runPanelTitle = latestRun
     ? queueDockPromptLabel(latestRun.prompt, latestRun.harness, 72)
@@ -3384,59 +3389,52 @@ export function App() {
           ) : null}
         </div>
 
-        <div
-          className="agent-queue-dock"
-          data-agent-queue-dock
-          data-concurrent-run-count={runningSessionCount}
-          data-queue-runtime-backed={runtimeMetrics ? "true" : "false"}
-          aria-label="Agent queue"
-        >
-          {runtimeQueueDockItems.map((item) => (
-            <button
-              className={`agent-queue-chip runtime ${item.status}`}
-              data-agent-queue-chip
-              data-status={item.status}
-              data-action-id={item.status === "empty" ? undefined : `queue.runtime.${item.id}`}
-              key={item.id}
-              type="button"
-              disabled={item.status === "empty" || item.status === "blocked"}
-              onClick={() => item.status === "empty" ? startNewChat() : undefined}
-            >
-              <span>{item.label}</span>
-              <small>{item.detail}</small>
-            </button>
-          ))}
-          {isStartingSession ? (
-            <button className="agent-queue-chip" aria-label={WORKBENCH_COPY.queue.queuedLabel} data-agent-queue-chip data-status="queued" data-action-id="queue.starting" type="button" disabled={true} title={WORKBENCH_COPY.queue.queuedLabel}>
-              <span aria-hidden="true">...</span>
-              <small>{queueDockPromptLabel(startingPrompt || prompt.trim() || WORKBENCH_COPY.queue.fallbackPrompt, selectedHarness)}</small>
-            </button>
-          ) : null}
-          {sessionInventory.slice(0, isStartingSession ? 4 : 5).map((recent) => (
-            <button
-              className="agent-queue-chip"
-              data-agent-queue-chip
-              data-status={queueDockStatusLabel(recent.status).toLowerCase()}
-              data-action-id={`queue.open.${recent.id}`}
-              key={recent.id}
-              title={recent.prompt}
-              type="button"
-              onClick={() => void openSessionSummary(recent)}
-            >
-              <span aria-hidden="true">{queueDockStatusGlyph(recent.status)}</span>
-              <small>{queueDockSessionLabel(recent)}</small>
-            </button>
-          ))}
-          {!isStartingSession && sessionInventory.length === 0 ? (
-            <IconButton
-              {...workbenchAction("newRun")}
-              actionId={workbenchAction("newRun").id}
-              className="agent-queue-chip empty"
-              data={{ "data-agent-queue-chip": true, "data-smart-empty-state": "sessions-new" }}
-              onClick={startNewChat}
-            />
-          ) : null}
-        </div>
+        {showAgentQueueDock ? (
+          <div
+            className="agent-queue-dock"
+            data-agent-queue-dock
+            data-concurrent-run-count={runningSessionCount}
+            data-queue-runtime-backed={runtimeMetrics ? "true" : "false"}
+            aria-label="Agent queue"
+          >
+            {runtimeQueueDockItems.map((item) => (
+              <button
+                className={`agent-queue-chip runtime ${item.status}`}
+                data-agent-queue-chip
+                data-status={item.status}
+                data-action-id={item.status === "empty" ? undefined : `queue.runtime.${item.id}`}
+                key={item.id}
+                type="button"
+                disabled={item.status === "empty" || item.status === "blocked"}
+                onClick={() => item.status === "empty" ? startNewChat() : undefined}
+              >
+                <span>{item.label}</span>
+                <small>{item.detail}</small>
+              </button>
+            ))}
+            {isStartingSession ? (
+              <button className="agent-queue-chip" aria-label={WORKBENCH_COPY.queue.queuedLabel} data-agent-queue-chip data-status="queued" data-action-id="queue.starting" type="button" disabled={true} title={WORKBENCH_COPY.queue.queuedLabel}>
+                <span aria-hidden="true">...</span>
+                <small>{queueDockPromptLabel(startingPrompt || prompt.trim() || WORKBENCH_COPY.queue.fallbackPrompt, selectedHarness)}</small>
+              </button>
+            ) : null}
+            {queueDockSessions.slice(0, isStartingSession ? 4 : 5).map((recent) => (
+              <button
+                className="agent-queue-chip"
+                data-agent-queue-chip
+                data-status={queueDockStatusLabel(recent.status).toLowerCase()}
+                data-action-id={`queue.open.${recent.id}`}
+                key={recent.id}
+                title={queueDockSessionTitle(recent)}
+                type="button"
+                onClick={() => void openSessionSummary(recent)}
+              >
+                <span aria-hidden="true">{queueDockStatusGlyph(recent.status)}</span>
+                <small>{queueDockSessionLabel(recent)}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <CommandBar data-command-editor="bottom-pinned" data-composer-layout="single-toolbar">
           <div
@@ -4808,8 +4806,8 @@ function RunSpine(props: {
       id: "plan",
       label: "Plan",
       status: props.agentThinkingState === "thinking" ? "running" : latestPlan ? latestPlan.status : "idle",
-      summary: latestPlan?.summary ?? (props.canStart ? "Ready" : props.startDisabledReason || "Blocked"),
-      meta: latestPlan ? runSpineActivityMeta(latestPlan) : "intent",
+      summary: compactRunSummary(latestPlan?.summary, props.session?.harness, 180) ?? (props.canStart ? "Ready" : props.startDisabledReason || "Blocked"),
+      meta: latestPlan ? runSpineActivityMeta(latestPlan, props.session?.harness) : "intent",
     },
     {
       id: "tools",
@@ -4846,7 +4844,7 @@ function RunSpine(props: {
       label: "Result",
       status: props.lastFailure ? "warn" : props.session?.status === "completed" ? "done" : props.session?.status === "running" || props.session?.status === "queued" ? "running" : "idle",
       summary: props.lastFailure?.message
-        ?? runSpineResultSummary(resultBlock)
+        ?? runSpineResultSummary(resultBlock, props.session)
         ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Idle"),
       meta: resultBlock?.title ?? props.session?.status ?? "standby",
       onSelect: resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined,
@@ -5508,10 +5506,10 @@ function runSpineActivityLabel(activity: StudioActivityItem): string {
   return "Action";
 }
 
-function runSpineActivityMeta(activity: StudioActivityItem): string {
+function runSpineActivityMeta(activity: StudioActivityItem, harness?: HarnessId): string {
   if (activity.targetPath) return runSpineCompactPath(activity.targetPath);
   if (activity.command) return trimText(activity.command, 86);
-  return trimText(activity.summary, 86);
+  return compactRunSummary(activity.summary, harness, 86) ?? trimText(activity.summary, 86);
 }
 
 function runSpineCompactPath(path: string): string {
@@ -5520,10 +5518,10 @@ function runSpineCompactPath(path: string): string {
   return parts.length > 2 ? parts.slice(-2).join("/") : normalized;
 }
 
-function runSpineResultSummary(block: TerminalBlock | null): string | null {
+function runSpineResultSummary(block: TerminalBlock | null, session?: SessionSummary | null): string | null {
   if (!block) return null;
   const text = block.messages.map((message) => message.trim()).find(Boolean);
-  return text ? trimText(text, 180) : block.title;
+  return compactRunSummary(text ?? block.title, session?.harness, 180);
 }
 
 function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean, action: StudioAction): string {
@@ -5817,21 +5815,12 @@ function queueDockSessionLabel(session: SessionSummary): string {
 }
 
 function queueDockPromptLabel(prompt: string, harness?: HarnessId, maxLength = 32): string {
-  const marker = prompt.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/);
-  if (marker) return `${shortHarnessLabel(harness)} check`;
-  if (/live studio agent smoke/i.test(prompt)) return `${shortHarnessLabel(harness)} live check`;
-  if (/live e2e proof/i.test(prompt)) return `${shortHarnessLabel(harness)} E2E proof`;
-  if (/lifecycle smoke/i.test(prompt)) return `${shortHarnessLabel(harness)} lifecycle`;
-  if (/smoke test/i.test(prompt)) return `${shortHarnessLabel(harness)} smoke`;
-  return trimText(prompt, maxLength);
+  return compactRunLabel(prompt, harness, maxLength);
 }
 
-function shortHarnessLabel(harness?: HarnessId): string {
-  if (harness === "codex") return "Codex";
-  if (harness === "claude-code") return "Claude";
-  if (harness === "ollama") return "Ollama";
-  if (harness === "opencode") return "OpenCode";
-  return "Run";
+function queueDockSessionTitle(session: SessionSummary): string {
+  const summary = compactRunSummary(session.prompt, session.harness, 96);
+  return summary && summary !== queueDockSessionLabel(session) ? `${queueDockSessionLabel(session)} — ${summary}` : queueDockSessionLabel(session);
 }
 
 function readFileAsText(file: File): Promise<string> {
