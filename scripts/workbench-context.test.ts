@@ -6,6 +6,8 @@ import {
   selectDesignArtifactsForSession,
   selectReviewPacketForSession,
 } from "../src/workbench-context.js";
+import { composerHarnesses, primaryHarnesses } from "../src/studio-workbench.js";
+import type { Harness, HarnessId } from "../src/studio-api.js";
 
 type TestEvent = {
   id: string;
@@ -30,6 +32,27 @@ type TestArtifact = {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function harness(id: HarnessId, label: string = id): Harness {
+  return {
+    id,
+    label,
+    kind: "external-cli",
+    provider: id,
+    command: id,
+    description: label,
+    enabled: true,
+    enabledByDefault: true,
+    installed: true,
+    capabilities: ["raw"],
+    commandTemplates: { raw: [id] },
+    envPolicy: "provider",
+    workspacePolicy: "workspace-required",
+    supportsStreaming: true,
+    supportsCancel: true,
+    outputParser: "stdio",
+  } as Harness;
 }
 
 const timestamp = "2026-05-26T00:00:00.000Z";
@@ -96,4 +119,22 @@ const sessionArtifacts = selectDesignArtifactsForSession({
 assert(
   sessionArtifacts.map((item) => item.id).join(",") === "artifact-a,artifact-event",
   "includes only active-session artifacts and event-scoped artifacts",
+);
+
+const allHarnesses = [
+  harness("hermes"),
+  harness("opencode", "OpenCode"),
+  harness("claude-code", "Claude Code"),
+  harness("ollama", "Ollama"),
+  harness("codex", "Codex"),
+];
+
+assert(
+  primaryHarnesses(allHarnesses).map((item) => item.id).join(",") === "codex,claude-code",
+  "keeps Codex and Claude as the only primary workbench harnesses",
+);
+
+assert(
+  composerHarnesses(allHarnesses).map((item) => item.id).join(",") === "codex,claude-code,ollama,opencode",
+  "shows Codex, Claude, Ollama, and OpenCode in the compact composer switcher",
 );

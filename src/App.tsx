@@ -5575,6 +5575,7 @@ function composerHarnessIcon(id: HarnessId): WorkbenchIconName {
   if (id === "codex") return "codex";
   if (id === "claude-code") return "claude";
   if (id === "ollama") return "ollama";
+  if (id === "opencode") return "opencode";
   return "harness";
 }
 

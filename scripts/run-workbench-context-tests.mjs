@@ -24,7 +24,9 @@ try {
     "--allowSyntheticDefaultImports",
     "--outDir",
     outDir,
+    "src/vite-env.d.ts",
     "src/workbench-context.ts",
+    "src/studio-workbench.ts",
     "scripts/workbench-context.test.ts",
   ], { stdio: "inherit" });
 

@@ -22,6 +22,7 @@ export type WorkbenchIconName =
   | "codex"
   | "claude"
   | "ollama"
+  | "opencode"
   | "action"
   | "command"
   | "details"
