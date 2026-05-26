@@ -421,6 +421,7 @@ export function App() {
   const pendingTraceSessionIdRef = useRef<string | null>(null);
   const harnessReadinessRefreshAttemptsRef = useRef(0);
   const runtimeStartupRefreshInFlightRef = useRef(false);
+  const runtimeReadyHydrationRef = useRef<string | null>(null);
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
@@ -1071,6 +1072,20 @@ export function App() {
       runtimeStartupRefreshInFlightRef.current = false;
     };
   }, [runtimeHealth]);
+
+  useEffect(() => {
+    if (runtimeHealth !== "ready") {
+      runtimeReadyHydrationRef.current = null;
+      return undefined;
+    }
+    const runtimeKey = String(status?.runtime?.pid ?? status?.runtime?.url ?? "ready");
+    if (runtimeReadyHydrationRef.current === runtimeKey) return undefined;
+    runtimeReadyHydrationRef.current = runtimeKey;
+    const timeout = window.setTimeout(() => {
+      void refresh();
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [runtimeHealth, status?.runtime?.pid, status?.runtime?.url]);
 
   async function refresh() {
     try {
@@ -5802,8 +5817,9 @@ function queueDockSessionLabel(session: SessionSummary): string {
 }
 
 function queueDockPromptLabel(prompt: string, harness?: HarnessId, maxLength = 32): string {
-  const marker = prompt.match(/\bMEMI_[A-Z0-9_]+(?:_OK|_DONE)\b/);
-  if (marker) return `${shortHarnessLabel(harness)} verification`;
+  const marker = prompt.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/);
+  if (marker) return `${shortHarnessLabel(harness)} check`;
+  if (/live studio agent smoke/i.test(prompt)) return `${shortHarnessLabel(harness)} live check`;
   if (/live e2e proof/i.test(prompt)) return `${shortHarnessLabel(harness)} E2E proof`;
   if (/lifecycle smoke/i.test(prompt)) return `${shortHarnessLabel(harness)} lifecycle`;
   if (/smoke test/i.test(prompt)) return `${shortHarnessLabel(harness)} smoke`;

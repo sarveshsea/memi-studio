@@ -1196,7 +1196,7 @@ export function ProjectSidebar(props: {
             const primaryNavItems = navItems.filter((item) => !item.isVerification);
             const verificationNavItems = navItems.filter((item) => item.isVerification);
             const visiblePrimaryItems = primaryNavItems.slice(0, 8);
-            const visibleVerificationItems = verificationNavItems.slice(0, 8);
+            const visibleVerificationItems = visibleSessionNavItems(verificationNavItems, props.currentSessionId, 4);
             const currentSessionIsVerification = verificationNavItems.some((item) => item.session.id === props.currentSessionId);
             return (
               <section className="project-folder" key={project.id} data-project-folder={project.id}>
@@ -1236,7 +1236,7 @@ export function ProjectSidebar(props: {
                     {verificationNavItems.length ? (
                       <details className="project-session-archive" open={currentSessionIsVerification}>
                         <summary>
-                          <span>Verification runs</span>
+                          <span>Checks</span>
                           <small>{verificationNavItems.length}</small>
                         </summary>
                         <div className="project-session-archive-list">
@@ -1336,13 +1336,15 @@ interface ProjectSessionNavItem {
 }
 
 function projectSessionNavItem(session: SessionSummary): ProjectSessionNavItem {
-  const marker = session.prompt.match(/\bMEMI_[A-Z0-9_]+(?:_OK|_DONE)\b/);
+  const marker = session.prompt.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/);
   const harness = sessionHarnessLabel(session.harness);
   const action = readableSessionAction(session.action);
   const isVerification = Boolean(marker) || /smoke|e2e proof|verification/i.test(`${session.prompt} ${session.conversationId ?? ""}`);
   let title = trimText(session.prompt.trim() || "Untitled run", 54);
   if (marker) {
-    title = `${harness} verification`;
+    title = `${harness} check`;
+  } else if (/live studio agent smoke/i.test(session.prompt)) {
+    title = `${harness} live check`;
   } else if (/live e2e proof/i.test(session.prompt)) {
     title = `${harness} E2E proof`;
   } else if (/lifecycle smoke/i.test(session.prompt)) {
@@ -1354,9 +1356,17 @@ function projectSessionNavItem(session: SessionSummary): ProjectSessionNavItem {
     session,
     title,
     titleDetail: session.prompt,
-    meta: `${action} / ${session.status}`,
+    meta: isVerification ? compactStatusLabel(session.status) : `${action} / ${session.status}`,
     isVerification,
   };
+}
+
+function visibleSessionNavItems(items: ProjectSessionNavItem[], currentSessionId: string | null, limit: number): ProjectSessionNavItem[] {
+  const visible = items.slice(0, limit);
+  if (!currentSessionId || visible.some((item) => item.session.id === currentSessionId)) return visible;
+  const current = items.find((item) => item.session.id === currentSessionId);
+  if (!current) return visible;
+  return [current, ...items.filter((item) => item.session.id !== currentSessionId).slice(0, Math.max(0, limit - 1))];
 }
 
 function sessionHarnessLabel(harness: SessionSummary["harness"]): string {

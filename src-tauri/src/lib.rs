@@ -30,7 +30,7 @@ use tauri_plugin_dialog::DialogExt;
 const STUDIO_RUNTIME_PORT: u16 = 8765;
 const STUDIO_RUNTIME_BIN: &str = "memi-studio-runtime";
 const STUDIO_RUNTIME_RESOURCE_DIR: &str = "resources/memoire-runtime";
-const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 120;
+const RUNTIME_STARTUP_POLL_ATTEMPTS: usize = 240;
 const MAX_MANAGED_RUNTIME_RESTARTS: u8 = 1;
 const MANAGED_RUNTIME_PID_FILE: &str = "managed-runtime.json";
 const RUNTIME_SIGNATURE_MANIFEST: &str = "source-signatures.json";
@@ -856,11 +856,12 @@ fn restart_studio_runtime_process(
     };
 
     let pid = child.id();
+    let runtime_ready_hint = Arc::new(AtomicBool::new(false));
     if let Some(stdout) = child.stdout.take() {
-        spawn_runtime_reader(app.clone(), "stdout", stdout, pid, generation);
+        spawn_runtime_reader(app.clone(), "stdout", stdout, pid, generation, Some(runtime_ready_hint.clone()));
     }
     if let Some(stderr) = child.stderr.take() {
-        spawn_runtime_reader(app.clone(), "stderr", stderr, pid, generation);
+        spawn_runtime_reader(app.clone(), "stderr", stderr, pid, generation, None);
     }
 
     let child = Arc::new(Mutex::new(child));
@@ -924,6 +925,7 @@ fn restart_studio_runtime_process(
             startup_started_at,
             cache_prepare_ms,
         },
+        runtime_ready_hint,
     );
     spawn_runtime_waiter(
         app.clone(),
@@ -2243,10 +2245,16 @@ fn spawn_runtime_reader<R: std::io::Read + Send + 'static>(
     output: R,
     pid: u32,
     generation: u64,
+    ready_hint: Option<Arc<AtomicBool>>,
 ) {
     thread::spawn(move || {
         let reader = BufReader::new(output);
         for line in reader.lines().map_while(Result::ok) {
+            if stream == "stdout" && runtime_output_signals_ready(&line) {
+                if let Some(ready_hint) = ready_hint.as_ref() {
+                    ready_hint.store(true, Ordering::SeqCst);
+                }
+            }
             let message = runtime_log_excerpt(&studio::redact_secrets(&line));
             append_runtime_lifecycle_log(
                 &app,
@@ -2270,6 +2278,10 @@ fn spawn_runtime_reader<R: std::io::Read + Send + 'static>(
     });
 }
 
+fn runtime_output_signals_ready(line: &str) -> bool {
+    line.contains("\"status\": \"running\"") || line.contains("\"status\":\"running\"")
+}
+
 fn spawn_runtime_ready_watcher(
     app: AppHandle,
     child: Arc<Mutex<std::process::Child>>,
@@ -2277,47 +2289,59 @@ fn spawn_runtime_ready_watcher(
     runtime_launch: MaterializedRuntime,
     api_token: Option<String>,
     timing: RuntimeSupervisorTiming,
+    ready_hint: Arc<AtomicBool>,
 ) {
     let pid = child.lock().map(|child| child.id()).unwrap_or_default();
     thread::spawn(move || {
+        let mut ready_source = None;
         for _ in 0..RUNTIME_STARTUP_POLL_ATTEMPTS {
             if runtime_answers_status(STUDIO_RUNTIME_PORT) {
-                if let Some(state) = app.try_state::<AppState>() {
-                    let mut ready_payload = None;
-                    {
-                        let mut runtime_state = state.runtime.lock().expect("runtime state lock");
-                        let current_pid = current_runtime_child_pid(&runtime_state.child);
-                        if runtime_state.generation == timing.generation && current_pid == Some(pid) {
-                            let mut status = runtime_status(
-                                "running",
-                                Some(pid),
-                                &workspace_root,
-                                api_token.clone(),
-                                Some(runtime_launch.package_root.to_string_lossy().to_string()),
-                                None,
-                            );
-                            apply_runtime_diagnostics(&mut status, &runtime_launch);
-                            status.supervisor_phase = Some("running".to_string());
-                            status.startup_started_at = Some(timing.startup_started_at.clone());
-                            status.cache_prepare_ms = Some(timing.cache_prepare_ms);
-                            status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
-                            ready_payload = Some(json!({
-                                "generation": timing.generation,
-                                "pid": pid,
-                                "runtimeCacheRoot": status.runtime_cache_root.clone(),
-                                "cachePrepareMs": status.cache_prepare_ms,
-                                "startupMs": status.startup_ms
-                            }));
-                            runtime_state.status = Some(status);
-                        }
-                    }
-                    if let Some(payload) = ready_payload {
-                        append_runtime_lifecycle_log(&app, "runtime.ready", payload);
-                    }
-                }
-                return;
+                ready_source = Some("http");
+                break;
+            }
+            if ready_hint.load(Ordering::SeqCst) && process_exists(pid) {
+                ready_source = Some("stdout");
+                break;
             }
             thread::sleep(Duration::from_millis(250));
+        }
+
+        if let Some(ready_source) = ready_source {
+            if let Some(state) = app.try_state::<AppState>() {
+                let mut ready_payload = None;
+                {
+                    let mut runtime_state = state.runtime.lock().expect("runtime state lock");
+                    let current_pid = current_runtime_child_pid(&runtime_state.child);
+                    if runtime_state.generation == timing.generation && current_pid == Some(pid) {
+                        let mut status = runtime_status(
+                            "running",
+                            Some(pid),
+                            &workspace_root,
+                            api_token.clone(),
+                            Some(runtime_launch.package_root.to_string_lossy().to_string()),
+                            None,
+                        );
+                        apply_runtime_diagnostics(&mut status, &runtime_launch);
+                        status.supervisor_phase = Some("running".to_string());
+                        status.startup_started_at = Some(timing.startup_started_at.clone());
+                        status.cache_prepare_ms = Some(timing.cache_prepare_ms);
+                        status.startup_ms = Some(elapsed_ms(timing.supervisor_started));
+                        ready_payload = Some(json!({
+                            "generation": timing.generation,
+                            "pid": pid,
+                            "readySource": ready_source,
+                            "runtimeCacheRoot": status.runtime_cache_root.clone(),
+                            "cachePrepareMs": status.cache_prepare_ms,
+                            "startupMs": status.startup_ms
+                        }));
+                        runtime_state.status = Some(status);
+                    }
+                }
+                if let Some(payload) = ready_payload {
+                    append_runtime_lifecycle_log(&app, "runtime.ready", payload);
+                }
+            }
+            return;
         }
 
         if let Some(state) = app.try_state::<AppState>() {
@@ -2761,6 +2785,14 @@ mod runtime_cache_tests {
         assert!(!should_recover_timed_out_runtime(4, 3, Some(97507), 97507));
         assert!(!should_recover_timed_out_runtime(3, 3, Some(97508), 97507));
         assert!(!should_recover_timed_out_runtime(3, 3, None, 97507));
+    }
+
+    #[test]
+    fn runtime_stdout_ready_signal_matches_pretty_and_compact_json() {
+        assert!(runtime_output_signals_ready("\"status\": \"running\","));
+        assert!(runtime_output_signals_ready("{\"status\":\"running\"}"));
+        assert!(!runtime_output_signals_ready("\"status\": \"starting\","));
+        assert!(!runtime_output_signals_ready("runtime started but waiting"));
     }
 
     #[test]
