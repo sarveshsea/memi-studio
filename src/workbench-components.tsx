@@ -257,9 +257,7 @@ export function ChatQualityLayer(props: {
         <span className="chat-plan-chip" title={props.session?.prompt ?? "Draft prompt"}>{props.session ? trimText(props.session.prompt, 72) : "Draft"}</span>
         <span className="chat-status-chip" data-session-status={props.sessionStatus}>{compactStatusLabel(props.sessionStatus)}</span>
         <span className="chat-next-chip" title={nextTask?.label ?? eventLabel(props.action)}>{nextTask?.label ?? eventLabel(props.action)}</span>
-        <button aria-label="Branch" className="icon-button" data-action-id="chat.branch-current" title="Branch" type="button" onClick={props.onBranch}>
-          <StudioControlIcon name="branch" />
-        </button>
+        <IconButton actionId="chat.branch-current" ariaLabel="Branch conversation" title="Branch" icon="branch" onClick={props.onBranch} />
       </section>
       <div className="chat-qol-grid" data-chat-signal-grid="clean-context">
         <label className="chat-search-row" data-chat-search="conversation">
@@ -275,16 +273,13 @@ export function ChatQualityLayer(props: {
             ))}
           </section>
           <section className="chat-memory-pins" data-memory-pins="session">
-            <button aria-label="Pin memory" data-action-id="chat.pin-memory" title="Pin" type="button" onClick={props.onPinMemory}>
-              <StudioControlIcon name="pin" />
+            <IconButton actionId="chat.pin-memory" ariaLabel="Pin memory" title="Pin memory" icon="pin" onClick={props.onPinMemory}>
               <strong>{props.memoryPins.length}</strong>
-            </button>
+            </IconButton>
           </section>
           <section className="chat-signal-card chat-artifact-shelf" data-artifact-shelf="chat-evidence" data-verification-receipt="run">
-            <button aria-label="Copy verification" data-action-id="chat.copy-verification" title={verification.summary} type="button" onClick={props.onCopyVerification}>
-              <StudioControlIcon name="copy" />
-            </button>
-            <strong title={latestArtifact?.title ?? verification.status}>{latestArtifact ? trimText(latestArtifact.title, 24) : "No"}</strong>
+            <IconButton actionId="chat.copy-verification" ariaLabel="Copy verification" title={`Copy verification: ${verification.summary}`} icon="copy" onClick={props.onCopyVerification} />
+            <strong title={latestArtifact?.title ?? verification.status}>{latestArtifact ? trimText(latestArtifact.title, 24) : verification.status}</strong>
             <small>{latestArtifact ? `${props.artifacts.length} artifacts / ${designFileCount} files` : `Artifact verification · ${props.artifacts.length} / ${designFileCount}`}</small>
           </section>
           {approvalRequests.length ? (
@@ -406,17 +401,13 @@ export function CreationStrip(props: {
             </button>
           ))}
         </section>
-        <button aria-label="Pin memory" data-action-id="chat.pin-memory" title="Pin" type="button" onClick={props.onPinMemory}>
-          <StudioControlIcon name="pin" />
+        <IconButton actionId="chat.pin-memory" ariaLabel="Pin memory" title="Pin memory" icon="pin" onClick={props.onPinMemory}>
           <strong>{props.memoryPins.length}</strong>
-        </button>
-        <button aria-label="Copy verification" data-action-id="chat.copy-verification" title={verification.summary} type="button" onClick={props.onCopyVerification}>
-          <StudioControlIcon name="copy" />
+        </IconButton>
+        <IconButton actionId="chat.copy-verification" ariaLabel="Copy verification" title={`Copy verification: ${verification.summary}`} icon="copy" onClick={props.onCopyVerification}>
           <span>Artifact verification</span>
-        </button>
-        <button aria-label="Branch" data-action-id="chat.branch-current" title="Branch" type="button" onClick={props.onBranch}>
-          <StudioControlIcon name="branch" />
-        </button>
+        </IconButton>
+        <IconButton actionId="chat.branch-current" ariaLabel="Branch conversation" title="Branch" icon="branch" onClick={props.onBranch} />
       </div>
     </section>
   );

@@ -54,6 +54,10 @@ const checks = [
       "contract.outputSections.join(\" / \")",
       "reference.mappedRoles.join(\" / \")",
       "pattern.requiredSignals.join(\" / \")",
+      "aria-label=\"Branch\" className=\"icon-button\" data-action-id=\"chat.branch-current\"",
+      "aria-label=\"Pin memory\" data-action-id=\"chat.pin-memory\" title=\"Pin\"",
+      "aria-label=\"Copy verification\" data-action-id=\"chat.copy-verification\" title={verification.summary}",
+      "latestArtifact ? trimText(latestArtifact.title, 24) : \"No\"",
     ],
   },
   {
@@ -162,6 +166,9 @@ const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
 if (!componentsSource.includes("data-icon-tooltip")) {
   failures.push("src/workbench-components.tsx: shared icon controls must emit data-icon-tooltip for visible labels");
+}
+if (!componentsSource.includes('actionId="chat.branch-current" ariaLabel="Branch conversation"') || !componentsSource.includes('title={`Copy verification: ${verification.summary}`}')) {
+  failures.push("src/workbench-components.tsx: contextual chat icon controls must use shared visible tooltips instead of title-only icons");
 }
 if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}')) {
   failures.push("src/workbench-components.tsx: collapsed sidebar icon control must expose a visible tooltip");

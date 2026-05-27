@@ -19,6 +19,7 @@ use std::{
     process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
+        mpsc,
         Arc, Mutex,
     },
     thread,
@@ -784,7 +785,7 @@ fn restart_studio_runtime_process(
         return status;
     }
 
-    if let Some(error) = workspace_access_error(workspace_root) {
+    if let Some(error) = workspace_access_error_with_timeout(workspace_root, Duration::from_secs(3)) {
         let mut status = runtime_status("error", None, workspace_root, None, None, Some(error));
         status.supervisor_phase = Some("workspace-access-blocked".to_string());
         status.startup_started_at = Some(startup_started_at.clone());
@@ -1131,6 +1132,35 @@ fn workspace_access_error(workspace_root: &Path) -> Option<String> {
         return permission_error_message(workspace_root, workspace_root, &error);
     }
     None
+}
+
+fn workspace_access_error_with_timeout(workspace_root: &Path, timeout: Duration) -> Option<String> {
+    workspace_access_error_with_timeout_probe(workspace_root, timeout, workspace_access_error)
+}
+
+fn workspace_access_error_with_timeout_probe<F>(
+    workspace_root: &Path,
+    timeout: Duration,
+    probe: F,
+) -> Option<String>
+where
+    F: FnOnce(&Path) -> Option<String> + Send + 'static,
+{
+    let workspace_root = workspace_root.to_path_buf();
+    let display_path = workspace_root.display().to_string();
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = sender.send(probe(&workspace_root));
+    });
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => Some(format!(
+            "macOS blocked access to the saved workspace {display_path} while verifying external-volume permissions. Choose Open folder and select the workspace again, or grant Mémoire Studio access to removable/network volumes in System Settings."
+        )),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Some(format!(
+            "macOS blocked access to the saved workspace {display_path} while checking workspace permissions. Choose Open folder and select the workspace again."
+        )),
+    }
 }
 
 fn permission_error_message(
@@ -2904,6 +2934,39 @@ mod runtime_cache_tests {
         assert!(error.contains("macOS blocked access to the saved workspace"));
         assert!(error.contains("Open folder"));
         assert!(error.contains(&project_file.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn workspace_access_preflight_timeout_returns_reauthorization_prompt() {
+        let root = PathBuf::from("/Volumes/ExtremeSSD/Projects/memi-studio");
+
+        let error = workspace_access_error_with_timeout_probe(
+            &root,
+            Duration::from_millis(5),
+            |_| {
+                thread::sleep(Duration::from_millis(40));
+                None
+            },
+        )
+        .expect("timeout should ask for reauthorization");
+
+        assert!(error.contains("macOS blocked access to the saved workspace"));
+        assert!(error.contains("Open folder"));
+        assert!(error.contains(&root.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn workspace_access_preflight_timeout_preserves_probe_error() {
+        let root = PathBuf::from("/Volumes/ExtremeSSD/Projects/memi-studio");
+
+        let error = workspace_access_error_with_timeout_probe(
+            &root,
+            Duration::from_secs(1),
+            |workspace| Some(format!("blocked {}", workspace.display())),
+        )
+        .expect("probe error");
+
+        assert_eq!(error, format!("blocked {}", root.display()));
     }
 
     #[test]
