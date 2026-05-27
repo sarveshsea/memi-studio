@@ -18,6 +18,9 @@ const checks = [
       "codex-gpt-5-5",
       "hermes-harness",
       "deterministic-product-simulator",
+      "studyHermesResearchHarness",
+      "model-hermes",
+      "data-harness-study=\"hermes\"",
     ],
   },
   {

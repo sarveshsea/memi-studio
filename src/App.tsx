@@ -215,6 +215,7 @@ import {
   normalizeComposerHarness,
   normalizePrimaryHarness,
   normalizeRightPaneTab,
+  researchLabHarness,
   type WorkbenchRightPaneTab,
 } from "./studio-workbench";
 
@@ -700,6 +701,7 @@ export function App() {
   const codexHarness = useMemo(() => harnesses.find((harness) => harness.id === "codex"), [harnesses]);
   const claudeHarness = useMemo(() => harnesses.find((harness) => harness.id === "claude-code"), [harnesses]);
   const visibleHarnesses = useMemo(() => composerSwitcherHarnesses(harnesses), [harnesses]);
+  const researchStudyHarness = useMemo(() => researchLabHarness(harnesses, selectedHarness), [harnesses, selectedHarness]);
 
   const harnessActions = useMemo(() => actionsForHarness(currentHarness), [currentHarness]);
   const effectiveAction: StudioAction = resolveHarnessAction(selectedAction, currentHarness);
@@ -2594,15 +2596,15 @@ export function App() {
     }
   }
 
-  async function studyHermesResearchHarness() {
-    if (!status?.projectRoot) return;
+  async function studyResearchHarness() {
+    if (!status?.projectRoot || !researchStudyHarness) return;
     setScenarioRunning(true);
     setError(null);
     try {
       const studyCall = await callStudioTool({
         toolId: "harness.study",
         cwd: status.projectRoot,
-        input: { harnessId: "hermes" },
+        input: { harnessId: researchStudyHarness.id },
       });
       const study = (studyCall.data as { study?: HarnessStudySummary } | undefined)?.study ?? null;
       setHarnessStudy(study);
@@ -3108,12 +3110,13 @@ export function App() {
     const latestMatrixRun = scenarioMatrix?.runs?.[0]?.run;
     const winnerRunId = scenarioMatrix?.comparison?.winnerRunId ?? latestMatrixRun?.id ?? null;
     const scorecard = latestMatrixRun?.scorecard;
-    const hasHermesProfile = scenarioModels.some((profile) => profile.provider === "hermes");
+    const studiedHarnessLabel = harnessStudy?.label ?? researchStudyHarness?.label ?? "Agent";
+    const studiedHarnessNodeId = harnessStudy ? "model-study" : null;
     const edges = [
       ["agent-pm", "finding-risk"],
       ["agent-research", "finding-risk"],
       ["model-codex", "agent-pm"],
-      ...(hasHermesProfile ? [["model-hermes", "agent-research"] as [string, string]] : []),
+      ...(studiedHarnessNodeId ? [[studiedHarnessNodeId, "agent-research"] as [string, string]] : []),
       ["variable", "finding-risk"],
       ["finding-risk", "outcome"],
     ] as Array<[string, string]>;
@@ -3121,7 +3124,7 @@ export function App() {
       { id: "agent-pm", label: "PM", kind: "agent" },
       { id: "agent-research", label: "Research", kind: "agent" },
       { id: "model-codex", label: "Codex", kind: "agent" },
-      ...(hasHermesProfile ? [{ id: "model-hermes", label: "Hermes", kind: "agent" } as ScenarioLabNode] : []),
+      ...(studiedHarnessNodeId ? [{ id: studiedHarnessNodeId, label: studiedHarnessLabel, kind: "agent" } as ScenarioLabNode] : []),
       { id: "finding-risk", label: "Risk", kind: "finding" },
       { id: "variable", label: scenarioVariable, kind: "variable" },
       { id: "outcome", label: winnerRunId ? "Winner" : "Spec", kind: "outcome" },
@@ -3142,8 +3145,8 @@ export function App() {
             <h2>PM harness study</h2>
           </div>
           <div className="scenario-head-actions">
-            <button type="button" data-action-id="research-lab.harness-study" onClick={() => void studyHermesResearchHarness()} disabled={scenarioRunning || !status?.projectRoot}>
-              Hermes
+            <button type="button" data-action-id="research-lab.harness-study" onClick={() => void studyResearchHarness()} disabled={scenarioRunning || !status?.projectRoot || !researchStudyHarness}>
+              {researchStudyHarness?.label ?? "Agent"}
             </button>
             <button type="button" data-action-id="research-lab.patterns" onClick={() => void refreshResearchPatterns()} disabled={scenarioRunning || !status?.projectRoot}>
               Patterns
@@ -3185,10 +3188,10 @@ export function App() {
           )) : <button data-smart-empty-state="memory-sync" type="button" onClick={() => void refreshKnowledge()}>Sync</button>}
         </div>
         <div className="research-lab-surfaces" data-research-lab="pm-harness-study">
-          <article data-harness-study="hermes">
+          <article data-harness-study={harnessStudy?.harnessId ?? researchStudyHarness?.id ?? "primary"}>
             <span>Harness Study</span>
             <strong>{harnessStudy ? `${harnessStudy.label} ${harnessStudy.available ? "ready" : "offline"}` : "Not run"}</strong>
-            <small>{harnessStudy?.model ?? "Run study"}</small>
+            <small>{harnessStudy?.model ?? `Study ${researchStudyHarness?.label ?? "agent"}`}</small>
             <div>
               {harnessStudy?.toolsets?.enabled?.slice(0, 4).map((toolset) => (
                 <em key={toolset}>{toolset}</em>

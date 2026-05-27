@@ -23,6 +23,7 @@ import {
   isVerificationRunText,
   modePresetIdForComposerState,
   primaryHarnesses,
+  researchLabHarness,
   sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
 import { buildCritiqueScreenPrompt, buildCritiqueScreenUnavailablePrompt, WORKBENCH_COPY } from "../src/workbench-copy.js";
@@ -195,6 +196,13 @@ assert(
 assert(
   composerSwitcherHarnesses(defaultStudioHarnesses).every((item) => item.id !== "opencode"),
   "keeps OpenCode advanced until it is explicitly enabled",
+);
+
+assert(
+  researchLabHarness(defaultStudioHarnesses, "codex")?.id === "codex"
+    && researchLabHarness(defaultStudioHarnesses, "claude-code")?.id === "claude-code"
+    && researchLabHarness(defaultStudioHarnesses, "ollama")?.id === "codex",
+  "keeps Research Lab studies on the selected primary harness and falls back from local/advanced harnesses",
 );
 
 assert(

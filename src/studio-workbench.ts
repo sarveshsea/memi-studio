@@ -57,6 +57,13 @@ export function composerSwitcherHarnesses(harnesses: Harness[]): Harness[] {
   return composerHarnesses(harnesses).filter((harness) => isPersistentComposerHarness(harness.id) || harness.enabled);
 }
 
+export function researchLabHarness(harnesses: Harness[], selectedHarnessId: HarnessId): Harness | null {
+  const byId = new Map(harnesses.map((harness) => [harness.id, harness]));
+  const selected = byId.get(selectedHarnessId);
+  if (selected?.enabled && harnessVisibility(selected) === "primary") return selected;
+  return PRIMARY_HARNESS_IDS.map((id) => byId.get(id)).find((harness): harness is Harness => Boolean(harness?.enabled)) ?? primaryHarnesses(harnesses)[0] ?? null;
+}
+
 export function isPersistentComposerHarness(id: string): boolean {
   return (PERSISTENT_COMPOSER_HARNESS_IDS as readonly string[]).includes(id);
 }
