@@ -70,6 +70,12 @@ struct MaterializedRuntime {
     source_kind: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeLaunchCommandSpec {
+    program: OsString,
+    args: Vec<OsString>,
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeSupervisorTiming {
     generation: u64,
@@ -859,14 +865,9 @@ fn restart_studio_runtime_process(
     let runtime_shell = runtime_child_shell_env();
 
     let api_token = generate_runtime_api_token();
-    let mut child = match Command::new(&binary)
-        .args([
-            "studio",
-            "serve",
-            "--port",
-            &STUDIO_RUNTIME_PORT.to_string(),
-            "--json",
-        ])
+    let launch = runtime_launch_command_spec(&binary, STUDIO_RUNTIME_PORT);
+    let mut child = match Command::new(&launch.program)
+        .args(&launch.args)
         .current_dir(&runtime_working_dir)
         .env("MEMOIRE_PACKAGE_ROOT", &package_root)
         .env("MEMOIRE_STUDIO_PROJECT_ROOT", workspace_root)
@@ -876,6 +877,7 @@ fn restart_studio_runtime_process(
         .env("PWD", &runtime_working_dir)
         .env("PATH", &runtime_path)
         .env("SHELL", &runtime_shell)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -2241,6 +2243,36 @@ fn runtime_spawn_working_dir(runtime: &MaterializedRuntime) -> &Path {
     &runtime.package_root
 }
 
+fn runtime_launch_command_spec(binary: &Path, port: u16) -> RuntimeLaunchCommandSpec {
+    #[cfg(target_os = "macos")]
+    {
+        RuntimeLaunchCommandSpec {
+            program: OsString::from("/bin/zsh"),
+            args: vec![
+                OsString::from("-lc"),
+                OsString::from("exec \"$1\" studio serve --port \"$2\" --json"),
+                OsString::from("memi-runtime-launch"),
+                binary.as_os_str().to_os_string(),
+                OsString::from(port.to_string()),
+            ],
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        RuntimeLaunchCommandSpec {
+            program: binary.as_os_str().to_os_string(),
+            args: vec![
+                OsString::from("studio"),
+                OsString::from("serve"),
+                OsString::from("--port"),
+                OsString::from(port.to_string()),
+                OsString::from("--json"),
+            ],
+        }
+    }
+}
+
 fn runtime_child_shell_env() -> OsString {
     env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/zsh"))
 }
@@ -2889,6 +2921,43 @@ mod runtime_cache_tests {
             runtime_spawn_working_dir(&runtime),
             Path::new("/tmp/runtime/package")
         );
+    }
+
+    #[test]
+    fn macos_runtime_launch_uses_shell_wrapper_without_interpolating_paths() {
+        let spec = runtime_launch_command_spec(
+            Path::new("/tmp/runtime with spaces/bin/memi-studio-runtime"),
+            8765,
+        );
+
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(spec.program, OsString::from("/bin/zsh"));
+            assert_eq!(spec.args[0], OsString::from("-lc"));
+            assert_eq!(
+                spec.args[1],
+                OsString::from("exec \"$1\" studio serve --port \"$2\" --json")
+            );
+            assert_eq!(spec.args[2], OsString::from("memi-runtime-launch"));
+            assert_eq!(
+                spec.args[3],
+                OsString::from("/tmp/runtime with spaces/bin/memi-studio-runtime")
+            );
+            assert_eq!(spec.args[4], OsString::from("8765"));
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(
+                spec.program,
+                OsString::from("/tmp/runtime with spaces/bin/memi-studio-runtime")
+            );
+            assert_eq!(spec.args[0], OsString::from("studio"));
+            assert_eq!(spec.args[1], OsString::from("serve"));
+            assert_eq!(spec.args[2], OsString::from("--port"));
+            assert_eq!(spec.args[3], OsString::from("8765"));
+            assert_eq!(spec.args[4], OsString::from("--json"));
+        }
     }
 
     #[test]

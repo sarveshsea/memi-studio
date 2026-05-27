@@ -168,6 +168,13 @@ if (existsSync(runtimeResourceRoot)) {
 }
 
 const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const localCargoTargetEnv = "CARGO_TARGET_DIR=$HOME/Library/Caches/cv.memoire.studio/cargo-target";
+for (const scriptName of ["check:rust", "tauri:dev", "tauri:build", "tauri:build:release"]) {
+  const script = packageJson.scripts?.[scriptName] ?? "";
+  if (!script.includes(localCargoTargetEnv)) {
+    failures.push(`package.json: ${scriptName} must set ${localCargoTargetEnv} so Rust artifacts stay off external volumes`);
+  }
+}
 const runtimeVersion = packageJson.memoireRuntime?.version;
 const runtimeTagVersion = String(packageJson.memoireRuntime?.releaseTag ?? "").replace(/^runtime-v/, "");
 if (runtimeVersion && runtimeTagVersion && runtimeVersion !== runtimeTagVersion) {
@@ -181,12 +188,34 @@ function exportedConst(name) {
   return match?.[1] ?? "";
 }
 
+function assertOpenCodeContract(manifestPath) {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const relativeManifestPath = manifestPath.replace(`${ROOT}/`, "");
+  const opencode = manifest.harnesses?.find((item) => item.id === "opencode");
+  if (!opencode) {
+    failures.push(`${relativeManifestPath}: missing OpenCode harness`);
+    return;
+  }
+  const expectedCommand = ["run", "--format", "json", "--dir", "{{cwd}}", "{{promptEnvelope}}"];
+  for (const action of ["compose", "audit", "raw"]) {
+    const actual = opencode.commandTemplates?.[action] ?? [];
+    if (actual.join("\u0000") !== expectedCommand.join("\u0000")) {
+      failures.push(`${relativeManifestPath}: OpenCode ${action} must use opencode run --format json --dir {{cwd}} {{promptEnvelope}}`);
+    }
+  }
+  if (opencode.outputParser !== "opencode-jsonl") {
+    failures.push(`${relativeManifestPath}: OpenCode outputParser must be opencode-jsonl`);
+  }
+}
+
 const publicPackageName = exportedConst("MEMOIRE_PACKAGE_NAME");
 const publicPackageVersion = exportedConst("MEMOIRE_PACKAGE_VERSION");
 const publicPackageUrl = exportedConst("MEMOIRE_PACKAGE_URL");
 const studioRustSource = readFileSync(join(ROOT, "src-tauri/src/studio.rs"), "utf8");
 const runtimeResourcePackage = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/package.json"), "utf8"));
 const runtimeInfo = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/studio-runtime-info.json"), "utf8"));
+assertOpenCodeContract(join(ROOT, "src-tauri", "resources", "harness-manifest.json"));
+assertOpenCodeContract(join(ROOT, "src-tauri", "resources", "memoire-runtime", "studio", "harness-manifest.json"));
 
 if (runtimeResourcePackage.name !== publicPackageName) {
   failures.push(`src-tauri/resources/memoire-runtime/package.json: name must be ${publicPackageName}, got ${runtimeResourcePackage.name}`);
