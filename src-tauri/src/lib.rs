@@ -673,6 +673,33 @@ fn restart_studio_runtime_process(
     if current_runtime_generation(state) != generation {
         return current_runtime_status(state, workspace_root);
     }
+    if let Some(error) = workspace_access_error_with_timeout(workspace_root, Duration::from_secs(3)) {
+        let mut status = runtime_status("error", None, workspace_root, None, None, Some(error));
+        status.supervisor_phase = Some("workspace-access-blocked".to_string());
+        status.startup_started_at = Some(startup_started_at.clone());
+        status.startup_ms = Some(elapsed_ms(supervisor_started));
+        let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.workspace-access-blocked",
+            json!({
+                "generation": generation,
+                "workspaceRoot": workspace_root.to_string_lossy().to_string(),
+                "startupMs": status.startup_ms,
+                "error": status.error.clone()
+            }),
+        );
+        let _ = app.emit(
+            "studio-runtime-log",
+            json!({
+                "stream": "system",
+                "message": status.error.clone(),
+                "timestamp": studio::unix_millis().to_string()
+            }),
+        );
+        return status;
+    }
+
     let child = take_runtime_child_for_stop(state);
     if let Some(pid) = stop_runtime_child(child) {
         clear_managed_runtime_pid_file(app, Some(pid));
@@ -782,33 +809,6 @@ fn restart_studio_runtime_process(
         &startup_started_at,
         supervisor_started,
     ) {
-        return status;
-    }
-
-    if let Some(error) = workspace_access_error_with_timeout(workspace_root, Duration::from_secs(3)) {
-        let mut status = runtime_status("error", None, workspace_root, None, None, Some(error));
-        status.supervisor_phase = Some("workspace-access-blocked".to_string());
-        status.startup_started_at = Some(startup_started_at.clone());
-        status.startup_ms = Some(elapsed_ms(supervisor_started));
-        let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
-        append_runtime_lifecycle_log(
-            app,
-            "runtime.workspace-access-blocked",
-            json!({
-                "generation": generation,
-                "workspaceRoot": workspace_root.to_string_lossy().to_string(),
-                "startupMs": status.startup_ms,
-                "error": status.error.clone()
-            }),
-        );
-        let _ = app.emit(
-            "studio-runtime-log",
-            json!({
-                "stream": "system",
-                "message": status.error.clone(),
-                "timestamp": studio::unix_millis().to_string()
-            }),
-        );
         return status;
     }
 

@@ -285,6 +285,7 @@ function assertOpenCodeContract(manifestPath) {
 const publicPackageName = exportedConst("MEMOIRE_PACKAGE_NAME");
 const publicPackageVersion = exportedConst("MEMOIRE_PACKAGE_VERSION");
 const publicPackageUrl = exportedConst("MEMOIRE_PACKAGE_URL");
+const tauriRustSource = readFileSync(join(ROOT, "src-tauri/src/lib.rs"), "utf8");
 const studioRustSource = readFileSync(join(ROOT, "src-tauri/src/studio.rs"), "utf8");
 const runtimeResourcePackage = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/package.json"), "utf8"));
 const runtimeInfo = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/studio-runtime-info.json"), "utf8"));
@@ -305,6 +306,18 @@ if (runtimeInfo.packageName !== publicPackageName || runtimeInfo.packageVersion 
 }
 if (!studioRustSource.includes(`${publicPackageName}@${publicPackageVersion}`) || !studioRustSource.includes(publicPackageUrl)) {
   failures.push("src-tauri/src/studio.rs: agent prompt package reference must match src/runtime/package-info.ts");
+}
+const workspacePreflightIndex = tauriRustSource.indexOf("workspace_access_error_with_timeout(workspace_root");
+const runtimeChildStopIndex = tauriRustSource.indexOf("let child = take_runtime_child_for_stop(state)");
+const orphanReplacementIndex = tauriRustSource.indexOf("replace_managed_orphan_runtime(app, workspace_root)");
+if (
+  workspacePreflightIndex < 0 ||
+  runtimeChildStopIndex < 0 ||
+  orphanReplacementIndex < 0 ||
+  workspacePreflightIndex > runtimeChildStopIndex ||
+  workspacePreflightIndex > orphanReplacementIndex
+) {
+  failures.push("src-tauri/src/lib.rs: workspace access preflight must run before stopping/replacing runtimes");
 }
 if (!runtimeInfo.releaseTag || runtimeInfo.releaseTag !== packageJson.memoireRuntime?.releaseTag) {
   failures.push("src-tauri/resources/memoire-runtime/studio-runtime-info.json: releaseTag must match package.json memoireRuntime.releaseTag");
