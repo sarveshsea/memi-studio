@@ -73,6 +73,7 @@ import {
   harnessVisibility,
   isPrimaryHarness,
   isVerificationRunText,
+  sidebarNavigationSessions,
 } from "./studio-workbench";
 import { MEMOIRE_PACKAGE_NAME, MEMOIRE_PACKAGE_VERSION, MEMOIRE_STUDIO_VERSION } from "./runtime/package-info";
 
@@ -1154,8 +1155,9 @@ export function ProjectSidebar(props: {
   onOpenAutomations: () => void;
   onOpenFigma: () => void | Promise<void>;
 }) {
-  const projects = groupSessionsByProject(props.sessions);
-  const activeWorkspaceProject = currentWorkspaceProject(props.currentWorkspace, props.sessions);
+  const navigationSessions = sidebarNavigationSessions(props.sessions, props.currentSessionId);
+  const projects = groupSessionsByProject(navigationSessions);
+  const activeWorkspaceProject = currentWorkspaceProject(props.currentWorkspace, navigationSessions);
   const expanded = new Set(props.expandedProjectIds);
   const hasNavigationContext = projects.length > 0 || Boolean(activeWorkspaceProject) || props.recentWorkspaces.length > 0;
   return (

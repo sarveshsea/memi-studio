@@ -79,6 +79,10 @@ export function isVerificationSession(session: Pick<SessionSummary, "prompt" | "
   return isVerificationRunText(`${session.prompt} ${session.conversationId ?? ""}`);
 }
 
+export function sidebarNavigationSessions(sessions: SessionSummary[], currentSessionId: string | null): SessionSummary[] {
+  return sessions.filter((session) => !isVerificationSession(session) || session.id === currentSessionId);
+}
+
 export function defaultWorkbenchSession(sessions: SessionSummary[]): SessionSummary | null {
   return sessions.find((session) => !isVerificationSession(session)) ?? null;
 }

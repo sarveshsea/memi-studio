@@ -17,6 +17,7 @@ import {
   isQueueDockSession,
   isVerificationRunText,
   primaryHarnesses,
+  sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
 import type { Harness, HarnessId, SessionSummary } from "../src/studio-api.js";
 
@@ -208,6 +209,16 @@ assert(
   defaultWorkbenchSession([smokeSession, realSession])?.id === "real-run"
     && defaultWorkbenchSession([smokeSession]) === null,
   "keeps verification runs from becoming the default workbench session",
+);
+
+assert(
+  sidebarNavigationSessions([smokeSession, realSession], null).map((item) => item.id).join(",") === "real-run",
+  "keeps verification runs out of default project navigation",
+);
+
+assert(
+  sidebarNavigationSessions([smokeSession], "check-run").map((item) => item.id).join(",") === "check-run",
+  "keeps the active verification run reachable when selected",
 );
 
 assert(
