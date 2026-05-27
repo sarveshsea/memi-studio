@@ -104,6 +104,7 @@ fn studio_status(app: AppHandle, state: State<AppState>) -> Result<studio::Studi
     let workspace_root = workspace_root(&app)?;
     let mut status = studio::studio_status(&workspace_root);
     let runtime = current_runtime_status(&state, &workspace_root);
+    status = reconcile_studio_status_with_runtime_workspace(status, &runtime);
     if runtime.status == "running" {
         if let Some(harnesses) = runtime_harnesses(runtime.api_token.as_deref()) {
             status.harnesses = harnesses;
@@ -111,6 +112,24 @@ fn studio_status(app: AppHandle, state: State<AppState>) -> Result<studio::Studi
     }
     status.runtime = Some(runtime);
     Ok(status)
+}
+
+fn reconcile_studio_status_with_runtime_workspace(
+    mut status: studio::StudioStatus,
+    runtime: &studio::StudioRuntimeStatus,
+) -> studio::StudioStatus {
+    if runtime.status != "running" || runtime.workspace_root.trim().is_empty() {
+        return status;
+    }
+    if normalize_runtime_path(&status.project_root)
+        == normalize_runtime_path(&runtime.workspace_root)
+    {
+        return status;
+    }
+    let runtime_workspace = Path::new(&runtime.workspace_root);
+    status.project_root = runtime.workspace_root.clone();
+    status.config = studio::studio_config(runtime_workspace);
+    status
 }
 
 #[tauri::command]
@@ -548,11 +567,38 @@ fn current_runtime_status(state: &AppState, workspace_root: &Path) -> studio::St
             Some("Studio runtime has not started yet".to_string()),
         )
     });
-    if status.status != "running" && runtime_status_matches_workspace(STUDIO_RUNTIME_PORT, workspace_root) {
+    status = reconcile_runtime_status_workspace(
+        status,
+        runtime_project_root(STUDIO_RUNTIME_PORT).as_deref(),
+    );
+    if status.status != "running"
+        && runtime_status_matches_workspace(STUDIO_RUNTIME_PORT, workspace_root)
+    {
         status.status = "running".to_string();
         status.error = None;
         status.supervisor_phase = Some("runtime-api-reconciled".to_string());
     }
+    status
+}
+
+fn reconcile_runtime_status_workspace(
+    mut status: studio::StudioRuntimeStatus,
+    runtime_project_root: Option<&str>,
+) -> studio::StudioRuntimeStatus {
+    if status.status != "running" {
+        return status;
+    }
+    let Some(project_root) = runtime_project_root else {
+        return status;
+    };
+    if project_root.trim().is_empty()
+        || normalize_runtime_path(&status.workspace_root) == normalize_runtime_path(project_root)
+    {
+        return status;
+    }
+    status.workspace_root = project_root.to_string();
+    status.error = None;
+    status.supervisor_phase = Some("runtime-api-reconciled".to_string());
     status
 }
 
@@ -2204,16 +2250,23 @@ fn runtime_answers_status(port: u16) -> bool {
 }
 
 fn runtime_status_matches_workspace(port: u16, workspace_root: &Path) -> bool {
+    runtime_project_root(port).is_some_and(|project_root| {
+        normalize_runtime_path(&project_root)
+            == normalize_runtime_path(&workspace_root.to_string_lossy())
+    })
+}
+
+fn runtime_project_root(port: u16) -> Option<String> {
     let Some((200, body)) = local_http_get(port, "/api/status") else {
-        return false;
+        return None;
     };
     let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body) else {
-        return false;
+        return None;
     };
     payload
         .get("projectRoot")
         .and_then(|value| value.as_str())
-        .is_some_and(|project_root| project_root == workspace_root.to_string_lossy())
+        .map(ToString::to_string)
 }
 
 fn runtime_harnesses(api_token: Option<&str>) -> Option<Vec<studio::HarnessStatus>> {
@@ -2731,6 +2784,40 @@ mod runtime_cache_tests {
             "/Applications/Mémoire Studio.app"
         )));
         assert!(is_sensitive_workspace(&home_root().join(".ssh")));
+    }
+
+    #[test]
+    fn studio_status_reconciles_running_runtime_workspace() {
+        let shell_workspace = Path::new("/tmp/workspace");
+        let runtime_workspace = Path::new("/Volumes/ExtremeSSD/Projects/memi-studio");
+        let shell_status = studio::studio_status(shell_workspace);
+        let runtime = runtime_status("running", None, runtime_workspace, None, None, None);
+
+        let reconciled = reconcile_studio_status_with_runtime_workspace(shell_status, &runtime);
+
+        assert_eq!(
+            reconciled.project_root,
+            runtime_workspace.to_string_lossy().to_string()
+        );
+        assert_eq!(
+            reconciled.config.workspace_roots,
+            vec![runtime_workspace.to_string_lossy().to_string()]
+        );
+    }
+
+    #[test]
+    fn cached_runtime_status_reconciles_api_workspace() {
+        let stale_workspace = Path::new("/tmp/workspace");
+        let runtime_workspace = "/Volumes/ExtremeSSD/Projects/memi-studio";
+        let status = runtime_status("running", None, stale_workspace, None, None, None);
+
+        let reconciled = reconcile_runtime_status_workspace(status, Some(runtime_workspace));
+
+        assert_eq!(reconciled.workspace_root, runtime_workspace);
+        assert_eq!(
+            reconciled.supervisor_phase.as_deref(),
+            Some("runtime-api-reconciled")
+        );
     }
 
     #[test]
