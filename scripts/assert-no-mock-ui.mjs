@@ -243,11 +243,19 @@ if (existsSync(runtimeResourceRoot)) {
 
 const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const localCargoTargetEnv = "CARGO_TARGET_DIR=$HOME/Library/Caches/cv.memoire.studio/cargo-target";
-for (const scriptName of ["check:rust", "tauri:dev", "tauri:build", "tauri:build:release"]) {
+for (const scriptName of ["check:rust", "tauri:dev", "tauri:build"]) {
   const script = packageJson.scripts?.[scriptName] ?? "";
   if (!script.includes(localCargoTargetEnv)) {
     failures.push(`package.json: ${scriptName} must set ${localCargoTargetEnv} so Rust artifacts stay off external volumes`);
   }
+}
+const releaseCargoTargetEnv =
+  "CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/Library/Caches/cv.memoire.studio/cargo-target}";
+const releaseBuildScript = packageJson.scripts?.["tauri:build:release"] ?? "";
+if (!releaseBuildScript.includes(releaseCargoTargetEnv)) {
+  failures.push(
+    `package.json: tauri:build:release must default to ${releaseCargoTargetEnv} while allowing CI to override CARGO_TARGET_DIR`,
+  );
 }
 const runtimeVersion = packageJson.memoireRuntime?.version;
 const runtimeTagVersion = String(packageJson.memoireRuntime?.releaseTag ?? "").replace(/^runtime-v/, "");

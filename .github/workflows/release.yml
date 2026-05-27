@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v1.0.2)"
+        description: "Tag to release (e.g. v1.0.3)"
         required: true
 
 permissions:
@@ -21,6 +21,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
 
 jobs:
   build-and-sign:
@@ -57,7 +58,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('src-tauri/Cargo.lock') }}
 
       - name: Install npm dependencies
@@ -67,6 +67,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run fetch:runtime -- --all-archs
+
+      - name: Clean stale bundle outputs
+        run: |
+          set -euo pipefail
+          rm -rf "$CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle"
+          rm -rf "$CARGO_TARGET_DIR/release/bundle"
 
       - name: Import Apple Developer ID certificate
         env:
@@ -95,6 +101,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri:build:release -- --target ${{ matrix.target }}
 
+      - name: Verify Developer ID signatures
+        run: |
+          set -euo pipefail
+          APP_DIR="$CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/macos"
+          APPS=("$APP_DIR"/*.app)
+          APP="${APPS[0]}"
+          if [ ! -d "$APP" ]; then
+            echo "no app bundle found under $CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/macos"
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=4 "$APP"
+          codesign -dv --verbose=4 "$APP/Contents/MacOS/memoire-studio" 2>&1 | grep "Authority=Developer ID Application"
+          codesign -dv --verbose=4 "$APP/Contents/MacOS/memi-studio-runtime" 2>&1 | grep "Authority=Developer ID Application"
+
       - name: Notarize DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -102,9 +122,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" -print -quit)
+          DMG=$(find "$CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" -print -quit)
           if [ -z "$DMG" ]; then
-            echo "no DMG found under src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+            echo "no DMG found under $CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/dmg"
             exit 1
           fi
           echo "submitting $DMG to notarytool (synchronous, will wait for verdict)..."
@@ -132,7 +152,7 @@ jobs:
       - name: Verify Gatekeeper assessment
         run: |
           set -euo pipefail
-          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" -print -quit)
+          DMG=$(find "$CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" -print -quit)
           spctl -a -vv --type install "$DMG" || (echo "spctl assessment failed for $DMG"; exit 1)
 
       - name: Collect updater artifacts
@@ -146,7 +166,7 @@ jobs:
           mkdir -p updater-staging
           ARCH_TOKEN="${{ matrix.target }}"
           ARCH_TOKEN="${ARCH_TOKEN%-apple-darwin}"
-          SRC="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          SRC="$CARGO_TARGET_DIR/${{ matrix.target }}/release/bundle/macos"
           cp "$SRC/Mémoire Studio.app.tar.gz" "updater-staging/Memoire-Studio-${ARCH_TOKEN}.app.tar.gz"
           cp "$SRC/Mémoire Studio.app.tar.gz.sig" "updater-staging/Memoire-Studio-${ARCH_TOKEN}.app.tar.gz.sig"
           ls -la updater-staging/
