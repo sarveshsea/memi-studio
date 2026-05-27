@@ -3644,7 +3644,7 @@ export function App() {
                 {slashCommandPreviewText}
               </div>
             ) : null}
-            <div className="composer-controls" data-composer-controls="readable">
+            <div className="composer-controls" data-composer-controls="icon-only">
               <label className="icon-button attachment-button" data-action-id="attachment.add" title="Attach context">
                 <StudioControlIcon name="attach" />
                 <input ref={fileInputRef} type="file" multiple onChange={handleAttachmentPick} />
@@ -3967,7 +3967,7 @@ export function App() {
           }}
           onOpenWorkspace={() => { void handleOpenWorkspace(); }}
           onBrowseTemplates={openPluginsSurface}
-          onViewExamples={() => window.open("https://github.com/sarveshsea/memoire#examples", "_blank")}
+          onViewExamples={() => window.open("https://github.com/sarveshsea/memi#examples", "_blank")}
         />
         {reviewPacketError ? <p className="error">{reviewPacketError}</p> : null}
       </section>

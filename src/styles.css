@@ -1624,6 +1624,22 @@ button.active,
 .composer-control-text { display: block; grid-column: 2; grid-row: 1; color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .composer-select select { position: absolute; inset: var(--space-0); width: 100%; height: 100%; border: 0; background: transparent; color: var(--ink); cursor: pointer; opacity: 0; padding: var(--space-0); }
 .composer-select select[data-action-id="harness.select"] { text-indent: -999px; overflow: hidden; }
+.composer-controls[data-composer-controls="icon-only"] .composer-select {
+  width: var(--control-height);
+  max-width: var(--control-height);
+  min-height: var(--control-height);
+  flex: 0 0 var(--control-height);
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: var(--space-0);
+}
+.composer-controls[data-composer-controls="icon-only"] .composer-select > .control-icon {
+  grid-column: 1;
+  grid-row: 1;
+}
+.composer-controls[data-composer-controls="icon-only"] .composer-control-text {
+  display: none;
+}
 .harness-switcher {
   min-height: var(--control-height);
   display: inline-flex;

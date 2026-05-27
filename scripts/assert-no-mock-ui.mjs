@@ -21,6 +21,8 @@ const checks = [
       "studyHermesResearchHarness",
       "model-hermes",
       "data-harness-study=\"hermes\"",
+      "data-composer-controls=\"readable\"",
+      "https://github.com/sarveshsea/memoire#examples",
     ],
   },
   {
