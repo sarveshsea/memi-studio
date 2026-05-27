@@ -816,6 +816,7 @@ fn restart_studio_runtime_process(
         .env("MEMOIRE_STUDIO_API_TOKEN", &api_token)
         .env("MEMOIRE_STUDIO_MANAGED_BY", "tauri")
         .env("NODE_ENV", "production")
+        .env("PWD", &runtime_working_dir)
         .env("PATH", &runtime_path)
         .env("SHELL", &runtime_shell)
         .stdout(Stdio::piped())
