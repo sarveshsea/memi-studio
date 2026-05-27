@@ -144,16 +144,28 @@ async function fileFingerprint(path) {
 }
 
 export async function cachedAssetMatches(destDir, repo, tag, asset) {
+  return (await cachedAssetState(destDir, repo, tag, asset)).status === "verified";
+}
+
+export async function cachedAssetState(destDir, repo, tag, asset) {
   const dest = join(destDir, asset);
-  if (!(await exists(dest))) return false;
+  if (!(await exists(dest))) return { status: "missing-file" };
   const cache = await readAssetCache(destDir);
   const fingerprint = await fileFingerprint(dest);
-  return assetCacheEntryMatches(cache.assets[asset], {
+  const entry = cache.assets[asset] ?? null;
+  if (!entry) {
+    return { status: "missing-metadata", fingerprint };
+  }
+  const verified = assetCacheEntryMatches(entry, {
     repo,
     tag,
     asset,
     ...fingerprint,
   });
+  return {
+    status: verified ? "verified" : "stale-metadata",
+    fingerprint,
+  };
 }
 
 export async function rememberCachedAsset(destDir, asset, repo, tag, path = join(destDir, asset)) {
@@ -283,11 +295,17 @@ async function downloadAsset(repo, tag, asset, destDir) {
   await ensureDir(destDir);
   const dest = join(destDir, asset);
   if (await exists(dest)) {
-    if (await cachedAssetMatches(destDir, repo, tag, asset)) {
+    const cacheState = await cachedAssetState(destDir, repo, tag, asset);
+    if (cacheState.status === "verified") {
       console.log(`fetch-runtime: ${asset} cache verified, skipping download`);
       return dest;
     }
     if (OFFLINE) {
+      if (cacheState.status === "missing-metadata") {
+        console.log(`fetch-runtime: ${asset} exists without current metadata, using offline cache`);
+        await rememberCachedAsset(destDir, asset, repo, tag, dest);
+        return dest;
+      }
       throw new Error(`offline mode but cached asset metadata is stale or missing: ${dest}`);
     }
     console.log(`fetch-runtime: ${asset} cache metadata is stale, refreshing`);
