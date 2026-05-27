@@ -12,6 +12,7 @@ import {
   composerHarnesses,
   composerHarnessShortLabel,
   composerHarnessTier,
+  currentWorkspaceProject,
   defaultWorkbenchSession,
   isQueueDockSession,
   isVerificationRunText,
@@ -207,4 +208,14 @@ assert(
   defaultWorkbenchSession([smokeSession, realSession])?.id === "real-run"
     && defaultWorkbenchSession([smokeSession]) === null,
   "keeps verification runs from becoming the default workbench session",
+);
+
+assert(
+  currentWorkspaceProject("/Volumes/ExtremeSSD/Projects/_archive/Desktop-Projects-20260512/Other/memi-studio", [])?.label === "memi-studio",
+  "keeps the current workspace visible before session history hydrates",
+);
+
+assert(
+  currentWorkspaceProject("/tmp/memi-studio", [realSession]) === null,
+  "does not duplicate the current workspace when its sessions already create a project row",
 );

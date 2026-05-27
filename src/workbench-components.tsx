@@ -69,6 +69,7 @@ import {
 import {
   compactRunLabel,
   compactRunSummary,
+  currentWorkspaceProject,
   harnessVisibility,
   isPrimaryHarness,
   isVerificationRunText,
@@ -1154,8 +1155,9 @@ export function ProjectSidebar(props: {
   onOpenFigma: () => void | Promise<void>;
 }) {
   const projects = groupSessionsByProject(props.sessions);
+  const activeWorkspaceProject = currentWorkspaceProject(props.currentWorkspace, props.sessions);
   const expanded = new Set(props.expandedProjectIds);
-  const hasNavigationContext = projects.length > 0 || props.recentWorkspaces.length > 0;
+  const hasNavigationContext = projects.length > 0 || Boolean(activeWorkspaceProject) || props.recentWorkspaces.length > 0;
   return (
     <aside
       className="project-sidebar"
@@ -1196,6 +1198,23 @@ export function ProjectSidebar(props: {
           <div className="project-sidebar-section-label">
             <span>Projects</span>
           </div>
+          {activeWorkspaceProject ? (
+            <section className="project-folder" data-current-workspace-project="true" data-project-folder={activeWorkspaceProject.id}>
+              <button
+                className="project-folder-row"
+                data-action-id={`workspace.current.${activeWorkspaceProject.id}`}
+                data-active="true"
+                data-current-workspace-row="true"
+                type="button"
+                onClick={() => void props.onOpenWorkspace(activeWorkspaceProject.path)}
+                title={activeWorkspaceProject.path}
+              >
+                <SidebarIcon name="folder-open" />
+                <span>{activeWorkspaceProject.label}</span>
+                <small>Current</small>
+              </button>
+            </section>
+          ) : null}
           {projects.map((project) => {
             const isExpanded = expanded.has(project.id) || project.sessions.some((session) => session.id === props.currentSessionId);
             const navItems = project.sessions.map(projectSessionNavItem);
@@ -1270,7 +1289,7 @@ export function ProjectSidebar(props: {
               </section>
             );
           })}
-          {projects.length === 0 ? (
+          {projects.length === 0 && !activeWorkspaceProject ? (
             <div className="project-sidebar-empty" data-project-sessions-empty="quiet">
               <span>No projects yet.</span>
               <small>Open a folder to start.</small>

@@ -52,6 +52,21 @@ export function composerHarnessShortLabel(id: string, label = id): string {
     .toUpperCase() || id.slice(0, 2).toUpperCase();
 }
 
+export function currentWorkspaceProject(
+  currentWorkspace: string | null | undefined,
+  sessions: Array<Pick<SessionSummary, "cwd">>,
+): { id: string; label: string; path: string } | null {
+  const path = normalizeWorkspacePath(currentWorkspace);
+  if (!path) return null;
+  const hasHydratedProject = sessions.some((session) => normalizeWorkspacePath(session.cwd) === path);
+  if (hasHydratedProject) return null;
+  return {
+    id: path,
+    label: workspaceProjectName(path),
+    path,
+  };
+}
+
 export function runVerificationMarker(value: string): string | null {
   return value.match(/\bMEMI_[A-Z0-9_]*(?:OK|DONE)(?:_[A-Z0-9]+)*\b/)?.[0] ?? null;
 }
@@ -103,6 +118,14 @@ function trimRunText(value: string, maxLength: number): string {
   const text = value.replace(/\s+/g, " ").trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function normalizeWorkspacePath(value: string | null | undefined): string {
+  return value?.replaceAll("\\", "/").replace(/\/+$/u, "") ?? "";
+}
+
+function workspaceProjectName(path: string): string {
+  return path.split("/").filter(Boolean).at(-1) ?? "workspace";
 }
 
 export function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): HarnessId {
