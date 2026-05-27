@@ -228,7 +228,9 @@ code, kbd, samp {
   gap: var(--space-2);
   height: var(--topbar-compact-height);
   min-height: var(--topbar-compact-height);
-  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  overflow: visible;
   border-bottom: 1px solid var(--line);
   background: var(--surface-bg);
   padding: var(--space-0) var(--space-2);
@@ -568,6 +570,10 @@ button.active,
 }
 .project-sidebar[data-sidebar-readable-collapsed="true"] .project-folder-row[data-active="true"] { outline: 1px solid var(--accent); outline-offset: -1px; }
 .project-sidebar[data-sidebar-readable-collapsed="true"] .project-sidebar-empty { display: none; }
+.project-sidebar[data-sidebar-collapsed="true"],
+.project-sidebar[data-sidebar-collapsed="true"] .project-sidebar-main {
+  overflow: visible;
+}
 .run-workbench,
 .console-panel { width: 100%; max-width: var(--console-max-width); min-width: 0; min-height: 0; display: flex; flex: 1; flex-direction: column; overflow: hidden; }
 .run-workbench {
@@ -1674,6 +1680,7 @@ button.active,
   text-overflow: ellipsis;
   transform: translate(-50%, var(--space-1));
   transition: opacity 120ms ease, transform 120ms ease;
+  visibility: hidden;
   white-space: nowrap;
 }
 [data-icon-tooltip]:hover::after,
@@ -1682,6 +1689,26 @@ button.active,
 .attachment-button:focus-within::after {
   opacity: 1;
   transform: translate(-50%, var(--space-0));
+  visibility: visible;
+}
+.console-topbar [data-icon-tooltip]::after {
+  top: calc(100% + var(--space-2));
+  bottom: auto;
+  transform: translate(-50%, calc(-1 * var(--space-1)));
+}
+.console-topbar [data-icon-tooltip]:hover::after,
+.console-topbar [data-icon-tooltip]:focus-visible::after {
+  transform: translate(-50%, var(--space-0));
+}
+.project-sidebar[data-sidebar-collapsed="true"] [data-icon-tooltip]::after {
+  top: 50%;
+  bottom: auto;
+  left: calc(100% + var(--space-2));
+  transform: translate(var(--space-1), -50%);
+}
+.project-sidebar[data-sidebar-collapsed="true"] [data-icon-tooltip]:hover::after,
+.project-sidebar[data-sidebar-collapsed="true"] [data-icon-tooltip]:focus-visible::after {
+  transform: translate(var(--space-0), -50%);
 }
 .composer-controls,
 .workspace-status-row {
@@ -1700,8 +1727,6 @@ button.active,
   background: var(--surface-muted);
 }
 .composer-select > .control-icon { grid-row: auto; }
-.composer-control-text { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-.composer-control-text { display: block; grid-column: 2; grid-row: 1; color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .composer-select select { position: absolute; inset: var(--space-0); width: 100%; height: 100%; border: 0; background: transparent; color: var(--ink); cursor: pointer; opacity: 0; padding: var(--space-0); }
 .composer-select select[data-action-id="harness.select"] { text-indent: -999px; overflow: hidden; }
 .composer-controls[data-composer-controls="icon-only"] .composer-select {
@@ -1716,9 +1741,6 @@ button.active,
 .composer-controls[data-composer-controls="icon-only"] .composer-select > .control-icon {
   grid-column: 1;
   grid-row: 1;
-}
-.composer-controls[data-composer-controls="icon-only"] .composer-control-text {
-  display: none;
 }
 .harness-switcher {
   min-height: var(--control-height);
@@ -1836,7 +1858,6 @@ button.active,
   justify-items: center;
   padding: var(--space-0);
 }
-.command-dock[data-composer-layout="single-toolbar"] .composer-select .composer-control-text,
 .command-dock[data-composer-layout="single-toolbar"] .usage-limit-chip span {
   position: absolute;
   width: 1px;

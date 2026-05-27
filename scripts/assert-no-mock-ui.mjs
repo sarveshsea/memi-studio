@@ -124,6 +124,12 @@ if (!appSource.includes('data-composer-tooltip="visible-on-hover"')) {
 if (!appSource.includes('data-icon-tooltip="Command"') || !appSource.includes('data-icon-tooltip="Settings"')) {
   failures.push("src/App.tsx: topbar icon controls must expose visible hover/focus tooltips");
 }
+if (!appSource.includes('data-icon-tooltip={`Mode: ${activeChatModeLabel}`}') || !appSource.includes('data-icon-tooltip={`Action: ${effectiveActionLabel}`}')) {
+  failures.push("src/App.tsx: composer icon controls must show the current value on hover");
+}
+if (appSource.includes("composer-control-text")) {
+  failures.push("src/App.tsx: icon-only composer controls must not render duplicate hidden value text");
+}
 if (!appSource.includes("truth-strip-detail")) {
   failures.push("src/App.tsx: truth strip must show explicit compact state values instead of label-only chips");
 }
@@ -141,6 +147,15 @@ if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sid
 }
 if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
   failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");
+}
+if (!studioCssSource.includes("visibility: hidden;") || !studioCssSource.includes("visibility: visible;")) {
+  failures.push("src/styles.css: hidden tooltip text must not leak into the idle accessibility tree");
+}
+if (!studioCssSource.includes(".console-topbar [data-icon-tooltip]::after") || !studioCssSource.includes('.project-sidebar[data-sidebar-collapsed="true"] [data-icon-tooltip]::after')) {
+  failures.push("src/styles.css: topbar and collapsed-sidebar icon tooltips must avoid clipped hover labels");
+}
+if (studioCssSource.includes("composer-control-text")) {
+  failures.push("src/styles.css: remove stale composer text styles; values belong in hover tooltips and aria labels");
 }
 if (!studioCssSource.includes(".truth-strip-detail")) {
   failures.push("src/styles.css: truth strip detail copy must have tokenized compact styling");

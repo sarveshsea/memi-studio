@@ -1526,7 +1526,7 @@ export function ActionChip(props: {
       aria-pressed={props.pressed ?? props.active}
       className={["action-chip", props.active ? "active" : "", props.className].filter(Boolean).join(" ")}
       data-action-id={action.id}
-      data-icon-tooltip={action.iconOnly ? label : undefined}
+      data-icon-tooltip={action.iconOnly ? tooltip : undefined}
       disabled={props.disabled}
       title={tooltip}
       type="button"
