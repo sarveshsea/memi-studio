@@ -9,6 +9,7 @@ import { join } from "node:path";
 import {
   assetCacheEntryMatches,
   cachedAssetMatches,
+  cachedAssetState,
   readAssetCache,
   rememberCachedAsset,
 } from "./fetch-runtime.mjs";
@@ -21,13 +22,17 @@ try {
 
   await writeFile(assetPath, "runtime-one");
   assert.equal(await cachedAssetMatches(root, "sarveshsea/memi", "runtime-v0.18.2", asset), false);
+  assert.equal((await cachedAssetState(root, "sarveshsea/memi", "runtime-v0.18.2", asset)).status, "missing-metadata");
 
   await rememberCachedAsset(root, asset, "sarveshsea/memi", "runtime-v0.18.2", assetPath);
   assert.equal(await cachedAssetMatches(root, "sarveshsea/memi", "runtime-v0.18.2", asset), true);
+  assert.equal((await cachedAssetState(root, "sarveshsea/memi", "runtime-v0.18.2", asset)).status, "verified");
   assert.equal(await cachedAssetMatches(root, "sarveshsea/memi", "runtime-v0.18.3", asset), false);
+  assert.equal((await cachedAssetState(root, "sarveshsea/memi", "runtime-v0.18.3", asset)).status, "stale-metadata");
 
   await writeFile(assetPath, "runtime-two");
   assert.equal(await cachedAssetMatches(root, "sarveshsea/memi", "runtime-v0.18.2", asset), false);
+  assert.equal((await cachedAssetState(root, "sarveshsea/memi", "runtime-v0.18.2", asset)).status, "stale-metadata");
 
   const cache = await readAssetCache(root);
   assert.equal(
