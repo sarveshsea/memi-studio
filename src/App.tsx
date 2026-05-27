@@ -194,8 +194,8 @@ import { WORKBENCH_COPY, workbenchAction, type WorkbenchIconName } from "./workb
 import {
   DEFAULT_PRIMARY_HARNESS_ID,
   DEFAULT_RIGHT_PANE_TAB_IDS,
-  composerHarnesses,
   composerHarnessShortLabel,
+  composerSwitcherHarnesses,
   composerHarnessTier,
   compactRunLabel,
   compactRunSummary,
@@ -688,7 +688,7 @@ export function App() {
   );
   const codexHarness = useMemo(() => harnesses.find((harness) => harness.id === "codex"), [harnesses]);
   const claudeHarness = useMemo(() => harnesses.find((harness) => harness.id === "claude-code"), [harnesses]);
-  const visibleHarnesses = useMemo(() => composerHarnesses(harnesses), [harnesses]);
+  const visibleHarnesses = useMemo(() => composerSwitcherHarnesses(harnesses), [harnesses]);
 
   const harnessActions = useMemo(() => actionsForHarness(currentHarness), [currentHarness]);
   const effectiveAction: StudioAction = resolveHarnessAction(selectedAction, currentHarness);

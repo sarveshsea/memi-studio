@@ -11,6 +11,7 @@ import {
   compactRunSummary,
   composerHarnesses,
   composerHarnessShortLabel,
+  composerSwitcherHarnesses,
   composerHarnessTier,
   currentWorkspaceProject,
   defaultWorkbenchSession,
@@ -46,7 +47,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function harness(id: HarnessId, label: string = id): Harness {
+function harness(id: HarnessId, label: string = id, overrides: Partial<Harness> = {}): Harness {
   return {
     id,
     label,
@@ -64,6 +65,7 @@ function harness(id: HarnessId, label: string = id): Harness {
     supportsStreaming: true,
     supportsCancel: true,
     outputParser: "stdio",
+    ...overrides,
   } as Harness;
 }
 
@@ -165,6 +167,23 @@ assert(
 assert(
   composerHarnesses(allHarnesses).map((item) => item.id).join(",") === "codex,claude-code,ollama,opencode",
   "shows Codex, Claude, Ollama, and OpenCode in the compact composer switcher",
+);
+
+const defaultStudioHarnesses = [
+  harness("opencode", "OpenCode", { enabled: false, installed: false, authStatus: "missing" }),
+  harness("claude-code", "Claude Code"),
+  harness("ollama", "Ollama", { enabled: false, installed: true, authStatus: "ready" }),
+  harness("codex", "Codex"),
+];
+
+assert(
+  composerSwitcherHarnesses(defaultStudioHarnesses).map((item) => item.id).join(",") === "codex,claude-code",
+  "keeps setup-only and disabled advanced harnesses out of the default composer switcher",
+);
+
+assert(
+  composerSwitcherHarnesses(defaultStudioHarnesses.map((item) => item.id === "ollama" ? { ...item, enabled: true } : item)).map((item) => item.id).join(",") === "codex,claude-code,ollama",
+  "keeps explicitly enabled local Ollama reachable from the composer switcher",
 );
 
 assert(

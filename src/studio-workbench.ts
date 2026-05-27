@@ -32,6 +32,10 @@ export function composerHarnesses(harnesses: Harness[]): Harness[] {
   return COMPOSER_HARNESS_IDS.map((id) => byId.get(id)).filter((harness): harness is Harness => Boolean(harness));
 }
 
+export function composerSwitcherHarnesses(harnesses: Harness[]): Harness[] {
+  return composerHarnesses(harnesses).filter((harness) => isPrimaryHarness(harness.id) || harness.enabled);
+}
+
 export function composerHarnessTier(id: string): ComposerHarnessTier {
   if (isPrimaryHarness(id)) return "primary";
   if (id === "ollama") return "local";
@@ -139,7 +143,7 @@ export function normalizePrimaryHarness(id: HarnessId, harnesses: Harness[]): Ha
 }
 
 export function normalizeComposerHarness(id: HarnessId, harnesses: Harness[]): HarnessId {
-  if (composerHarnesses(harnesses).some((harness) => harness.id === id)) return id;
+  if (composerSwitcherHarnesses(harnesses).some((harness) => harness.id === id)) return id;
   return normalizePrimaryHarness(id, harnesses);
 }
 
