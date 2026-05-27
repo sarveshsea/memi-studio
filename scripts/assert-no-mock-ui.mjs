@@ -112,6 +112,19 @@ studioCssSource.split("\n").forEach((line, index) => {
   if (/var\(--font-(studio|mono)\)/.test(line)) return;
   failures.push(`src/styles.css:${index + 1}: font-family must use --font-studio or --font-mono`);
 });
+studioCssSource.split("\n").forEach((line, index) => {
+  const trimmed = line.trim();
+  if (/^--font-size-[\w-]+\s*:/.test(trimmed) || /^--font-weight-[\w-]+\s*:/.test(trimmed)) return;
+  if (/font-size\s*:/.test(line) && !/var\(--font-size-[\w-]+\)/.test(line)) {
+    failures.push(`src/styles.css:${index + 1}: font-size must use --font-size tokens`);
+  }
+  if (/font-weight\s*:/.test(line) && !/var\(--font-weight-[\w-]+\)/.test(line)) {
+    failures.push(`src/styles.css:${index + 1}: font-weight must use --font-weight tokens`);
+  }
+  if (/\bfont\s*:/.test(line) && !/font\s*:\s*inherit\b/.test(line)) {
+    failures.push(`src/styles.css:${index + 1}: font shorthand is only allowed for inherit`);
+  }
+});
 
 function walkRuntimeResourceFiles(root) {
   const files = [];
