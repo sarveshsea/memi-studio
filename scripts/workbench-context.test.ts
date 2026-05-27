@@ -179,13 +179,18 @@ const defaultStudioHarnesses = [
 ];
 
 assert(
-  composerSwitcherHarnesses(defaultStudioHarnesses).map((item) => item.id).join(",") === "codex,claude-code",
-  "keeps setup-only and disabled advanced harnesses out of the default composer switcher",
+  composerSwitcherHarnesses(defaultStudioHarnesses).map((item) => item.id).join(",") === "codex,claude-code,ollama",
+  "keeps Codex, Claude, and local Ollama reachable from the default composer switcher",
 );
 
 assert(
   composerSwitcherHarnesses(defaultStudioHarnesses.map((item) => item.id === "ollama" ? { ...item, enabled: true } : item)).map((item) => item.id).join(",") === "codex,claude-code,ollama",
   "keeps explicitly enabled local Ollama reachable from the composer switcher",
+);
+
+assert(
+  composerSwitcherHarnesses(defaultStudioHarnesses).every((item) => item.id !== "opencode"),
+  "keeps OpenCode advanced until it is explicitly enabled",
 );
 
 assert(
