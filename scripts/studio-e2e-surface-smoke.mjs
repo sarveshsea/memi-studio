@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 
 const DEFAULT_BASE = process.env.MEMI_STUDIO_RUNTIME_BASE ?? "http://127.0.0.1:8765";
 const DEFAULT_TIMEOUT_MS = 30_000;
+const HARNESS_READY_STATUSES = new Set(["ready", "signed_in", "not_required"]);
 
 const args = new Map();
 for (const arg of process.argv.slice(2)) {
@@ -15,6 +16,7 @@ for (const arg of process.argv.slice(2)) {
 const base = String(args.get("base") ?? DEFAULT_BASE).replace(/\/$/, "");
 const json = args.has("json");
 const timeoutMs = Number(args.get("timeout-ms") ?? DEFAULT_TIMEOUT_MS);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -56,6 +58,26 @@ function gitTrackedStatus() {
   } catch {
     return null;
   }
+}
+
+function harnessReady(harness) {
+  return Boolean(harness?.enabled && harness?.installed && HARNESS_READY_STATUSES.has(harness.authStatus ?? "ready"));
+}
+
+async function waitForHarnessReadiness(ids) {
+  const startedAt = Date.now();
+  let latest = new Map();
+  while (Date.now() - startedAt < timeoutMs) {
+    const payload = await request("/api/harnesses?refresh=1");
+    latest = new Map((payload.harnesses ?? []).map((harness) => [harness.id, harness]));
+    if (ids.every((id) => harnessReady(latest.get(id)))) return latest;
+    await sleep(750);
+  }
+  const details = ids.map((id) => {
+    const harness = latest.get(id);
+    return `${id} enabled=${harness?.enabled} installed=${harness?.installed} auth=${harness?.authStatus ?? "missing"} message=${harness?.authMessage ?? ""}`;
+  }).join("; ");
+  throw new Error(`Primary harnesses are not ready after ${timeoutMs}ms: ${details}`);
 }
 
 function toolInputResearch() {
@@ -140,12 +162,11 @@ async function main() {
   const projectRoot = status.projectRoot;
   assert(typeof projectRoot === "string" && projectRoot.length > 0, "Studio status did not include projectRoot");
 
-  const harnesses = await request("/api/harnesses?refresh=1");
-  const byHarness = new Map((harnesses.harnesses ?? []).map((harness) => [harness.id, harness]));
+  const byHarness = await waitForHarnessReadiness(["codex", "claude-code"]);
   for (const id of ["codex", "claude-code"]) {
     const harness = byHarness.get(id);
     assert(harness?.enabled && harness?.installed, `${id} is not enabled and installed`);
-    assert(["ready", "signed_in", "not_required"].includes(harness.authStatus ?? "ready"), `${id} auth is ${harness.authStatus}`);
+    assert(HARNESS_READY_STATUSES.has(harness.authStatus ?? "ready"), `${id} auth is ${harness.authStatus}`);
     assert(harness.visibility === "primary", `${id} must remain primary`);
   }
   assert(byHarness.get("opencode")?.visibility === "advanced", "OpenCode should remain an advanced integration until installed/configured");

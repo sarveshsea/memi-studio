@@ -10,6 +10,7 @@ const PACKAGE_INFO_TS = join(ROOT, "src", "runtime", "package-info.ts");
 const DEFAULT_BASE = process.env.MEMI_STUDIO_RUNTIME_BASE ?? "http://127.0.0.1:8765";
 const DEFAULT_HARNESSES = ["codex", "claude-code"];
 const DEFAULT_TIMEOUT_MS = 240_000;
+const HARNESS_READY_STATUSES = new Set(["ready", "signed_in", "not_required"]);
 const PUBLIC_PACKAGE = readPublicPackageInfo();
 
 const args = new Map();
@@ -48,8 +49,24 @@ function harnessReady(harness) {
     harness
     && harness.enabled
     && harness.installed
-    && ["ready", "signed_in", "not_required"].includes(harness.authStatus ?? "ready"),
+    && HARNESS_READY_STATUSES.has(harness.authStatus ?? "ready"),
   );
+}
+
+async function waitForHarnessReadiness(ids) {
+  const startedAt = Date.now();
+  let latest = new Map();
+  while (Date.now() - startedAt < Math.min(timeoutMs, 30_000)) {
+    const payload = await request("/api/harnesses?refresh=1");
+    latest = new Map((payload.harnesses ?? []).map((harness) => [harness.id, harness]));
+    if (ids.every((id) => harnessReady(latest.get(id)))) return latest;
+    await sleep(750);
+  }
+  const details = ids.map((id) => {
+    const harness = latest.get(id);
+    return `${id} enabled=${harness?.enabled} installed=${harness?.installed} auth=${harness?.authStatus ?? "missing"} message=${harness?.authMessage ?? ""}`;
+  }).join("; ");
+  throw new Error(`Harnesses are not ready: ${details}`);
 }
 
 function markerTextFromEvents(events) {
@@ -182,8 +199,7 @@ async function runHarnessSmoke(status, harness) {
 async function main() {
   const status = await request("/api/status");
   if (status.status !== "running") throw new Error(`Studio runtime is ${status.status}, expected running`);
-  const harnessPayload = await request("/api/harnesses?refresh=1");
-  const byId = new Map((harnessPayload.harnesses ?? []).map((harness) => [harness.id, harness]));
+  const byId = await waitForHarnessReadiness(harnesses);
   const missing = harnesses.filter((id) => !harnessReady(byId.get(id)));
   if (missing.length) {
     const details = missing.map((id) => {
