@@ -797,6 +797,7 @@ fn restart_studio_runtime_process(
     );
     let package_root = materialized.package_root.clone();
     let binary = materialized.binary.clone();
+    let runtime_working_dir = runtime_spawn_working_dir(&materialized).to_path_buf();
     let runtime_path = runtime_child_path_env();
     let runtime_shell = runtime_child_shell_env();
 
@@ -809,8 +810,9 @@ fn restart_studio_runtime_process(
             &STUDIO_RUNTIME_PORT.to_string(),
             "--json",
         ])
-        .current_dir(workspace_root)
+        .current_dir(&runtime_working_dir)
         .env("MEMOIRE_PACKAGE_ROOT", &package_root)
+        .env("MEMOIRE_STUDIO_PROJECT_ROOT", workspace_root)
         .env("MEMOIRE_STUDIO_API_TOKEN", &api_token)
         .env("MEMOIRE_STUDIO_MANAGED_BY", "tauri")
         .env("NODE_ENV", "production")
@@ -909,6 +911,8 @@ fn restart_studio_runtime_process(
             "pid": pid,
             "runtimeBinary": status.runtime_binary.clone(),
             "runtimeCacheRoot": status.runtime_cache_root.clone(),
+            "runtimeWorkingDirectory": runtime_working_dir.to_string_lossy().to_string(),
+            "workspaceRoot": workspace_root.to_string_lossy().to_string(),
             "cachePrepareMs": status.cache_prepare_ms,
             "startupMs": status.startup_ms
         }),
@@ -2065,6 +2069,10 @@ fn runtime_child_path_env() -> OsString {
     })
 }
 
+fn runtime_spawn_working_dir(runtime: &MaterializedRuntime) -> &Path {
+    &runtime.package_root
+}
+
 fn runtime_child_shell_env() -> OsString {
     env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/zsh"))
 }
@@ -2657,6 +2665,21 @@ mod runtime_cache_tests {
         assert!(materialized.package_root.join("package.json").is_file());
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(cache_root);
+    }
+
+    #[test]
+    fn runtime_spawn_working_dir_uses_local_materialized_package_root() {
+        let runtime = MaterializedRuntime {
+            binary: PathBuf::from("/tmp/runtime/bin/memi-studio-runtime"),
+            package_root: PathBuf::from("/tmp/runtime/package"),
+            runtime_root: PathBuf::from("/tmp/runtime"),
+            source_kind: "test".to_string(),
+        };
+
+        assert_eq!(
+            runtime_spawn_working_dir(&runtime),
+            Path::new("/tmp/runtime/package")
+        );
     }
 
     #[test]
