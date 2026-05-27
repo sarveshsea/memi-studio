@@ -272,9 +272,11 @@ assert(
 
 assert(
   isQueueDockSession({ status: "running" } as SessionSummary)
-    && isQueueDockSession({ status: "failed" } as SessionSummary)
+    && isQueueDockSession({ status: "queued" } as SessionSummary)
+    && !isQueueDockSession({ status: "failed" } as SessionSummary)
+    && !isQueueDockSession({ status: "cancelled" } as SessionSummary)
     && !isQueueDockSession({ status: "completed" } as SessionSummary),
-  "keeps the center queue focused on active or actionable runs",
+  "keeps the center queue focused on active runs instead of stale failure history",
 );
 
 const realSession = session({ id: "real-run", prompt: "Audit the settings pane for hierarchy." });
@@ -300,6 +302,12 @@ assert(
 assert(
   sidebarNavigationSessions([smokeSession], "check-run").map((item) => item.id).join(",") === "check-run",
   "keeps the active verification run reachable when selected",
+);
+
+assert(
+  sidebarNavigationSessions([failedSession, realSession], null).map((item) => item.id).join(",") === "real-run"
+    && sidebarNavigationSessions([failedSession, realSession], "failed-run").map((item) => item.id).join(",") === "failed-run,real-run",
+  "keeps stale failed runs out of default project navigation while preserving the active failed run",
 );
 
 assert(

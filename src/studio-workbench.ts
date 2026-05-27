@@ -110,7 +110,11 @@ export function isVerificationSession(session: Pick<SessionSummary, "prompt" | "
 }
 
 export function sidebarNavigationSessions(sessions: SessionSummary[], currentSessionId: string | null): SessionSummary[] {
-  return sessions.filter((session) => !isVerificationSession(session) || session.id === currentSessionId);
+  return sessions.filter((session) => {
+    if (session.id === currentSessionId) return true;
+    if (isVerificationSession(session)) return false;
+    return isDefaultOpenableSession(session);
+  });
 }
 
 export function defaultWorkbenchSession(sessions: SessionSummary[]): SessionSummary | null {
@@ -141,7 +145,7 @@ export function compactRunSummary(value: string | null | undefined, harness?: Ha
 }
 
 export function isQueueDockSession(session: Pick<SessionSummary, "status">): boolean {
-  return session.status === "running" || session.status === "queued" || session.status === "failed" || session.status === "cancelled";
+  return session.status === "running" || session.status === "queued";
 }
 
 function shortHarnessName(harness?: HarnessId): string {

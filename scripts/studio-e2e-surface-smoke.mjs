@@ -129,6 +129,14 @@ async function main() {
   const beforeStatus = gitTrackedStatus();
   const status = await request("/api/status");
   assert(status.status === "running", `Studio runtime is ${status.status}, expected running`);
+  const sessionsBefore = await request("/api/sessions");
+  const runningSessions = (sessionsBefore.sessions ?? []).filter((session) => session.status === "running");
+  const activeProcesses = Number(status.metrics?.activeProcesses ?? 0);
+  const activeStreams = Number(status.metrics?.activeStreams ?? 0);
+  assert(
+    runningSessions.length === 0 || activeProcesses > 0 || activeStreams > 0,
+    `runtime has stale running sessions with no active process or stream: ${runningSessions.map((session) => session.id).join(", ")}`,
+  );
   const projectRoot = status.projectRoot;
   assert(typeof projectRoot === "string" && projectRoot.length > 0, "Studio status did not include projectRoot");
 
