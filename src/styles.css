@@ -1362,12 +1362,17 @@ button.active,
 .run-spine-row[data-status="running"] .run-spine-marker { border-color: var(--accent); background: var(--accent); }
 .run-spine-row[data-status="done"] .run-spine-marker { border-color: var(--ok); background: var(--ok); }
 .run-spine-row[data-status="warn"] .run-spine-marker { border-color: var(--danger); background: var(--danger); }
+.run-spine-row[data-empty="true"] .run-spine-marker { opacity: 0.48; }
 .run-spine-row-body {
   min-width: 0;
   display: grid;
   gap: var(--space-1);
   border-bottom: 1px solid var(--line);
   padding: var(--space-0-5) var(--space-0) var(--space-2);
+}
+.run-spine-row[data-empty="true"] .run-spine-row-body {
+  gap: var(--space-0);
+  padding-bottom: var(--space-1);
 }
 .run-spine-row:last-of-type .run-spine-row-body {
   border-bottom: 0;
@@ -1383,6 +1388,10 @@ button.active,
   color: var(--ink);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
+}
+.run-spine-row[data-empty="true"] .run-spine-row-body header span {
+  color: var(--ink-muted);
+  font-weight: var(--font-weight-regular);
 }
 .run-spine-row-body header small,
 .run-spine-row-body p,

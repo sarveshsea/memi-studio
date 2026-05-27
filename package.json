@@ -11,11 +11,11 @@
     "url": "git+https://github.com/sarveshsea/memi-studio.git"
   },
   "memoireRuntime": {
-    "version": "0.18.2",
+    "version": "0.18.3",
     "engineRepo": "sarveshsea/memi",
-    "releaseTag": "runtime-v0.18.2",
+    "releaseTag": "runtime-v0.18.3",
     "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
-    "resourcesAsset": "memoire-runtime-resources-0.18.0.tar.gz"
+    "resourcesAsset": "memoire-runtime-resources-0.18.3.tar.gz"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",

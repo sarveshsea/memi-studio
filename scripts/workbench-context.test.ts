@@ -10,6 +10,7 @@ import {
   DEFAULT_COMPOSER_PRESET_ID,
   DEFAULT_COMPOSER_STATE,
   compactRunLabel,
+  compactRunSpineRows,
   compactRunSummary,
   composerStateForSession,
   composerHarnesses,
@@ -351,4 +352,54 @@ assert(
 assert(
   currentWorkspaceProject("/tmp/memi-studio", [realSession]) === null,
   "does not duplicate the current workspace when its sessions already create a project row",
+);
+
+const idleRunSpineRows = compactRunSpineRows({
+  promptText: "",
+  harness: "codex",
+  promptMeta: "Build",
+  latestPlanSummary: null,
+  latestPlanStatus: null,
+  latestPlanMeta: null,
+  agentThinkingState: "idle",
+  activeProcessCount: 0,
+  toolActivityCount: 0,
+  changedFileCount: 0,
+  fileTraceError: null,
+  fileTraceMeta: "workspace",
+  designLane: null,
+  resultSummary: null,
+  resultMeta: "standby",
+  resultStatus: "idle",
+});
+assert(
+  idleRunSpineRows.length === 5
+    && idleRunSpineRows.every((row) => row.summary === null && row.meta === null && row.status === "idle"),
+  "keeps the idle run spine label-only instead of rendering placeholder words",
+);
+
+const activeRunSpineRows = compactRunSpineRows({
+  promptText: "Audit the inspector pane hierarchy.",
+  harness: "claude-code",
+  promptMeta: "Claude Code / audit",
+  latestPlanSummary: "Check structure, labels, and empty states.",
+  latestPlanStatus: "done",
+  latestPlanMeta: "plan",
+  agentThinkingState: "idle",
+  activeProcessCount: 0,
+  toolActivityCount: 2,
+  changedFileCount: 3,
+  fileTraceError: null,
+  fileTraceMeta: "review",
+  designLane: { title: "Design-system artifact ready", status: "done", meta: "system / figjam" },
+  resultSummary: "Inspector hierarchy tightened.",
+  resultMeta: "session result",
+  resultStatus: "done",
+});
+assert(
+  activeRunSpineRows.map((row) => row.id).join(",") === "prompt,plan,tools,files,design-lane,result"
+    && activeRunSpineRows.find((row) => row.id === "prompt")?.summary === "Audit the inspector pane hierarchy."
+    && activeRunSpineRows.find((row) => row.id === "tools")?.summary === "2 recent actions"
+    && activeRunSpineRows.find((row) => row.id === "files")?.summary === "3 files changed",
+  "keeps active run spine transparency while removing only idle filler",
 );

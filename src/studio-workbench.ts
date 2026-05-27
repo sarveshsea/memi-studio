@@ -31,6 +31,33 @@ export interface ComposerChipAction {
   icon: WorkbenchIconName;
   iconOnly: boolean;
 }
+export type RunSpineRowId = "prompt" | "plan" | "tools" | "files" | "design-lane" | "result";
+export type RunSpineRowStatus = "idle" | "running" | "done" | "warn";
+export interface RunSpineRowBase {
+  id: RunSpineRowId;
+  label: string;
+  status: RunSpineRowStatus;
+  summary: string | null;
+  meta: string | null;
+}
+export interface RunSpineRowsInput {
+  promptText: string;
+  harness?: HarnessId;
+  promptMeta?: string | null;
+  latestPlanSummary?: string | null;
+  latestPlanStatus?: "running" | "completed" | "failed" | RunSpineRowStatus | null;
+  latestPlanMeta?: string | null;
+  agentThinkingState: "thinking" | "running" | "idle" | "failed";
+  activeProcessCount: number;
+  toolActivityCount: number;
+  changedFileCount: number;
+  fileTraceError?: string | null;
+  fileTraceMeta?: string | null;
+  designLane?: { title?: string | null; status: RunSpineRowStatus; meta?: string | null } | null;
+  resultSummary?: string | null;
+  resultMeta?: string | null;
+  resultStatus: RunSpineRowStatus;
+}
 
 export const DEFAULT_RIGHT_PANE_TAB_IDS = ["run", "changes", "memory"] as const;
 export type WorkbenchRightPaneTab = (typeof WORKBENCH_COPY.rightPaneTabs)[number]["id"];
@@ -186,6 +213,70 @@ export function compactRunSummary(value: string | null | undefined, harness?: Ha
   return trimRunText(value, maxLength);
 }
 
+export function compactRunSpineRows(input: RunSpineRowsInput): RunSpineRowBase[] {
+  const promptText = input.promptText.trim();
+  const promptSummary = promptText ? compactRunLabel(promptText, input.harness, 180) : null;
+  const planSummary = compactRunSummary(input.latestPlanSummary, input.harness, 180);
+  const fileTraceError = compactOptionalText(input.fileTraceError);
+  const resultSummary = compactOptionalText(input.resultSummary);
+  const rows: RunSpineRowBase[] = [
+    {
+      id: "prompt",
+      label: "Prompt",
+      status: promptSummary ? "done" : "idle",
+      summary: promptSummary,
+      meta: promptSummary ? compactOptionalText(input.promptMeta) : null,
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      status: input.agentThinkingState === "thinking" ? "running" : normalizeRunSpineStatus(input.latestPlanStatus),
+      summary: planSummary,
+      meta: planSummary ? compactOptionalText(input.latestPlanMeta) : null,
+    },
+    {
+      id: "tools",
+      label: "Tool Calls",
+      status: input.activeProcessCount > 0 ? "running" : input.toolActivityCount > 0 ? "done" : "idle",
+      summary: input.activeProcessCount > 0
+        ? `${input.activeProcessCount} command${input.activeProcessCount === 1 ? "" : "s"} running`
+        : input.toolActivityCount > 0
+          ? `${input.toolActivityCount} recent action${input.toolActivityCount === 1 ? "" : "s"}`
+          : null,
+      meta: null,
+    },
+    {
+      id: "files",
+      label: "Files Changed",
+      status: input.changedFileCount > 0 || fileTraceError ? "warn" : "idle",
+      summary: input.changedFileCount > 0
+        ? `${input.changedFileCount} file${input.changedFileCount === 1 ? "" : "s"} changed`
+        : fileTraceError,
+      meta: input.changedFileCount > 0 || fileTraceError ? compactOptionalText(input.fileTraceMeta) : null,
+    },
+  ];
+
+  if (input.designLane) {
+    rows.push({
+      id: "design-lane",
+      label: "Design Lane",
+      status: input.designLane.status,
+      summary: compactOptionalText(input.designLane.title),
+      meta: compactOptionalText(input.designLane.meta),
+    });
+  }
+
+  rows.push({
+    id: "result",
+    label: "Result",
+    status: resultSummary ? input.resultStatus : "idle",
+    summary: resultSummary,
+    meta: resultSummary ? compactOptionalText(input.resultMeta) : null,
+  });
+
+  return rows;
+}
+
 export function isQueueDockSession(session: Pick<SessionSummary, "status">): boolean {
   return session.status === "running" || session.status === "queued";
 }
@@ -196,6 +287,18 @@ function shortHarnessName(harness?: HarnessId): string {
   if (harness === "ollama") return "Ollama";
   if (harness === "opencode") return "OpenCode";
   return "Run";
+}
+
+function compactOptionalText(value: string | null | undefined): string | null {
+  const text = value?.replace(/\s+/g, " ").trim();
+  return text ? text : null;
+}
+
+function normalizeRunSpineStatus(status: RunSpineRowsInput["latestPlanStatus"]): RunSpineRowStatus {
+  if (status === "running") return "running";
+  if (status === "completed" || status === "done") return "done";
+  if (status === "failed" || status === "warn") return "warn";
+  return "idle";
 }
 
 function trimRunText(value: string, maxLength: number): string {

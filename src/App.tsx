@@ -208,6 +208,7 @@ import {
   composerHarnessTier,
   composerStarterAction,
   compactRunLabel,
+  compactRunSpineRows,
   compactRunSummary,
   defaultWorkbenchSession,
   isQueueDockSession,
@@ -4900,9 +4901,6 @@ function RunSpine(props: {
   onSelectEvent: (event: StudioEvent) => void;
 }) {
   const promptText = props.session?.prompt ?? props.prompt.trim();
-  const promptSummary = promptText
-    ? queueDockPromptLabel(promptText, props.session?.harness, 180)
-    : "Idle";
   const latestPlan = [...props.activities].reverse().find((activity) =>
     activity.kind === "thinking" || /plan|intent|reason/i.test(`${activity.label} ${activity.summary}`),
   ) ?? null;
@@ -4936,80 +4934,71 @@ function RunSpine(props: {
   ) ?? null;
   const resultSelectEvent = props.lastFailure ?? resultBlock?.events.find((event) => ["session_result", "artifact", "design_decision", "acceptance_statement"].includes(event.type)) ?? null;
   const sessionReceipt = props.session ? runSpineSessionReceipt(props.session, props.events, props.usageSnapshot, resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined) : null;
-  const rows = [
-    {
-      id: "prompt",
-      label: "Prompt",
-      status: promptText ? "done" : "idle",
-      summary: promptSummary,
-      meta: props.session ? `${props.session.harness} / ${props.session.action ?? "run"}` : props.actionLabel,
-    },
-    {
-      id: "plan",
-      label: "Plan",
-      status: props.agentThinkingState === "thinking" ? "running" : latestPlan ? latestPlan.status : "idle",
-      summary: compactRunSummary(latestPlan?.summary, props.session?.harness, 180) ?? (props.canStart ? "Ready" : props.startDisabledReason || "Blocked"),
-      meta: latestPlan ? runSpineActivityMeta(latestPlan, props.session?.harness) : "intent",
-    },
-    {
-      id: "tools",
-      label: "Tool Calls",
-      status: props.activeProcesses.length ? "running" : toolActivities.length ? "done" : "idle",
-      summary: props.activeProcesses.length
-        ? `${props.activeProcesses.length} command${props.activeProcesses.length === 1 ? "" : "s"} running`
-        : toolActivities.length
-          ? `${toolActivities.length} recent action${toolActivities.length === 1 ? "" : "s"}`
-          : "None",
-      receipts: toolReceipts,
-    },
-    {
-      id: "files",
-      label: "Files Changed",
-      status: changedFiles.length ? "warn" : "done",
-      summary: changedFiles.length
-        ? `${changedFiles.length} file${changedFiles.length === 1 ? "" : "s"} changed`
-        : props.designTrace?.error ?? "Clean",
-      meta: props.designTrace?.reviewLabel ?? "workspace",
-      receipts: fileReceipts,
-    },
-    ...(props.designLaneReceipt ? [{
-      id: "design-lane",
-      label: "Design Lane",
+  const resultSummary = props.lastFailure?.message
+    ?? runSpineResultSummary(resultBlock, props.session)
+    ?? (props.session ? compactSessionStatusLabel(props.session.status) : null);
+  const resultStatus = props.lastFailure
+    ? "warn"
+    : props.session?.status === "completed"
+      ? "done"
+      : props.session?.status === "running" || props.session?.status === "queued"
+        ? "running"
+        : "idle";
+  const rows = compactRunSpineRows({
+    promptText,
+    harness: props.session?.harness,
+    promptMeta: props.session ? `${props.session.harness} / ${props.session.action ?? "run"}` : props.actionLabel,
+    latestPlanSummary: latestPlan?.summary,
+    latestPlanStatus: latestPlan?.status,
+    latestPlanMeta: latestPlan ? runSpineActivityMeta(latestPlan, props.session?.harness) : null,
+    agentThinkingState: props.agentThinkingState,
+    activeProcessCount: props.activeProcesses.length,
+    toolActivityCount: toolActivities.length,
+    changedFileCount: changedFiles.length,
+    fileTraceError: props.designTrace?.error ?? null,
+    fileTraceMeta: props.designTrace?.reviewLabel ?? "trace",
+    designLane: props.designLaneReceipt ? {
+      title: props.designLaneReceipt.title ?? "Design-system and FigJam handoff context is ready.",
       status: props.designLaneReceipt.status,
-      summary: props.designLaneReceipt.title ?? "Design-system and FigJam handoff context is ready.",
       meta: "system / figjam",
-      receipts: [props.designLaneReceipt],
-      onSelect: props.designLaneReceipt.onSelect,
-    }] : []),
-    {
-      id: "result",
-      label: "Result",
-      status: props.lastFailure ? "warn" : props.session?.status === "completed" ? "done" : props.session?.status === "running" || props.session?.status === "queued" ? "running" : "idle",
-      summary: props.lastFailure?.message
-        ?? runSpineResultSummary(resultBlock, props.session)
-        ?? (props.session ? compactSessionStatusLabel(props.session.status) : "Idle"),
-      meta: resultBlock?.title ?? props.session?.status ?? "standby",
-      onSelect: resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined,
-      receipts: sessionReceipt ? [sessionReceipt] : undefined,
-    },
-  ];
+    } : null,
+    resultSummary,
+    resultMeta: resultBlock?.title ?? props.session?.status ?? null,
+    resultStatus,
+  }).map((row) => ({
+    ...row,
+    receipts: row.id === "tools"
+      ? toolReceipts
+      : row.id === "files"
+        ? fileReceipts
+        : row.id === "design-lane" && props.designLaneReceipt
+          ? [props.designLaneReceipt]
+          : row.id === "result" && sessionReceipt
+            ? [sessionReceipt]
+            : undefined,
+    onSelect: row.id === "design-lane"
+      ? props.designLaneReceipt?.onSelect
+      : row.id === "result"
+        ? resultSelectEvent ? () => props.onSelectEvent(resultSelectEvent) : undefined
+        : undefined,
+  }));
   return (
     <section className="run-spine" data-run-spine="compact" aria-label="Run timeline">
       {rows.map((row) => (
-        <article className="run-spine-row" data-run-spine-row={row.id} data-status={row.status} key={row.id}>
+        <article className="run-spine-row" data-empty={row.summary || row.receipts?.length ? undefined : "true"} data-run-spine-row={row.id} data-status={row.status} key={row.id}>
           <div className="run-spine-marker" aria-hidden="true" />
           <div className="run-spine-row-body">
             <header>
               <span>{row.label}</span>
-              <small>{row.meta ?? row.status}</small>
+              {row.meta ? <small>{row.meta}</small> : null}
             </header>
-            {row.onSelect ? (
+            {row.summary && row.onSelect ? (
               <button className="run-spine-summary-button" data-action-id={`run-spine.inspect.${row.id}`} type="button" onClick={row.onSelect} title={row.summary}>
                 {trimText(row.summary, 220)}
               </button>
-            ) : (
+            ) : row.summary ? (
               <p title={row.summary}>{trimText(row.summary, 220)}</p>
-            )}
+            ) : null}
             {row.receipts?.length ? (
               <div className="run-spine-receipts" data-run-spine-receipts={row.id}>
                 {row.receipts.map((receipt) => (
@@ -5072,12 +5061,12 @@ function RunSpine(props: {
             ) : null}
           </section>
         </details>
-      ) : (
+      ) : promptText.trim() ? (
         <button className="run-spine-start" data-action-id="activity.start" type="button" onClick={props.onStart} disabled={!props.canStart} title={props.startDisabledReason}>
           <StudioControlIcon name="command" />
           <span>{props.canStart ? "Start" : props.startDisabledReason}</span>
         </button>
-      )}
+      ) : null}
     </section>
   );
 }
