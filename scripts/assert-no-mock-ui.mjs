@@ -36,6 +36,17 @@ const checks = [
       "FALLBACK_AGENTIC_ROLES",
       "FALLBACK_AGENTIC_OPEN_SOURCE_REFERENCES",
       "FALLBACK_AGENTIC_INTERACTION_PATTERNS",
+      "No artifact yet",
+      "<h2>No artifact",
+      "No trace",
+      "Design system text",
+      "token refs pending",
+      "runtime ready",
+      "tests traced",
+      "diff linked",
+      "\"H1 / 32 / 700\"",
+      "\"Primary\", \"Secondary\", \"Outline\", \"Danger\", \"Disabled\"",
+      "\"transparent\", \"on surface\", \"on light\"",
     ],
   },
   {
@@ -144,6 +155,9 @@ if (!componentsSource.includes("data-icon-tooltip")) {
 }
 if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}')) {
   failures.push("src/workbench-components.tsx: collapsed sidebar icon control must expose a visible tooltip");
+}
+if (!componentsSource.includes("displayableDesignTokens") || !componentsSource.includes("isDisplayableDesignToken")) {
+  failures.push("src/workbench-components.tsx: design-system token evidence must filter raw JSON snippets before rendering");
 }
 if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
   failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");

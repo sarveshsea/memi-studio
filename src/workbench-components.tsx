@@ -386,9 +386,9 @@ export function CreationStrip(props: {
           <button data-action-id={`artifact.inspect.${latestDesignArtifact.id}`} title={latestDesignArtifact.title} type="button" onClick={() => props.onSelectArtifact?.(latestDesignArtifact)}>
             {trimText(latestDesignArtifact.title, 42)}
           </button>
-        ) : (
-          <span title={latestArtifact?.title ?? "No artifact yet"}>{latestArtifact ? trimText(latestArtifact.title, 42) : "No artifact yet"}</span>
-        )}
+        ) : latestArtifact ? (
+          <span title={latestArtifact.title}>{trimText(latestArtifact.title, 42)}</span>
+        ) : null}
         <span>{evidenceCount} evidence</span>
         <span>{decisionCount} decisions</span>
         <span>{visualCount} visuals</span>
@@ -2060,11 +2060,10 @@ export function DesignSystemReviewSurface(props: {
         <header className="artifact-review-head">
           <div>
             <p className="eyebrow">Design system</p>
-            <h2>No artifact</h2>
+            <h2>Memory</h2>
           </div>
-          <span>waiting</span>
+          <span>idle</span>
         </header>
-        <p className="empty">No trace</p>
       </section>
     );
   }
@@ -2189,7 +2188,7 @@ export function DesignSystemReviewSurface(props: {
 
 function ArtifactResolvedEvidence({ artifact }: { artifact: DesignSystemArtifact }) {
   const assets = artifact.assets ?? [];
-  const tokens = artifact.tokens ?? [];
+  const tokens = displayableDesignTokens(artifact);
   if (assets.length === 0 && tokens.length === 0) return null;
   return (
     <div className="artifact-resolved-evidence" data-artifact-assets="resolved" data-token-evidence="resolved">
@@ -2211,6 +2210,34 @@ function ArtifactResolvedEvidence({ artifact }: { artifact: DesignSystemArtifact
       ) : null}
     </div>
   );
+}
+
+type DesignSystemResolvedTokenItem = NonNullable<DesignSystemArtifact["tokens"]>[number];
+const TYPOGRAPHY_TOKEN_KINDS = new Set<DesignSystemResolvedTokenItem["kind"]>(["typography"]);
+const COLOR_TOKEN_KINDS = new Set<DesignSystemResolvedTokenItem["kind"]>(["color"]);
+const SPACE_TOKEN_KINDS = new Set<DesignSystemResolvedTokenItem["kind"]>(["spacing", "radius", "shadow"]);
+
+function displayableDesignTokens(
+  artifact: DesignSystemArtifact,
+  kinds?: ReadonlySet<DesignSystemResolvedTokenItem["kind"]>,
+): DesignSystemResolvedTokenItem[] {
+  return (artifact.tokens ?? []).filter((token) => {
+    if (kinds && !kinds.has(token.kind)) return false;
+    return isDisplayableDesignToken(token);
+  });
+}
+
+function isDisplayableDesignToken(token: DesignSystemResolvedTokenItem): boolean {
+  const name = token.name.trim();
+  const value = token.value.trim();
+  if (!name || !value) return false;
+  const raw = `${name} ${value}`;
+  if (/[{}]/.test(raw)) return false;
+  if (/"[^"]+"\s*:/.test(raw)) return false;
+  if (/"(?:id|kind|title|summary|content|label|value|section)"\s*:/i.test(raw)) return false;
+  if (/\b(?:sectionId|sourceRefs|preview|state)\b/i.test(raw)) return false;
+  if (name.length > 72 || value.length > 96) return false;
+  return true;
 }
 
 export function SourceReferenceChips({ refs }: { refs: DesignSystemArtifact["sourceRefs"] }) {
@@ -2328,13 +2355,14 @@ function BrandPreview({ artifact, section }: { artifact: DesignSystemArtifact; s
       </div>
     );
   }
+  if (!section.preview.items.length) return null;
   return (
     <div className="artifact-preview visual-reference brand-reference" data-artifact-preview="brand-lockups">
-      {["transparent", "on surface", "on light"].map((tone) => (
-        <article key={tone}>
-          <span className="brand-mark" aria-hidden="true">{section.title.slice(0, 1)}</span>
-          <strong>{tone}</strong>
-          <small>{section.summary}</small>
+      {section.preview.items.map((item, index) => (
+        <article key={`${section.id}-brand-${index}`}>
+          <span className="brand-mark" aria-hidden="true">{item.label.slice(0, 1)}</span>
+          <strong>{item.label}</strong>
+          {item.value ? <small>{item.value}</small> : null}
         </article>
       ))}
     </div>
@@ -2342,19 +2370,22 @@ function BrandPreview({ artifact, section }: { artifact: DesignSystemArtifact; s
 }
 
 function TypographyPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
-  const typeTokens = (artifact.tokens ?? []).filter((token) => token.kind === "typography").slice(0, 4);
-  const labels = typeTokens.length ? typeTokens.map((token) => `${token.name} / ${token.line ?? "src"}`) : ["H1 / 32 / 700", "H2 / 24 / 600", "Body / 15 / 400", "Meta / 13 / 400"];
+  const typeTokens = displayableDesignTokens(artifact, TYPOGRAPHY_TOKEN_KINDS).slice(0, 4);
+  const rows = typeTokens.length
+    ? typeTokens.map((token) => ({ label: `${token.name} / ${token.line ?? "src"}`, value: token.value }))
+    : section.preview.items.map((item) => ({ label: item.label, value: item.value || item.detail || "" })).filter((item) => item.value.trim().length > 0);
+  if (!rows.length) return null;
   return (
     <div className="typography-reference visual-reference" data-artifact-preview="type-ramp">
-      {labels.map((label, index) => (
-        <p className={`type-sample type-sample-${index}`} key={label}><span>{label}</span>{typeTokens[index]?.value ?? section.preview.items[index]?.label ?? "Design system text"}</p>
+      {rows.map((row, index) => (
+        <p className={`type-sample type-sample-${index}`} key={`${row.label}-${index}`}><span>{row.label}</span>{row.value}</p>
       ))}
     </div>
   );
 }
 
 function TokenPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
-  const resolved = (artifact.tokens ?? []).filter((token) => token.kind === "color").slice(0, 12);
+  const resolved = displayableDesignTokens(artifact, COLOR_TOKEN_KINDS).slice(0, 12);
   if (resolved.length) {
     return (
       <div className="token-reference visual-reference" data-artifact-preview="token-swatches">
@@ -2362,16 +2393,11 @@ function TokenPreview({ artifact, section }: { artifact: DesignSystemArtifact; s
       </div>
     );
   }
-  const tokens = ["surface", "muted", "accent", "ok", "danger"];
-  return (
-    <div className="token-reference visual-reference" data-artifact-preview="token-swatches">
-      {tokens.map((token) => <article className={`swatch-${token}`} key={token}><span /><strong>{token}</strong><small>{section.summary}</small></article>)}
-    </div>
-  );
+  return <PreviewItemList section={section} />;
 }
 
 function SpacingPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
-  const resolved = (artifact.tokens ?? []).filter((token) => ["spacing", "radius", "shadow"].includes(token.kind)).slice(0, 6);
+  const resolved = displayableDesignTokens(artifact, SPACE_TOKEN_KINDS).slice(0, 6);
   if (resolved.length) {
     return (
       <div className="spacing-reference visual-reference" data-artifact-preview="spacing-scale">
@@ -2379,30 +2405,46 @@ function SpacingPreview({ artifact, section }: { artifact: DesignSystemArtifact;
       </div>
     );
   }
+  return <PreviewItemList section={section} />;
+}
+
+function ComponentPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
+  const componentTokens = displayableDesignTokens(artifact).filter((token) => token.kind !== "color").slice(0, 6);
+  const tokenRefs = componentTokens.map((token) => token.name).join(" / ");
+  const sourceRefs = section.sourceRefs.slice(0, 3).map((ref) => ref.label).join(" / ");
   return (
-    <div className="spacing-reference visual-reference" data-artifact-preview="spacing-scale">
-      {["none", "sm", "md", "glow"].map((label) => <article className={`space-${label}`} key={label}><span /><strong>{label}</strong><small>{section.summary}</small></article>)}
+    <div className="component-reference visual-reference" data-artifact-preview="component-playground">
+      <div className="component-lab" data-component-lab="playground-sandbox">
+        <div className="component-stage">
+          {section.preview.items.map((item, index) => (
+            <article key={`${section.id}-component-${index}`}>
+              <strong>{item.label}</strong>
+              {item.value ? <span>{item.value}</span> : null}
+              {item.detail ? <small>{item.detail}</small> : null}
+            </article>
+          ))}
+        </div>
+        <aside className="component-inspector" data-component-inspector="props-tokens-source">
+          {tokenRefs || sourceRefs ? <strong>Evidence</strong> : null}
+          {tokenRefs || sourceRefs ? <span>{tokenRefs || sourceRefs}</span> : null}
+          <strong>Agent output</strong><span>{section.summary}</span>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function ComponentPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
-  const componentTokens = (artifact.tokens ?? []).filter((token) => token.kind !== "color").slice(0, 6);
+function PreviewItemList({ section }: { section: DesignSystemArtifactSection }) {
+  if (!section.preview.items.length) return null;
   return (
-    <div className="component-reference visual-reference" data-artifact-preview="component-playground">
-      <div className="component-tabs" data-component-tabs="preview-variants-states">{["Preview", "Variants", "States", "Responsive", "Data"].map((label) => <span className={label === "Preview" ? "active" : ""} key={label}>{label}</span>)}</div>
-      <div className="component-lab" data-component-lab="playground-sandbox">
-        <div className="component-stage">
-          {["Primary", "Secondary", "Outline", "Danger", "Disabled"].map((label) => <span className="component-button" key={label}>{label}</span>)}
-          <article><strong>Component inventory</strong><span>{section.preview.items.map((item) => item.label).join(" / ")}</span></article>
-        </div>
-        <aside className="component-inspector" data-component-inspector="props-tokens-source">
-          <strong>Props</strong><span>variant / state / source refs</span>
-          <strong>Tokens used</strong><span>{componentTokens.map((token) => token.name).join(" / ") || section.sourceRefs.slice(0, 3).map((ref) => ref.label).join(" / ") || "token refs pending"}</span>
-          <strong>Agent output</strong><span>{section.summary}</span>
-        </aside>
-      </div>
-      <div className="component-console" data-component-console="agent-cli"><span>runtime ready</span><span>tests traced</span><span>diff linked</span></div>
+    <div className={`artifact-preview preview-${section.preview.kind}`} data-artifact-preview={section.preview.kind}>
+      {section.preview.items.map((item, index) => (
+        <article key={`${section.id}-preview-item-${index}`}>
+          <strong>{item.label}</strong>
+          {item.value ? <span>{item.value}</span> : null}
+          {item.detail ? <small>{item.detail}</small> : null}
+        </article>
+      ))}
     </div>
   );
 }
