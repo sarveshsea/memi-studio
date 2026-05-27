@@ -721,6 +721,17 @@ fn restart_studio_runtime_process(
         return status;
     }
 
+    if let Some(status) = attach_to_existing_managed_runtime(
+        app,
+        state,
+        workspace_root,
+        generation,
+        &startup_started_at,
+        supervisor_started,
+    ) {
+        return status;
+    }
+
     let source = match resolve_runtime_launch_source(app) {
         Ok(source) => source,
         Err(error) => {
@@ -1290,6 +1301,116 @@ fn replace_managed_orphan_runtime(app: &AppHandle, workspace_root: &Path) -> Res
         }),
     );
     Ok(true)
+}
+
+fn attach_to_existing_managed_runtime(
+    app: &AppHandle,
+    state: &AppState,
+    workspace_root: &Path,
+    generation: u64,
+    startup_started_at: &str,
+    supervisor_started: Instant,
+) -> Option<studio::StudioRuntimeStatus> {
+    let pid_file = read_managed_runtime_pid_file(app)?;
+    let process_alive = process_exists(pid_file.pid);
+    if !process_alive {
+        clear_managed_runtime_pid_file(app, Some(pid_file.pid));
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.managed-existing.stale-pid-file",
+            json!({
+                "generation": generation,
+                "pid": pid_file.pid,
+                "port": pid_file.port
+            }),
+        );
+        return None;
+    }
+    let token_status_ok = matches!(
+        local_http_get_with_token(pid_file.port, "/api/status", Some(&pid_file.api_token)),
+        Some((200, _))
+    );
+    let mut status = managed_runtime_status_from_pid_file(
+        &pid_file,
+        workspace_root,
+        process_alive,
+        token_status_ok,
+    )?;
+    status.startup_started_at = Some(startup_started_at.to_string());
+    status.startup_ms = Some(elapsed_ms(supervisor_started));
+    let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+    append_runtime_lifecycle_log(
+        app,
+        "runtime.managed-existing.attached",
+        json!({
+            "generation": generation,
+            "pid": pid_file.pid,
+            "port": pid_file.port,
+            "status": status.status.clone(),
+            "supervisorPhase": status.supervisor_phase.clone(),
+            "tokenStatusOk": token_status_ok,
+            "startupMs": status.startup_ms
+        }),
+    );
+    Some(status)
+}
+
+fn managed_runtime_status_from_pid_file(
+    pid_file: &ManagedRuntimePidFile,
+    workspace_root: &Path,
+    process_alive: bool,
+    token_status_ok: bool,
+) -> Option<studio::StudioRuntimeStatus> {
+    if pid_file.schema_version != 1 || pid_file.port != STUDIO_RUNTIME_PORT || !process_alive {
+        return None;
+    }
+    let workspace_matches = runtime_pid_workspace_matches(pid_file, workspace_root);
+    let status_kind = if token_status_ok && workspace_matches {
+        "running"
+    } else if workspace_matches {
+        "starting"
+    } else {
+        "error"
+    };
+    let mut status = runtime_status(
+        status_kind,
+        Some(pid_file.pid),
+        workspace_root,
+        Some(pid_file.api_token.clone()),
+        Some(pid_file.package_root.clone()),
+        if workspace_matches {
+            None
+        } else {
+            Some(format!(
+                "A Mémoire Studio runtime is already starting for {}. Quit that Studio window or restart the runtime before opening {}.",
+                pid_file.workspace_root,
+                workspace_root.display()
+            ))
+        },
+    );
+    status.runtime_binary = Some(pid_file.runtime_binary.clone());
+    status.runtime_cache_root = Some(pid_file.runtime_cache_root.clone());
+    status.runtime_source = Some(if token_status_ok && workspace_matches {
+        "attached-existing-runtime".to_string()
+    } else {
+        "attached-managed-runtime".to_string()
+    });
+    status.supervisor_phase = Some(if token_status_ok && workspace_matches {
+        "attached".to_string()
+    } else if workspace_matches {
+        "attached-starting".to_string()
+    } else {
+        "managed-runtime-workspace-conflict".to_string()
+    });
+    Some(status)
+}
+
+fn runtime_pid_workspace_matches(pid_file: &ManagedRuntimePidFile, workspace_root: &Path) -> bool {
+    normalize_runtime_path(&pid_file.workspace_root) == normalize_runtime_path(&workspace_root.to_string_lossy())
+}
+
+fn normalize_runtime_path(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_string()
 }
 
 fn should_replace_managed_runtime_pid_file(
@@ -2867,6 +2988,63 @@ mod runtime_cache_tests {
         assert!(!should_replace_managed_runtime_pid_file(&pid_file, false, true));
         assert!(!should_replace_managed_runtime_pid_file(&pid_file, true, false));
         assert!(!should_replace_managed_runtime_pid_file(&wrong_port, true, true));
+    }
+
+    #[test]
+    fn managed_runtime_pid_file_blocks_duplicate_startup_spawns() {
+        let pid_file = ManagedRuntimePidFile {
+            schema_version: 1,
+            pid: 12345,
+            port: STUDIO_RUNTIME_PORT,
+            api_token: "token".to_string(),
+            workspace_root: "/tmp/workspace".to_string(),
+            package_root: "/tmp/runtime/package".to_string(),
+            runtime_binary: "/tmp/runtime/bin/memi-studio-runtime".to_string(),
+            runtime_cache_root: "/tmp/runtime".to_string(),
+            started_at: "1".to_string(),
+        };
+
+        let starting = managed_runtime_status_from_pid_file(
+            &pid_file,
+            Path::new("/tmp/workspace"),
+            true,
+            false,
+        )
+        .expect("starting runtime status");
+        assert_eq!(starting.status, "starting");
+        assert_eq!(starting.pid, Some(12345));
+        assert_eq!(starting.supervisor_phase.as_deref(), Some("attached-starting"));
+
+        let running = managed_runtime_status_from_pid_file(
+            &pid_file,
+            Path::new("/tmp/workspace/"),
+            true,
+            true,
+        )
+        .expect("running runtime status");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.runtime_source.as_deref(), Some("attached-existing-runtime"));
+
+        let conflict = managed_runtime_status_from_pid_file(
+            &pid_file,
+            Path::new("/tmp/other-workspace"),
+            true,
+            false,
+        )
+        .expect("conflicting runtime status");
+        assert_eq!(conflict.status, "error");
+        assert_eq!(
+            conflict.supervisor_phase.as_deref(),
+            Some("managed-runtime-workspace-conflict")
+        );
+
+        assert!(managed_runtime_status_from_pid_file(
+            &pid_file,
+            Path::new("/tmp/workspace"),
+            false,
+            false,
+        )
+        .is_none());
     }
 
     #[test]
