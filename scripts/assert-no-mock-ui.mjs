@@ -26,6 +26,7 @@ const checks = [
       "Select a run event, changed file, artifact, or approval to inspect details here.",
       "Readiness details",
       "Hide readiness",
+      "No trace",
     ],
   },
   {
@@ -47,6 +48,12 @@ const checks = [
       "\"H1 / 32 / 700\"",
       "\"Primary\", \"Secondary\", \"Outline\", \"Danger\", \"Disabled\"",
       "\"transparent\", \"on surface\", \"on light\"",
+      "{contract.source.name} / {contract.source.access}",
+      "{role.atomicLevel}",
+      "role.requiredSignals.slice(0, 2).join(\" / \")",
+      "contract.outputSections.join(\" / \")",
+      "reference.mappedRoles.join(\" / \")",
+      "pattern.requiredSignals.join(\" / \")",
     ],
   },
   {
@@ -147,6 +154,9 @@ if (!appSource.includes("truth-strip-detail")) {
 if (!appSource.includes("aria-label={accessibleLabel}")) {
   failures.push("src/App.tsx: truth strip state values must be exposed to accessibility");
 }
+if (!appSource.includes("isWorkspaceAccessBlockedMessage") || !appSource.includes('data-action-id="workspace.reauthorize"')) {
+  failures.push("src/App.tsx: macOS workspace access failures must offer Open folder reauthorization instead of only runtime restart");
+}
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
@@ -158,6 +168,9 @@ if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sid
 }
 if (!componentsSource.includes("displayableDesignTokens") || !componentsSource.includes("isDisplayableDesignToken")) {
   failures.push("src/workbench-components.tsx: design-system token evidence must filter raw JSON snippets before rendering");
+}
+if (!componentsSource.includes("formatAgenticContractTerm") || !componentsSource.includes("formatAgenticContractAccess")) {
+  failures.push("src/workbench-components.tsx: agentic design-system contract must humanize raw event and token ids before rendering");
 }
 if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
   failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");

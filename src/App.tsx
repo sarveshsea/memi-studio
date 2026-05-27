@@ -722,7 +722,7 @@ export function App() {
   const effectiveRuntimeMetrics = status?.metrics ?? runtimeMetrics;
   const hasWorkspace = Boolean((status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "").trim());
   const canRunSession = Boolean(hasWorkspace && runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
-  const runDisabledMessage = runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace, effectiveAction);
+  const runDisabledMessage = runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace, effectiveAction, runtimeRecoveryMessage);
   const canContinueConversation = Boolean(activeConversationId && session && (session.status === "completed" || session.status === "interrupted") && (session.conversationId ?? session.id) === activeConversationId);
   const isResumingInterrupted = Boolean(session?.status === "interrupted");
   const activeModelRegistry = harnessModelRegistries[selectedHarness] ?? null;
@@ -2705,26 +2705,40 @@ export function App() {
   }
 
   async function handleRestartStudioRuntime() {
-    setMermaidBoardLoading(true);
+    const boardNeedsTools = rightPaneTab === "mermaid-board";
+    if (boardNeedsTools) setMermaidBoardLoading(true);
     setMermaidBoardError(null);
     try {
       const restarted = await restartStudioRuntime();
       if (!restarted) {
         throw new Error("Packaged runtime restart is unavailable in browser preview. Restart the Studio runtime process, then refresh this board.");
       }
-      const fresh = await waitForMermaidBoardRuntimeTools();
-      setStatus(fresh.status);
-      setRuntimeMetrics(fresh.status.metrics ?? null);
-      setRuntimeHealth("ready");
-      setRuntimeRecoveryMessage(null);
-      setStudioTools(fresh.tools);
-      setError(null);
+      const restartedHealth: RuntimeHealth = restarted.status === "running"
+        ? "ready"
+        : restarted.status === "starting"
+          ? "starting"
+          : restarted.status === "stopped" || restarted.status === "error"
+            ? "degraded"
+            : "offline";
+      setRuntimeHealth(restartedHealth);
+      setRuntimeRecoveryMessage(restarted.error ?? null);
+      setError(restartedHealth === "ready" ? null : restarted.error ?? "Studio runtime did not become ready.");
+      await refresh();
+      if (boardNeedsTools && restartedHealth === "ready") {
+        const fresh = await waitForMermaidBoardRuntimeTools();
+        setStatus(fresh.status);
+        setRuntimeMetrics(fresh.status.metrics ?? null);
+        setRuntimeHealth("ready");
+        setRuntimeRecoveryMessage(null);
+        setStudioTools(fresh.tools);
+        setError(null);
+      }
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setMermaidBoardError(message);
+      if (boardNeedsTools) setMermaidBoardError(message);
       setError(message);
     } finally {
-      setMermaidBoardLoading(false);
+      if (boardNeedsTools) setMermaidBoardLoading(false);
     }
   }
 
@@ -3418,6 +3432,7 @@ export function App() {
             canRestart={canRestartStudioRuntime()}
             onRetry={refresh}
             onRestart={() => void handleRestartStudioRuntime()}
+            onOpenWorkspace={() => void handleOpenWorkspace()}
             onOpenSettings={() => openSettingsPanel()}
           />
         ) : null}
@@ -3850,7 +3865,7 @@ export function App() {
             <button data-action-id="design-trace.refresh" type="button" onClick={refresh}>Refresh</button>
           </div>
           <div className="change-summary">
-            <strong>{designTrace?.reviewLabel ?? "No trace"}</strong>
+            <strong>{designTrace?.reviewLabel ?? "Trace idle"}</strong>
             <small>{designTrace?.status ?? "checking"}</small>
           </div>
           <div className="trace-file-list">
@@ -4768,10 +4783,12 @@ function RuntimeRecoveryStrip(props: {
   canRestart: boolean;
   onRetry: () => void;
   onRestart: () => void;
+  onOpenWorkspace: () => void;
   onOpenSettings: () => void;
 }) {
   const message = props.message
     ?? (props.health === "starting" ? "Starting local runtime..." : "Runtime unavailable");
+  const needsWorkspaceAccess = isWorkspaceAccessBlockedMessage(message);
   return (
     <section
       className="runtime-recovery-strip"
@@ -4782,7 +4799,11 @@ function RuntimeRecoveryStrip(props: {
       <strong>{runtimeHealthLabel(props.health)}</strong>
       <span title={message}>{trimText(message, 96)}</span>
       <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>
-      <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
+      {needsWorkspaceAccess ? (
+        <button data-action-id="workspace.reauthorize" type="button" onClick={props.onOpenWorkspace}>Open folder</button>
+      ) : (
+        <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
+      )}
       <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
     </section>
   );
@@ -4795,6 +4816,12 @@ function runtimeHealthFromStatus(status: StudioStatus): RuntimeHealth {
   if (runtimeStatus === "stopped" || runtimeStatus === "error") return "degraded";
   if (status.status === "running" || status.status === "ready") return "ready";
   return "degraded";
+}
+
+function isWorkspaceAccessBlockedMessage(message: string | null | undefined): boolean {
+  const normalized = (message ?? "").trim();
+  return /\bmacOS blocked access\b/i.test(normalized)
+    && /\b(saved workspace|workspace|removable|network volumes?)\b/i.test(normalized);
 }
 
 function runtimeHealthLabel(health: RuntimeHealth): string {
@@ -5659,8 +5686,9 @@ function runSpineResultSummary(block: TerminalBlock | null, session?: SessionSum
   return compactRunSummary(text ?? block.title, session?.harness, 180);
 }
 
-function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean, action: StudioAction): string {
+function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: string, prompt: string, runtimeHealth: RuntimeHealth, hasWorkspace: boolean, action: StudioAction, runtimeRecoveryMessage?: string | null): string {
   if (!hasWorkspace) return "Open a folder to run";
+  if (runtimeHealth !== "ready" && isWorkspaceAccessBlockedMessage(runtimeRecoveryMessage)) return "Open folder to reauthorize workspace";
   if (runtimeHealth !== "ready") return `Runtime ${runtimeHealthLabel(runtimeHealth)}`;
   if (!prompt.trim()) return "Add a prompt to run";
   if (!harness) return "Pick a harness to run";

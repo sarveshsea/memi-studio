@@ -2278,20 +2278,20 @@ function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtif
     <section className="agentic-design-system" data-agentic-design-system="role-contract-collapsed">
       <header className="agentic-contract-summary">
         <strong>Agentic contract</strong>
-        <span>{contract.source.name} / {contract.source.access}</span>
+        <span>{contract.source.name} / {formatAgenticContractAccess(contract.source.access)}</span>
       </header>
       <div className="agentic-role-strip">
         {roles.map((role) => (
           <article className="agentic-role-card" data-agentic-role-card={role.id} key={role.id}>
             <strong>{role.label}</strong>
-            <span>{role.atomicLevel}</span>
-            <small>{role.requiredSignals.slice(0, 2).join(" / ")}</small>
+            <span>{formatAgenticContractTerm(role.atomicLevel)}</span>
+            <small>{role.requiredSignals.slice(0, 2).map(formatAgenticContractTerm).join(" / ")}</small>
           </article>
         ))}
       </div>
       {contract.outputSections.length ? (
         <div className="agentic-output-contract">
-          <span>{contract.outputSections.join(" / ")}</span>
+          <span>{contract.outputSections.map(formatAgenticContractTerm).join(" / ")}</span>
         </div>
       ) : null}
       {references.length || patterns.length ? (
@@ -2301,8 +2301,8 @@ function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtif
             {references.slice(0, 6).map((reference) => (
               <article className="agentic-pattern-source-card" data-agentic-pattern-source={reference.name} key={reference.name}>
                 <strong>{reference.name}</strong>
-                <span>{reference.license} / {reference.category}</span>
-                <small>{reference.mappedRoles.join(" / ")}</small>
+                <span>{reference.license} / {formatAgenticContractTerm(reference.category)}</span>
+                <small>{reference.mappedRoles.map(formatAgenticContractTerm).join(" / ")}</small>
               </article>
             ))}
           </div>
@@ -2311,7 +2311,7 @@ function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtif
               <article className="agentic-role-card" data-agentic-pattern={pattern.id} key={pattern.id}>
                 <strong>{pattern.label}</strong>
                 <span>{pattern.source}</span>
-                <small>{pattern.requiredSignals.join(" / ")}</small>
+                <small>{pattern.requiredSignals.map(formatAgenticContractTerm).join(" / ")}</small>
               </article>
             ))}
           </div>
@@ -2319,6 +2319,17 @@ function AgenticDesignSystemContract({ artifact }: { artifact: DesignSystemArtif
       ) : null}
     </section>
   );
+}
+
+function formatAgenticContractAccess(value: string): string {
+  if (value === "public-preview") return "Preview reference";
+  return formatAgenticContractTerm(value);
+}
+
+function formatAgenticContractTerm(value: string): string {
+  const normalized = value.trim().replace(/[_/-]+/g, " ").replace(/\s+/g, " ");
+  if (!normalized) return "";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function ArtifactPreview({ artifact, section }: { artifact: DesignSystemArtifact; section: DesignSystemArtifactSection }) {
