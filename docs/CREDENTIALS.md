@@ -120,7 +120,7 @@ security find-certificate -c "Developer ID Application: Humyn LLC." -a -p \
   | grep notAfter
 
 # Latest release working?
-gh release view v0.18.0 --repo sarveshsea/memi-studio --json assets \
+gh release view --repo sarveshsea/memi-studio --json assets \
   | jq -r '.assets[].name'
 # Expected: 2 .dmg files, 2 .app.tar.gz, 2 .app.tar.gz.sig, latest.json, SHA256SUMS
 
