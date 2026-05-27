@@ -199,8 +199,10 @@ import {
   type WorkbenchIconName,
 } from "./workbench-copy";
 import {
+  DEFAULT_COMPOSER_STATE,
   DEFAULT_PRIMARY_HARNESS_ID,
   DEFAULT_RIGHT_PANE_TAB_IDS,
+  composerStateForSession,
   composerHarnessShortLabel,
   composerSwitcherHarnesses,
   composerHarnessTier,
@@ -209,6 +211,7 @@ import {
   compactRunSummary,
   defaultWorkbenchSession,
   isQueueDockSession,
+  modePresetIdForComposerState,
   normalizeComposerHarness,
   normalizePrimaryHarness,
   normalizeRightPaneTab,
@@ -439,9 +442,9 @@ export function App() {
   const [status, setStatus] = useState<StudioStatus | null>(null);
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
-  const [selectedAction, setSelectedAction] = useState<StudioAction>("app-build");
-  const [chatMode, setChatMode] = useState<StudioChatMode>("ideate");
-  const [permissionMode, setPermissionMode] = useState<StudioPermissionMode>("guarded");
+  const [selectedAction, setSelectedAction] = useState<StudioAction>(DEFAULT_COMPOSER_STATE.action);
+  const [chatMode, setChatMode] = useState<StudioChatMode>(DEFAULT_COMPOSER_STATE.chatMode);
+  const [permissionMode, setPermissionMode] = useState<StudioPermissionMode>(DEFAULT_COMPOSER_STATE.permissionMode);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("dark");
   const [inputMode, setInputMode] = useState<StudioInputMode>("agent");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -703,9 +706,11 @@ export function App() {
   const effectiveActionLabel = harnessActions.find((action) => action.id === effectiveAction)?.label ?? effectiveAction;
   const activeChatModeLabel = CHAT_MODES.find((mode) => mode.id === chatMode)?.label ?? chatMode;
   const activePermissionModeLabel = PERMISSION_MODES.find((mode) => mode.id === permissionMode)?.label ?? permissionMode;
-  const activeModePreset = MODE_PRESETS.find((preset) =>
-    preset.action === selectedAction && preset.chatMode === chatMode && preset.permissionMode === permissionMode,
-  )?.id ?? null;
+  const activeModePreset = modePresetIdForComposerState(MODE_PRESETS, {
+    action: selectedAction,
+    chatMode,
+    permissionMode,
+  });
   const sessionStatus = deriveSessionStatus(session, events);
   const visibleSessionStatus = isStartingSession ? "starting" : sessionStatus;
   const isSessionActive = isStartingSession || sessionStatus === "running" || sessionStatus === "queued";
@@ -1312,13 +1317,14 @@ export function App() {
   }
 
   async function openSessionSummary(nextSession: SessionSummary, availableHarnesses = harnesses) {
+    const nextComposerState = composerStateForSession(nextSession, MODE_PRESETS);
     setSession(nextSession);
     setServerTrace(null);
     setCollapsedBlockIds(new Set());
-    setSelectedAction((nextSession.action as StudioAction | undefined) ?? "raw");
+    setSelectedAction(nextComposerState.action);
     setSelectedHarness(normalizeComposerHarness(nextSession.harness, availableHarnesses));
-    setChatMode(nextSession.chatMode ?? "ideate");
-    setPermissionMode(nextSession.permissionMode ?? "guarded");
+    setChatMode(nextComposerState.chatMode);
+    setPermissionMode(nextComposerState.permissionMode);
     setActiveConversationId(nextSession.conversationId ?? nextSession.id);
     setConversationGoal(nextSession.goal ?? "");
     setGoalEditorOpen(false);

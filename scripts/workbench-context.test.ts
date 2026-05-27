@@ -7,8 +7,11 @@ import {
   selectReviewPacketForSession,
 } from "../src/workbench-context.js";
 import {
+  DEFAULT_COMPOSER_PRESET_ID,
+  DEFAULT_COMPOSER_STATE,
   compactRunLabel,
   compactRunSummary,
+  composerStateForSession,
   composerHarnesses,
   composerHarnessShortLabel,
   composerSwitcherHarnesses,
@@ -18,6 +21,7 @@ import {
   defaultWorkbenchSession,
   isQueueDockSession,
   isVerificationRunText,
+  modePresetIdForComposerState,
   primaryHarnesses,
   sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
@@ -217,6 +221,27 @@ assert(
     icon: "review",
   }, 0).iconOnly === true,
   "keeps idle starter prompts icon-first in the composer",
+);
+
+const defaultModePreset = WORKBENCH_COPY.modePresets.find((preset) => preset.id === DEFAULT_COMPOSER_PRESET_ID);
+assert(
+  Boolean(defaultModePreset)
+    && defaultModePreset?.action === DEFAULT_COMPOSER_STATE.action
+    && defaultModePreset?.chatMode === DEFAULT_COMPOSER_STATE.chatMode
+    && defaultModePreset?.permissionMode === DEFAULT_COMPOSER_STATE.permissionMode
+    && modePresetIdForComposerState(WORKBENCH_COPY.modePresets, DEFAULT_COMPOSER_STATE) === "build",
+  "keeps the default composer state aligned to the active Build preset",
+);
+
+assert(
+  composerStateForSession({ action: "app-build" } as SessionSummary, WORKBENCH_COPY.modePresets).chatMode === "build"
+    && composerStateForSession({ action: "app-build" } as SessionSummary, WORKBENCH_COPY.modePresets).permissionMode === "guarded",
+  "hydrates legacy build sessions with Build mode instead of Ideate",
+);
+
+assert(
+  modePresetIdForComposerState(WORKBENCH_COPY.modePresets, composerStateForSession({ action: "audit" } as SessionSummary, WORKBENCH_COPY.modePresets)) === "review",
+  "hydrates legacy audit sessions into the Review preset",
 );
 
 const critiqueStarter = WORKBENCH_COPY.starterPrompts.find((starter) => starter.label === "Critique screen");

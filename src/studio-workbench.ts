@@ -1,16 +1,27 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 // Copyright 2026 Humyn LLC
 
-import type { Harness, HarnessId, SessionSummary } from "./studio-api";
-import type { WORKBENCH_COPY, WorkbenchIconName, WorkbenchStarterPrompt } from "./workbench-copy";
+import type { Harness, HarnessId, SessionSummary, StudioAction, StudioChatMode, StudioPermissionMode } from "./studio-api";
+import type { WORKBENCH_COPY, WorkbenchIconName, WorkbenchModePreset, WorkbenchStarterPrompt } from "./workbench-copy";
 
 export const PRIMARY_HARNESS_IDS = ["codex", "claude-code"] as const satisfies HarnessId[];
 export const COMPOSER_HARNESS_IDS = ["codex", "claude-code", "ollama", "opencode"] as const satisfies HarnessId[];
 export const PERSISTENT_COMPOSER_HARNESS_IDS = ["codex", "claude-code", "ollama"] as const satisfies HarnessId[];
 export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
+export const DEFAULT_COMPOSER_PRESET_ID = "build";
+export const DEFAULT_COMPOSER_STATE = {
+  action: "app-build",
+  chatMode: "build",
+  permissionMode: "guarded",
+} as const satisfies ComposerRunState;
 
 export type HarnessVisibility = "primary" | "advanced";
 export type ComposerHarnessTier = "primary" | "local" | "advanced";
+export interface ComposerRunState {
+  action: StudioAction;
+  chatMode: StudioChatMode;
+  permissionMode: StudioPermissionMode;
+}
 export interface ComposerChipAction {
   id: string;
   label: string;
@@ -79,6 +90,30 @@ export function composerStarterAction(starter: WorkbenchStarterPrompt, index: nu
     title: starter.template,
     icon: starter.icon,
     iconOnly: true,
+  };
+}
+
+export function modePresetIdForComposerState(
+  presets: readonly WorkbenchModePreset[],
+  state: ComposerRunState,
+): WorkbenchModePreset["id"] | null {
+  return presets.find((preset) =>
+    preset.action === state.action
+    && preset.chatMode === state.chatMode
+    && preset.permissionMode === state.permissionMode,
+  )?.id ?? null;
+}
+
+export function composerStateForSession(
+  session: Pick<SessionSummary, "action" | "chatMode" | "permissionMode">,
+  presets: readonly WorkbenchModePreset[],
+): ComposerRunState {
+  const action = (session.action as StudioAction | undefined) ?? DEFAULT_COMPOSER_STATE.action;
+  const actionPreset = presets.find((preset) => preset.action === action);
+  return {
+    action,
+    chatMode: session.chatMode ?? actionPreset?.chatMode ?? DEFAULT_COMPOSER_STATE.chatMode,
+    permissionMode: session.permissionMode ?? actionPreset?.permissionMode ?? DEFAULT_COMPOSER_STATE.permissionMode,
   };
 }
 
