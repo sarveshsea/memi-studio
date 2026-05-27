@@ -22,6 +22,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 1421",
     "fetch:runtime": "node scripts/fetch-runtime.mjs",
+    "test:runtime-fetch": "node scripts/fetch-runtime-cache.test.mjs",
     "test:workbench-context": "node scripts/run-workbench-context-tests.mjs",
     "test:no-mock-ui": "node scripts/assert-no-mock-ui.mjs",
     "test:live-agents": "node scripts/studio-live-agent-smoke.mjs",

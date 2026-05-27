@@ -4,7 +4,7 @@
 // Downloads the memoire-studio-runtime sidecar binary + resources tarball
 // from a release tag of the engine repo (default: sarveshsea/memi).
 // Idempotent — skips download if the expected file is already present and
-// matches the recorded sha256.
+// matches the recorded repo/tag/asset metadata and sha256.
 //
 // Reads release coordinates from package.json's `memoireRuntime` field:
 //   {
@@ -25,10 +25,11 @@
 // Requires the `gh` CLI (used to download release assets — handles auth and
 // public-repo rate limits gracefully).
 
-import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { arch as nodeArch } from "node:os";
 
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
@@ -40,6 +41,8 @@ const STUDIO_HARNESS_MANIFEST = join(ROOT, "src-tauri", "resources", "harness-ma
 
 const ALL_ARCHS = process.argv.includes("--all-archs");
 const OFFLINE = process.argv.includes("--offline");
+const CACHE_META_FILE = ".memoire-runtime-assets.json";
+const CACHE_SCHEMA_VERSION = 1;
 const TEXT_RESOURCE_EXTENSIONS = new Set([
   ".css",
   ".html",
@@ -79,6 +82,98 @@ async function exists(path) {
   } catch {
     return false;
   }
+}
+
+async function sha256File(path) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+function blankAssetCache() {
+  return {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    assets: {},
+  };
+}
+
+export function assetCacheEntryMatches(entry, expected) {
+  return Boolean(
+    entry
+      && entry.schemaVersion === CACHE_SCHEMA_VERSION
+      && entry.repo === expected.repo
+      && entry.tag === expected.tag
+      && entry.asset === expected.asset
+      && entry.sha256 === expected.sha256
+      && entry.size === expected.size,
+  );
+}
+
+export async function readAssetCache(destDir) {
+  const metaPath = join(destDir, CACHE_META_FILE);
+  try {
+    const cache = JSON.parse(await fs.readFile(metaPath, "utf8"));
+    if (cache?.schemaVersion !== CACHE_SCHEMA_VERSION || typeof cache.assets !== "object") {
+      return blankAssetCache();
+    }
+    return cache;
+  } catch (error) {
+    if (error.code === "ENOENT") return blankAssetCache();
+    throw error;
+  }
+}
+
+async function writeAssetCache(destDir, cache) {
+  await ensureDir(destDir);
+  await writeJson(join(destDir, CACHE_META_FILE), {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    assets: cache.assets ?? {},
+  });
+}
+
+async function fileFingerprint(path) {
+  const stats = await fs.stat(path);
+  return {
+    sha256: await sha256File(path),
+    size: stats.size,
+  };
+}
+
+export async function cachedAssetMatches(destDir, repo, tag, asset) {
+  const dest = join(destDir, asset);
+  if (!(await exists(dest))) return false;
+  const cache = await readAssetCache(destDir);
+  const fingerprint = await fileFingerprint(dest);
+  return assetCacheEntryMatches(cache.assets[asset], {
+    repo,
+    tag,
+    asset,
+    ...fingerprint,
+  });
+}
+
+export async function rememberCachedAsset(destDir, asset, repo, tag, path = join(destDir, asset)) {
+  const cache = await readAssetCache(destDir);
+  const fingerprint = await fileFingerprint(path);
+  cache.assets[asset] = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    repo,
+    tag,
+    asset,
+    ...fingerprint,
+    cachedAt: new Date().toISOString(),
+  };
+  await writeAssetCache(destDir, cache);
+}
+
+async function forgetCachedAsset(destDir, asset) {
+  const cache = await readAssetCache(destDir);
+  delete cache.assets[asset];
+  await writeAssetCache(destDir, cache);
 }
 
 function exportedConst(source, name) {
@@ -188,8 +283,16 @@ async function downloadAsset(repo, tag, asset, destDir) {
   await ensureDir(destDir);
   const dest = join(destDir, asset);
   if (await exists(dest)) {
-    console.log(`fetch-runtime: ${asset} already cached, skipping download`);
-    return dest;
+    if (await cachedAssetMatches(destDir, repo, tag, asset)) {
+      console.log(`fetch-runtime: ${asset} cache verified, skipping download`);
+      return dest;
+    }
+    if (OFFLINE) {
+      throw new Error(`offline mode but cached asset metadata is stale or missing: ${dest}`);
+    }
+    console.log(`fetch-runtime: ${asset} cache metadata is stale, refreshing`);
+    await fs.rm(dest, { force: true });
+    await forgetCachedAsset(destDir, asset);
   }
   if (OFFLINE) {
     throw new Error(`offline mode but asset is missing: ${dest}`);
@@ -207,6 +310,7 @@ async function downloadAsset(repo, tag, asset, destDir) {
     destDir,
     "--clobber",
   ]);
+  await rememberCachedAsset(destDir, asset, repo, tag, dest);
   return dest;
 }
 
@@ -257,7 +361,9 @@ async function main() {
   console.log("fetch-runtime: done");
 }
 
-main().catch((error) => {
-  console.error(`fetch-runtime: ${error.message}`);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main().catch((error) => {
+    console.error(`fetch-runtime: ${error.message}`);
+    process.exit(1);
+  });
+}

@@ -27,6 +27,7 @@ Cargo.lock.bak
 
 # Tauri sidecar binaries (fetched at build time, not committed)
 src-tauri/binaries/
+src-tauri/resources/.memoire-runtime-assets.json
 src-tauri/resources/memoire-runtime/
 src-tauri/resources/*.tar.gz
 
