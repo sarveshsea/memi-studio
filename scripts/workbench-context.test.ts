@@ -21,7 +21,7 @@ import {
   primaryHarnesses,
   sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
-import { buildCritiqueScreenPrompt, WORKBENCH_COPY } from "../src/workbench-copy.js";
+import { buildCritiqueScreenPrompt, buildCritiqueScreenUnavailablePrompt, WORKBENCH_COPY } from "../src/workbench-copy.js";
 import type { Harness, HarnessId, SessionSummary } from "../src/studio-api.js";
 
 type TestEvent = {
@@ -228,6 +228,12 @@ assert(
   buildCritiqueScreenPrompt("Critique.", "/tmp/screen.png").includes("Screenshot artifact: /tmp/screen.png")
     && buildCritiqueScreenPrompt("Critique.", "/tmp/screen.png").includes("ux-tenets-traps"),
   "includes screenshot evidence and the UX Tenets Note in Critique screen prompts",
+);
+
+assert(
+  buildCritiqueScreenUnavailablePrompt("Critique.", "could not create image from display").includes("Screenshot capture unavailable: could not create image from display")
+    && buildCritiqueScreenUnavailablePrompt("Critique.", "could not create image from display").includes("clearly mark screenshot evidence as unavailable"),
+  "keeps Critique screen runnable when macOS capture is unavailable",
 );
 
 assert(

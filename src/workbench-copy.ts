@@ -113,6 +113,17 @@ export function buildCritiqueScreenPrompt(template: string, artifactPath: string
   ].join("\n");
 }
 
+export function buildCritiqueScreenUnavailablePrompt(template: string, message: string): string {
+  const failure = message.trim() || "Screen capture was unavailable.";
+  return [
+    template,
+    "",
+    "Use the UX_TENETS_TRAPS skill and the ux-tenets-traps Note.",
+    `Screenshot capture unavailable: ${failure}`,
+    "Proceed with the available Studio context, clearly mark screenshot evidence as unavailable, and return UX score, likely tenet coverage, likely trap hits, and the next prioritized tweaks.",
+  ].join("\n");
+}
+
 export const WORKBENCH_ACTIONS = {
   attach: { id: "attachment.add", label: "Attach", ariaLabel: "Attach context", title: "Attach context", icon: "attach", iconOnly: true },
   planToggle: { id: "codex.plan-mode.toggle", label: "Plan", ariaLabel: "Toggle plan mode", title: "Plan mode", icon: "plan", iconOnly: true },

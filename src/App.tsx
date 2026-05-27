@@ -194,6 +194,7 @@ import {
   CRITIQUE_SCREEN_STARTER_LABEL,
   WORKBENCH_COPY,
   buildCritiqueScreenPrompt,
+  buildCritiqueScreenUnavailablePrompt,
   workbenchAction,
   type WorkbenchIconName,
 } from "./workbench-copy";
@@ -1829,8 +1830,15 @@ export function App() {
       const result = await callComputerAction({ action: "captureScreen", approved: true });
       setComputerStatus(await getComputerStatus().catch(() => computerStatus));
       if (result.status !== "completed" || !result.artifactPath) {
-        setError(result.message || "Screen capture did not produce an artifact.");
-        setPrompt(starter.template);
+        const fallbackPrompt = buildCritiqueScreenUnavailablePrompt(starter.template, result.message);
+        setError(result.message || "Screen capture unavailable. Running critique without screenshot evidence.");
+        await runWithPrompt(fallbackPrompt, {
+          actionOverride: starter.action,
+          chatModeOverride: starter.chatMode,
+          permissionModeOverride: starter.permissionMode,
+          attachmentsOverride: [],
+          restorePromptOnFailure: true,
+        });
         return;
       }
       const screenshotAttachment = attachmentFromScreenshot(result.artifactPath);
