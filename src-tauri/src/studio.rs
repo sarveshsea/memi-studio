@@ -363,7 +363,9 @@ pub fn record_recent_workspace(config: &mut DesktopAppConfig, workspace_root: &P
 }
 
 fn normalize_recent_workspaces(config: &mut DesktopAppConfig) {
-    config.recent_workspaces.retain(|workspace| !workspace.path.trim().is_empty());
+    config
+        .recent_workspaces
+        .retain(|workspace| !workspace.path.trim().is_empty());
     config.recent_workspaces.truncate(20);
 }
 
@@ -447,8 +449,10 @@ pub fn build_command_for_action_with_context(
     let args = template
         .iter()
         .map(|part| {
-            let envelope = design_agent_envelope(harness, action, chat_mode, permission_mode, prompt);
-            let system_prompt = design_agent_system_prompt(harness, action, chat_mode, permission_mode);
+            let envelope =
+                design_agent_envelope(harness, action, chat_mode, permission_mode, prompt);
+            let system_prompt =
+                design_agent_system_prompt(harness, action, chat_mode, permission_mode);
             part.replace("{{prompt}}", prompt)
                 .replace("{{promptEnvelope}}", &envelope)
                 .replace("{{agentSystemPrompt}}", &system_prompt)
@@ -514,7 +518,13 @@ fn apply_codex_runtime_args(args: Vec<String>, action: &str, permission_mode: &s
     let mut next = Vec::new();
     let use_search = matches!(
         action,
-        "compose" | "audit" | "app-build" | "self-design" | "research" | "browser-audit" | "handoff"
+        "compose"
+            | "audit"
+            | "app-build"
+            | "self-design"
+            | "research"
+            | "browser-audit"
+            | "handoff"
     );
     if let Some(exec_index) = stripped.iter().position(|arg| arg == "exec") {
         next.extend_from_slice(&stripped[..exec_index]);
@@ -626,11 +636,7 @@ fn design_agent_envelope(
     } else {
         ""
     };
-    let codex = if harness == "codex" {
-        "\n\n## Codex + Mémoire command ladder\n- First confirm Codex readiness with `codex login status` when auth or run ability is unclear.\n- Start workspace inspection with `memi status --json`, then `memi suite doctor --json` when a suite manifest exists.\n- For research-scale work, prefer `memi research report --json` or `memi research synthesize --json` when research inputs exist.\n- For UI quality and shadcn/Tailwind cleanup, use `memi diagnose . --json`, token pulls, and design docs before editing.\n- Emit final sections with these exact labels when possible: research_note, design_decision, tool_call, artifact, acceptance_statement, session_result."
-    } else {
-        ""
-    };
+    let codex = codex_command_guidance(harness, action, chat_mode, permission_mode);
     let codex_settings = if harness == "codex" {
         "\n- Codex model: gpt-5.5\n- Codex reasoning: xhigh\n- Codex approval policy: never"
     } else {
@@ -639,6 +645,21 @@ fn design_agent_envelope(
     format!(
         "# Mémoire Studio Agent Task\n\n## Design/research lens\n- Start from UX research, information architecture, accessibility, and design-system coherence.\n- Keep component thinking in Atomic design levels: atom -> molecule -> organism -> template -> page.\n- Use project memory, specs, references, and Figma state when available.\n- Report discoveries as research_note, design_decision, tool_call, artifact, and session_result when possible.\n\n## Harness behavior\n- Harness: {harness}\n- Action: {action}\n- Chat mode: {chat_mode}\n- Permission mode: {permission_mode}{codex_settings}\n- Reference package: @memi-design/cli@1.0.1 (https://www.npmjs.com/package/@memi-design/cli)\n- In ideate and research modes, produce plans, questions, references, research evidence, and design artifacts before implementation.{plan}\n- In build and terminal modes, keep terminal commands, output, previews, and handoff artifacts traceable.\n- In full_access mode, act without extra confirmation inside configured workspaces; reserve destructive host actions for explicit user requests.\n- Produce a concise final session_result with artifacts, assumptions, and next design/research step.{codex}\n\n## User request\n{prompt}"
     )
+}
+
+fn codex_command_guidance(
+    harness: &str,
+    action: &str,
+    chat_mode: &str,
+    permission_mode: &str,
+) -> &'static str {
+    if harness != "codex" {
+        return "";
+    }
+    if action == "audit" && chat_mode == "review" && permission_mode == "plan" {
+        return "\n\n## Codex + Mémoire command guidance\n- For screen critique and read-only review, start from the prompt, attachments, live Studio trace, and visible UI state.\n- Do not start by running `memi status --json`; run workspace commands only when they are necessary and clearly read-only in the current sandbox.\n- If screenshot evidence is unavailable, say so directly and still return UX score, tenet coverage, trap hits, prioritized tweaks, and session_result.";
+    }
+    "\n\n## Codex + Mémoire command ladder\n- First confirm Codex readiness with `codex login status` when auth or run ability is unclear.\n- Start workspace inspection with `memi status --json`, then `memi suite doctor --json` when a suite manifest exists.\n- For research-scale work, prefer `memi research report --json` or `memi research synthesize --json` when research inputs exist.\n- For UI quality and shadcn/Tailwind cleanup, use `memi diagnose . --json`, token pulls, and design docs before editing.\n- Emit final sections with these exact labels when possible: research_note, design_decision, tool_call, artifact, acceptance_statement, session_result."
 }
 
 pub fn redact_secrets(input: &str) -> String {
@@ -847,6 +868,23 @@ mod tests {
             .last()
             .expect("prompt")
             .contains("design_decision"));
+    }
+
+    #[test]
+    fn codex_review_audits_start_from_screen_context_not_status_command() {
+        let command = build_command_for_action_with_context(
+            "codex",
+            "Critique the current screen.",
+            Some("audit"),
+            Some("review"),
+            Some("plan"),
+        )
+        .expect("codex review command");
+        let prompt = command.args.last().expect("prompt");
+
+        assert!(prompt.contains("start from the prompt, attachments, live Studio trace"));
+        assert!(prompt.contains("Do not start by running `memi status --json`"));
+        assert!(!prompt.contains("Start workspace inspection with `memi status --json`"));
     }
 
     #[test]
