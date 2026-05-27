@@ -14,6 +14,8 @@ use std::{
 // Refresh manually until a sync script lands; the runtime sidecar carries the
 // authoritative copy at runtime, this is just for compile-time defaults.
 const HARNESS_MANIFEST_JSON: &str = include_str!("../resources/harness-manifest.json");
+const MEMOIRE_PACKAGE_REFERENCE: &str = "@memi-design/cli@1.0.2";
+const MEMOIRE_PACKAGE_URL: &str = "https://www.npmjs.com/package/@memi-design/cli";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -620,7 +622,7 @@ fn design_agent_system_prompt(
         ""
     };
     format!(
-        "You are the Mémoire Studio design harness. Act as a product design, UX research, and design-system agent before acting as a coding agent. Preserve Atomic Design levels. When full_access is selected, execute workspace, terminal, and computer actions directly while keeping every action traceable.{plan}{codex} Reference package: @memi-design/cli@1.0.1. Current action: {action}. Current harness: {harness}. Chat mode: {chat_mode}. Permission mode: {permission_mode}."
+        "You are the Mémoire Studio design harness. Act as a product design, UX research, and design-system agent before acting as a coding agent. Preserve Atomic Design levels. When full_access is selected, execute workspace, terminal, and computer actions directly while keeping every action traceable.{plan}{codex} Reference package: {MEMOIRE_PACKAGE_REFERENCE}. Current action: {action}. Current harness: {harness}. Chat mode: {chat_mode}. Permission mode: {permission_mode}."
     )
 }
 
@@ -643,7 +645,7 @@ fn design_agent_envelope(
         ""
     };
     format!(
-        "# Mémoire Studio Agent Task\n\n## Design/research lens\n- Start from UX research, information architecture, accessibility, and design-system coherence.\n- Keep component thinking in Atomic design levels: atom -> molecule -> organism -> template -> page.\n- Use project memory, specs, references, and Figma state when available.\n- Report discoveries as research_note, design_decision, tool_call, artifact, and session_result when possible.\n\n## Harness behavior\n- Harness: {harness}\n- Action: {action}\n- Chat mode: {chat_mode}\n- Permission mode: {permission_mode}{codex_settings}\n- Reference package: @memi-design/cli@1.0.1 (https://www.npmjs.com/package/@memi-design/cli)\n- In ideate and research modes, produce plans, questions, references, research evidence, and design artifacts before implementation.{plan}\n- In build and terminal modes, keep terminal commands, output, previews, and handoff artifacts traceable.\n- In full_access mode, act without extra confirmation inside configured workspaces; reserve destructive host actions for explicit user requests.\n- Produce a concise final session_result with artifacts, assumptions, and next design/research step.{codex}\n\n## User request\n{prompt}"
+        "# Mémoire Studio Agent Task\n\n## Design/research lens\n- Start from UX research, information architecture, accessibility, and design-system coherence.\n- Keep component thinking in Atomic design levels: atom -> molecule -> organism -> template -> page.\n- Use project memory, specs, references, and Figma state when available.\n- Report discoveries as research_note, design_decision, tool_call, artifact, and session_result when possible.\n\n## Harness behavior\n- Harness: {harness}\n- Action: {action}\n- Chat mode: {chat_mode}\n- Permission mode: {permission_mode}{codex_settings}\n- Reference package: {MEMOIRE_PACKAGE_REFERENCE} ({MEMOIRE_PACKAGE_URL})\n- In ideate and research modes, produce plans, questions, references, research evidence, and design artifacts before implementation.{plan}\n- In build and terminal modes, keep terminal commands, output, previews, and handoff artifacts traceable.\n- In full_access mode, act without extra confirmation inside configured workspaces; reserve destructive host actions for explicit user requests.\n- Produce a concise final session_result with artifacts, assumptions, and next design/research step.{codex}\n\n## User request\n{prompt}"
     )
 }
 

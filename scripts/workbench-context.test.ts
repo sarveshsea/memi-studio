@@ -279,10 +279,17 @@ assert(
 
 const realSession = session({ id: "real-run", prompt: "Audit the settings pane for hierarchy." });
 const smokeSession = session({ id: "check-run", prompt: "Live Studio agent smoke. Reply MEMI_CODEX_LIVE_OK_123." });
+const failedSession = session({ id: "failed-run", prompt: "Critique the current screen.", status: "failed" });
 assert(
   defaultWorkbenchSession([smokeSession, realSession])?.id === "real-run"
     && defaultWorkbenchSession([smokeSession]) === null,
   "keeps verification runs from becoming the default workbench session",
+);
+
+assert(
+  defaultWorkbenchSession([failedSession, realSession])?.id === "real-run"
+    && defaultWorkbenchSession([failedSession]) === null,
+  "keeps abandoned failed sessions in history without reopening them as the default workbench",
 );
 
 assert(

@@ -114,7 +114,11 @@ export function sidebarNavigationSessions(sessions: SessionSummary[], currentSes
 }
 
 export function defaultWorkbenchSession(sessions: SessionSummary[]): SessionSummary | null {
-  return sessions.find((session) => !isVerificationSession(session)) ?? null;
+  return sessions.find((session) => !isVerificationSession(session) && isDefaultOpenableSession(session)) ?? null;
+}
+
+function isDefaultOpenableSession(session: Pick<SessionSummary, "status">): boolean {
+  return !["failed", "cancelled", "interrupted"].includes(session.status);
 }
 
 export function compactRunLabel(value: string, harness?: HarnessId, maxLength = 32): string {
