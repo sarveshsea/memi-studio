@@ -2,7 +2,7 @@
 // Copyright 2026 Humyn LLC
 
 import type { Harness, HarnessId, SessionSummary } from "./studio-api";
-import type { WORKBENCH_COPY } from "./workbench-copy";
+import type { WORKBENCH_COPY, WorkbenchIconName, WorkbenchStarterPrompt } from "./workbench-copy";
 
 export const PRIMARY_HARNESS_IDS = ["codex", "claude-code"] as const satisfies HarnessId[];
 export const COMPOSER_HARNESS_IDS = ["codex", "claude-code", "ollama", "opencode"] as const satisfies HarnessId[];
@@ -10,6 +10,15 @@ export const DEFAULT_PRIMARY_HARNESS_ID: HarnessId = "codex";
 
 export type HarnessVisibility = "primary" | "advanced";
 export type ComposerHarnessTier = "primary" | "local" | "advanced";
+export interface ComposerChipAction {
+  id: string;
+  label: string;
+  shortLabel?: string;
+  ariaLabel: string;
+  title: string;
+  icon: WorkbenchIconName;
+  iconOnly: boolean;
+}
 
 export const DEFAULT_RIGHT_PANE_TAB_IDS = ["run", "changes", "memory"] as const;
 export type WorkbenchRightPaneTab = (typeof WORKBENCH_COPY.rightPaneTabs)[number]["id"];
@@ -54,6 +63,18 @@ export function composerHarnessShortLabel(id: string, label = id): string {
     .join("")
     .slice(0, 2)
     .toUpperCase() || id.slice(0, 2).toUpperCase();
+}
+
+export function composerStarterAction(starter: WorkbenchStarterPrompt, index: number): ComposerChipAction {
+  return {
+    id: `starter.prompt.${index}`,
+    label: starter.label,
+    shortLabel: starter.shortLabel,
+    ariaLabel: starter.label,
+    title: starter.template,
+    icon: starter.icon,
+    iconOnly: true,
+  };
 }
 
 export function currentWorkspaceProject(

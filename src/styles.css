@@ -1602,7 +1602,7 @@ button.active,
 .message-composer textarea { width: 100%; min-height: var(--command-textarea-height); max-height: 112px; border: 0; border-radius: 0; background: transparent; line-height: 1.5; padding: var(--space-2) var(--space-3); }
 .message-composer[data-composer-layout="single-toolbar"] textarea { min-height: 44px; max-height: 96px; padding: var(--space-2) var(--space-3); resize: none; }
 .mode-preset-strip { width: max-content; max-width: calc(100% - var(--space-6)); display: inline-flex; align-items: center; gap: 2px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-compact); background: var(--surface-muted); margin: var(--space-0) var(--space-3) var(--space-1); padding: 2px; }
-.mode-preset-strip button { min-height: 22px; border: 0; border-radius: calc(var(--radius-compact) - 1px); background: transparent; color: var(--ink-muted); padding: var(--space-0) var(--space-1-5); font-size: var(--font-size-xs); }.mode-preset-strip button.active { border-color: transparent; color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.mode-preset-strip button { width: var(--control-height-compact); min-width: var(--control-height-compact); min-height: var(--control-height-compact); border: 0; border-radius: calc(var(--radius-compact) - 1px); background: transparent; color: var(--ink-muted); padding: var(--space-0); font-size: var(--font-size-xs); }.mode-preset-strip button.active { border-color: transparent; color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
 .composer-controls,
 .workspace-status-row {
   display: flex;
@@ -1770,14 +1770,17 @@ button.active,
   padding: var(--space-0) var(--space-3) var(--space-1);
 }
 .composer-starter-chip {
-  min-height: 22px;
+  width: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  min-height: var(--control-height-compact);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-default);
   background: var(--surface-soft);
   color: var(--ink-muted);
-  padding: var(--space-0) var(--space-1-5);
+  padding: var(--space-0);
   font-size: var(--font-size-xs);
   cursor: pointer;
 }

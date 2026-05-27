@@ -190,13 +190,20 @@ import { hydrateMermaidBoardAgentSurface } from "./mermaid-board-contract";
 import type { IASurfaceProps } from "./ia-surface";
 import type { MermaidBoardSurfaceProps } from "./mermaid-board-surface";
 import { SLASH_COMMANDS, applySlashCommand, filterSlashCommands, slashCommandPreview, type SlashCommand } from "./slash-commands";
-import { WORKBENCH_COPY, workbenchAction, type WorkbenchIconName } from "./workbench-copy";
+import {
+  CRITIQUE_SCREEN_STARTER_LABEL,
+  WORKBENCH_COPY,
+  buildCritiqueScreenPrompt,
+  workbenchAction,
+  type WorkbenchIconName,
+} from "./workbench-copy";
 import {
   DEFAULT_PRIMARY_HARNESS_ID,
   DEFAULT_RIGHT_PANE_TAB_IDS,
   composerHarnessShortLabel,
   composerSwitcherHarnesses,
   composerHarnessTier,
+  composerStarterAction,
   compactRunLabel,
   compactRunSummary,
   defaultWorkbenchSession,
@@ -1797,10 +1804,48 @@ export function App() {
   }
 
   function applyStarterPrompt(starter: (typeof STARTER_PROMPTS)[number]) {
+    if (starter.label === CRITIQUE_SCREEN_STARTER_LABEL) {
+      void runCritiqueScreenFlow(starter);
+      return;
+    }
     setPrompt(starter.template);
     setSelectedAction(starter.action);
     setChatMode(starter.chatMode);
     setPermissionMode(starter.permissionMode);
+  }
+
+  async function runCritiqueScreenFlow(starter: (typeof STARTER_PROMPTS)[number]) {
+    setSelectedAction(starter.action);
+    setChatMode(starter.chatMode);
+    setPermissionMode(starter.permissionMode);
+    if (runtimeHealth !== "ready" || !status || !harnessCanRun(currentHarness, starter.action)) {
+      setRunBlockedMessage(runDisabledMessage);
+      setPrompt(starter.template);
+      return;
+    }
+    try {
+      setError(null);
+      setRunBlockedMessage(null);
+      const result = await callComputerAction({ action: "captureScreen", approved: true });
+      setComputerStatus(await getComputerStatus().catch(() => computerStatus));
+      if (result.status !== "completed" || !result.artifactPath) {
+        setError(result.message || "Screen capture did not produce an artifact.");
+        setPrompt(starter.template);
+        return;
+      }
+      const screenshotAttachment = attachmentFromScreenshot(result.artifactPath);
+      await runWithPrompt(buildCritiqueScreenPrompt(starter.template, result.artifactPath), {
+        actionOverride: starter.action,
+        chatModeOverride: starter.chatMode,
+        permissionModeOverride: starter.permissionMode,
+        attachmentsOverride: [screenshotAttachment],
+        restorePromptOnFailure: true,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setPrompt(starter.template);
+    }
   }
 
   function applyModePreset(preset: (typeof MODE_PRESETS)[number]) {
@@ -2072,8 +2117,13 @@ export function App() {
   }
 
   async function handleComputerCaptureRequest() {
+    const starter = STARTER_PROMPTS.find((candidate) => candidate.label === CRITIQUE_SCREEN_STARTER_LABEL);
+    if (starter) {
+      await runCritiqueScreenFlow(starter);
+      return;
+    }
     try {
-      const result = await callComputerAction({ action: "captureScreen" });
+      const result = await callComputerAction({ action: "captureScreen", approved: true });
       setError(result.status === "approval_required" ? result.message : null);
       setComputerStatus(await getComputerStatus().catch(() => computerStatus));
     } catch (err) {
@@ -2125,6 +2175,20 @@ export function App() {
       text,
     });
     setAttachments((current) => [...current, captured]);
+  }
+
+  function attachmentFromScreenshot(path: string): StudioAttachment {
+    const name = path.split(/[\\/]/).filter(Boolean).at(-1) ?? "screen-capture.png";
+    return {
+      id: `screen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: "image",
+      name,
+      mimeType: "image/png",
+      size: 0,
+      source: "material",
+      path,
+      createdAt: new Date().toISOString(),
+    };
   }
 
   function handlePromptPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
@@ -2212,8 +2276,19 @@ export function App() {
     await runWithPrompt(submittedPrompt, { restorePromptOnFailure: true });
   }
 
-  async function runWithPrompt(text: string, options: { conversationIdOverride?: string | null; restorePromptOnFailure?: boolean } = {}) {
-    if (!status || !text.trim() || !harnessCanRun(currentHarness, effectiveAction)) {
+  async function runWithPrompt(text: string, options: {
+    conversationIdOverride?: string | null;
+    restorePromptOnFailure?: boolean;
+    actionOverride?: StudioAction;
+    chatModeOverride?: StudioChatMode;
+    permissionModeOverride?: StudioPermissionMode;
+    attachmentsOverride?: StudioAttachment[];
+  } = {}) {
+    const actionForRun = options.actionOverride ?? effectiveAction;
+    const chatModeForRun = options.chatModeOverride ?? chatMode;
+    const permissionModeForRun = options.permissionModeOverride ?? permissionMode;
+    const attachmentsForRun = options.attachmentsOverride ?? attachments;
+    if (!status || !text.trim() || !harnessCanRun(currentHarness, actionForRun)) {
       setRunBlockedMessage(runDisabledMessage);
       return;
     }
@@ -2232,12 +2307,12 @@ export function App() {
     try {
       const nextSession = await startSession({
         harness: selectedHarness,
-        action: effectiveAction,
+        action: actionForRun,
         cwd: status.projectRoot,
         prompt: text,
-        chatMode,
-        permissionMode,
-        attachments,
+        chatMode: chatModeForRun,
+        permissionMode: permissionModeForRun,
+        attachments: attachmentsForRun,
         ...(continuingConversationId ? { conversationId: continuingConversationId } : {}),
         ...(conversationGoal.trim() ? { goal: conversationGoal.trim() } : {}),
         ...(activeModelId ? { model: activeModelId } : {}),
@@ -3520,7 +3595,7 @@ export function App() {
               <div className="composer-starter-chips" data-agent-run-launcher="composer-inline" data-starter-prompts="composer-inline" aria-label="Agent run launcher">
                 {DEFAULT_COMPOSER_STARTERS.map((starter, index) => (
                   <ActionChip
-                    action={{ id: `starter.prompt.${index}`, label: starter.label, shortLabel: starter.shortLabel, ariaLabel: starter.label, title: starter.template, icon: starter.icon }}
+                    action={composerStarterAction(starter, index)}
                     key={starter.label}
                     className="composer-starter-chip"
                     onClick={() => applyStarterPrompt(starter)}

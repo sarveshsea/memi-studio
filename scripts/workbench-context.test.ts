@@ -13,6 +13,7 @@ import {
   composerHarnessShortLabel,
   composerSwitcherHarnesses,
   composerHarnessTier,
+  composerStarterAction,
   currentWorkspaceProject,
   defaultWorkbenchSession,
   isQueueDockSession,
@@ -20,6 +21,7 @@ import {
   primaryHarnesses,
   sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
+import { buildCritiqueScreenPrompt, WORKBENCH_COPY } from "../src/workbench-copy.js";
 import type { Harness, HarnessId, SessionSummary } from "../src/studio-api.js";
 
 type TestEvent = {
@@ -197,6 +199,48 @@ assert(
     && composerHarnessShortLabel("ollama") === "OL"
     && composerHarnessShortLabel("opencode") === "OC",
   "keeps provider affordances compact for icon-first switching",
+);
+
+assert(
+  composerStarterAction({
+    label: "Critique screen",
+    shortLabel: "Critique",
+    template: "Critique the current screen with UX Tenets and Traps.",
+    action: "audit",
+    chatMode: "review",
+    permissionMode: "plan",
+    icon: "review",
+  }, 0).iconOnly === true,
+  "keeps idle starter prompts icon-first in the composer",
+);
+
+const critiqueStarter = WORKBENCH_COPY.starterPrompts.find((starter) => starter.label === "Critique screen");
+assert(
+  Boolean(critiqueStarter)
+    && critiqueStarter?.action === "audit"
+    && critiqueStarter.chatMode === "review"
+    && critiqueStarter.permissionMode === "plan"
+    && critiqueStarter.template.includes("UX Tenets and Traps"),
+  "keeps Critique screen wired to the Review/Audit UX Tenets flow",
+);
+
+assert(
+  buildCritiqueScreenPrompt("Critique.", "/tmp/screen.png").includes("Screenshot artifact: /tmp/screen.png")
+    && buildCritiqueScreenPrompt("Critique.", "/tmp/screen.png").includes("ux-tenets-traps"),
+  "includes screenshot evidence and the UX Tenets Note in Critique screen prompts",
+);
+
+assert(
+  composerStarterAction({
+    label: "Map journey",
+    shortLabel: "Journey",
+    template: "Map the target user journey.",
+    action: "research",
+    chatMode: "research",
+    permissionMode: "plan",
+    icon: "research",
+  }, 1).title === "Map the target user journey.",
+  "keeps starter prompt detail available as tooltip copy",
 );
 
 assert(

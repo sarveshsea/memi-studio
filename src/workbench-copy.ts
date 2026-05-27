@@ -100,6 +100,19 @@ export interface WorkbenchModePreset {
   iconOnly?: boolean;
 }
 
+export const CRITIQUE_SCREEN_STARTER_LABEL = "Critique screen";
+
+export function buildCritiqueScreenPrompt(template: string, artifactPath: string): string {
+  return [
+    template,
+    "",
+    "Use the UX_TENETS_TRAPS skill and the ux-tenets-traps Note. Treat the attached screenshot as the primary evidence.",
+    `Screenshot artifact: ${artifactPath}`,
+    "Call ux.audit_screenshot when the runtime tool is available.",
+    "Return UX score, tenet coverage, trap hits, screenshot evidence, and the next prioritized tweaks.",
+  ].join("\n");
+}
+
 export const WORKBENCH_ACTIONS = {
   attach: { id: "attachment.add", label: "Attach", ariaLabel: "Attach context", title: "Attach context", icon: "attach", iconOnly: true },
   planToggle: { id: "codex.plan-mode.toggle", label: "Plan", ariaLabel: "Toggle plan mode", title: "Plan mode", icon: "plan", iconOnly: true },
@@ -138,9 +151,9 @@ export const WORKBENCH_ACTIONS = {
 export const WORKBENCH_COPY = {
   starterPrompts: [
     {
-      label: "Critique screen",
+      label: CRITIQUE_SCREEN_STARTER_LABEL,
       shortLabel: "Critique",
-      template: "Critique the current screen for hierarchy, spacing, accessibility, copy, empty/loading/error states, and design-system drift. Return prioritized fixes and verification steps.",
+      template: "Critique the current screen with UX Tenets and Traps: hierarchy, spacing, accessibility, copy, empty/loading/error states, feedback, control, workflow fit, trust, state continuity, and design-system drift.",
       action: "audit",
       chatMode: "review",
       permissionMode: "plan",
