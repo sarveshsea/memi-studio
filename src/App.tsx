@@ -3648,12 +3648,12 @@ export function App() {
                 {slashCommandPreviewText}
               </div>
             ) : null}
-            <div className="composer-controls" data-composer-controls="icon-only">
-              <label className="icon-button attachment-button" data-action-id="attachment.add" title="Attach context">
+            <div className="composer-controls" data-composer-controls="icon-only" data-composer-tooltip="visible-on-hover">
+              <label className="icon-button attachment-button" data-action-id="attachment.add" data-icon-tooltip="Attach" title="Attach context">
                 <StudioControlIcon name="attach" />
                 <input ref={fileInputRef} type="file" multiple onChange={handleAttachmentPick} />
               </label>
-              <label className="composer-select" data-composer-control="mode" title={`Mode: ${activeChatModeLabel}`}>
+              <label className="composer-select" data-composer-control="mode" data-icon-tooltip="Mode" title={`Mode: ${activeChatModeLabel}`}>
                 <StudioControlIcon name="mode" />
                 <span className="composer-control-text">{activeChatModeLabel}</span>
                 <select aria-label={`Mode: ${activeChatModeLabel}`} data-action-id="chat-mode.select" value={chatMode} onChange={(event) => setChatMode(event.target.value as StudioChatMode)}>
@@ -3662,7 +3662,7 @@ export function App() {
                   ))}
                 </select>
               </label>
-              <label className="composer-select" data-composer-control="access" title={`Access: ${activePermissionModeLabel} — ${permissionModePowerDetail(permissionMode)}`}>
+              <label className="composer-select" data-composer-control="access" data-icon-tooltip="Access" title={`Access: ${activePermissionModeLabel} — ${permissionModePowerDetail(permissionMode)}`}>
                 <StudioControlIcon name="access" />
                 <span className="composer-control-text">{activePermissionModeLabel}</span>
                 <select aria-label={`Access: ${activePermissionModeLabel}`} data-action-id="permission-mode.select" value={permissionMode} onChange={(event) => setPermissionMode(event.target.value as StudioPermissionMode)}>
@@ -3687,6 +3687,7 @@ export function App() {
                       data-harness-short={composerHarnessShortLabel(harness.id, harness.label)}
                       data-harness-state={harness.enabled ? selected ? "active" : "available" : "setup"}
                       data-harness-tier={composerHarnessTier(harness.id)}
+                      data-icon-tooltip={composerHarnessTooltip(harness)}
                       role="radio"
                       title={title}
                       type="button"
@@ -3701,6 +3702,7 @@ export function App() {
               <button
                 className={`icon-button goal-toggle${conversationGoal.trim() ? " active" : ""}`}
                 data-action-id="conversation.goal.toggle"
+                data-icon-tooltip="Goal"
                 type="button"
                 title={conversationGoal.trim() ? `Goal: ${conversationGoal.trim()}` : "Set conversation goal"}
                 aria-label="Set conversation goal"
@@ -3709,7 +3711,7 @@ export function App() {
                 <StudioControlIcon name="pin" />
               </button>
               {showModelPicker ? (
-                <label className="composer-select" data-composer-control="model" title={`Model: ${activeModelLabel}`}>
+                <label className="composer-select" data-composer-control="model" data-icon-tooltip="Model" title={`Model: ${activeModelLabel}`}>
                   <StudioControlIcon name="harness" />
                   <span className="composer-control-text">{activeModelLabel}</span>
                   <select
@@ -3725,7 +3727,7 @@ export function App() {
                 </label>
               ) : null}
               {showEffortPicker ? (
-                <label className="composer-select" data-composer-control="effort" title={`Reasoning effort: ${activeEffortLabel}`}>
+                <label className="composer-select" data-composer-control="effort" data-icon-tooltip="Reasoning" title={`Reasoning effort: ${activeEffortLabel}`}>
                   <StudioControlIcon name="plan" />
                   <span className="composer-control-text">{activeEffortLabel}</span>
                   <select
@@ -3741,7 +3743,7 @@ export function App() {
                   </select>
                 </label>
               ) : null}
-              <label className="composer-select" data-composer-control="action" title={`Action: ${effectiveActionLabel}`}>
+              <label className="composer-select" data-composer-control="action" data-icon-tooltip="Action" title={`Action: ${effectiveActionLabel}`}>
                 <StudioControlIcon name="action" />
                 <span className="composer-control-text">{effectiveActionLabel}</span>
                 <select
@@ -3759,6 +3761,7 @@ export function App() {
               <button
                 className={`usage-limit-chip ${usageWarning?.status ?? "ok"}`}
                 data-action-id="usage.limits.open"
+                data-icon-tooltip="Usage"
                 type="button"
                 title={usageWarning?.message ?? "Usage and rate-limit status"}
                 onClick={() => void openUsageLimits()}
@@ -5737,6 +5740,11 @@ function composerHarnessTitle(harness: Harness): string {
   if (!harness.enabled) return `${harness.label}: setup required`;
   const state = harnessReadinessLabel(harness);
   return state ? `${harness.label}: ${state}` : harness.label;
+}
+
+function composerHarnessTooltip(harness: Harness): string {
+  if (!harness.enabled) return `Set up ${harness.label}`;
+  return harness.label;
 }
 
 function ConversationGoalRow(props: {

@@ -1479,14 +1479,16 @@ export function IconButton(props: {
   type?: "button" | "submit" | "reset";
   onClick?: () => void;
 }) {
+  const tooltip = props.title ?? props.ariaLabel;
   return (
     <button
       aria-label={props.ariaLabel}
       aria-pressed={props.pressed}
       className={["icon-button", props.className].filter(Boolean).join(" ")}
       data-action-id={props.actionId}
+      data-icon-tooltip={tooltip}
       disabled={props.disabled}
-      title={props.title ?? props.ariaLabel}
+      title={tooltip}
       type={props.type ?? "button"}
       onClick={props.onClick}
       {...props.data}
@@ -1509,6 +1511,7 @@ export function ActionChip(props: {
   const action = props.action;
   const label = action.shortLabel ?? action.label;
   const ariaLabel = action.ariaLabel ?? action.label;
+  const tooltip = action.title ?? action.label;
   const content = action.iconOnly ? null : <span>{label}</span>;
   return (
     <button
@@ -1516,8 +1519,9 @@ export function ActionChip(props: {
       aria-pressed={props.pressed ?? props.active}
       className={["action-chip", props.active ? "active" : "", props.className].filter(Boolean).join(" ")}
       data-action-id={action.id}
+      data-icon-tooltip={action.iconOnly ? label : undefined}
       disabled={props.disabled}
-      title={action.title ?? action.label}
+      title={tooltip}
       type="button"
       onClick={props.onClick}
       {...props.data}

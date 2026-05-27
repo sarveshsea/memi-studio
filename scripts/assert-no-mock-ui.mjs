@@ -118,8 +118,18 @@ const appSource = readFileSync(join(ROOT, "src/App.tsx"), "utf8");
 if (!appSource.includes('data-mode-rail-density="icon-only"')) {
   failures.push("src/App.tsx: run mode rail must be icon-only; keep detailed mode text in tooltips and composer controls");
 }
+if (!appSource.includes('data-composer-tooltip="visible-on-hover"')) {
+  failures.push("src/App.tsx: composer icon controls must expose visible hover/focus tooltips");
+}
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
+const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
+if (!componentsSource.includes("data-icon-tooltip")) {
+  failures.push("src/workbench-components.tsx: shared icon controls must emit data-icon-tooltip for visible labels");
+}
+if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
+  failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");
+}
 studioCssSource.split("\n").forEach((line, index) => {
   if (!/font-family\s*:/.test(line)) return;
   if (/var\(--font-(studio|mono)\)/.test(line)) return;

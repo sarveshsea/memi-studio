@@ -1627,12 +1627,49 @@ button.active,
   min-height: var(--command-textarea-height);
   resize: vertical;
 }
-.message-composer { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); }
+.message-composer { overflow: visible; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); }
 .message-composer[data-composer-selected="chat-active"]:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent); }
 .message-composer textarea { width: 100%; min-height: var(--command-textarea-height); max-height: 112px; border: 0; border-radius: 0; background: transparent; line-height: 1.5; padding: var(--space-2) var(--space-3); }
 .message-composer[data-composer-layout="single-toolbar"] textarea { min-height: 44px; max-height: 96px; padding: var(--space-2) var(--space-3); resize: none; }
-.mode-preset-strip { width: max-content; max-width: calc(100% - var(--space-6)); display: inline-flex; align-items: center; gap: 2px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-compact); background: var(--surface-muted); margin: var(--space-0) var(--space-3) var(--space-1); padding: 2px; }
+.mode-preset-strip { width: max-content; max-width: calc(100% - var(--space-6)); display: inline-flex; align-items: center; gap: 2px; overflow: visible; border: 1px solid var(--line); border-radius: var(--radius-compact); background: var(--surface-muted); margin: var(--space-0) var(--space-3) var(--space-1); padding: 2px; }
 .mode-preset-strip button { width: var(--control-height-compact); min-width: var(--control-height-compact); min-height: var(--control-height-compact); border: 0; border-radius: calc(var(--radius-compact) - 1px); background: transparent; color: var(--ink-muted); padding: var(--space-0); font-size: var(--font-size-xs); }.mode-preset-strip button.active { border-color: transparent; color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.mode-preset-strip button,
+[data-icon-tooltip] {
+  position: relative;
+}
+[data-icon-tooltip]::after {
+  content: attr(data-icon-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--space-2));
+  z-index: 40;
+  max-width: 220px;
+  min-width: max-content;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-default);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+  font-family: var(--font-studio);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  opacity: 0;
+  padding: var(--space-1) var(--space-1-5);
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translate(-50%, var(--space-1));
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+[data-icon-tooltip]:hover::after,
+[data-icon-tooltip]:focus-visible::after,
+.composer-select:focus-within::after,
+.attachment-button:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, var(--space-0));
+}
 .composer-controls,
 .workspace-status-row {
   display: flex;
@@ -1641,8 +1678,8 @@ button.active,
   border-top: 1px solid var(--line);
   padding: var(--space-1) var(--space-2);
 }
-.composer-controls { flex-wrap: nowrap; overflow: hidden; }
-.command-dock[data-composer-layout="single-toolbar"] .composer-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-1); overflow: hidden; }
+.composer-controls { flex-wrap: nowrap; overflow: visible; }
+.command-dock[data-composer-layout="single-toolbar"] .composer-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-1); overflow: visible; }
 .workspace-status-row { flex-wrap: nowrap; overflow: hidden; border-top: 0; color: var(--ink-muted); padding: var(--space-1) var(--space-2); }
 .composer-select { position: relative; min-width: var(--space-0); max-width: 112px; min-height: var(--control-height); display: grid; flex: 0 0 112px; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; align-items: center; gap: var(--space-1); border: 1px solid transparent; border-radius: var(--radius-default); background: transparent; color: var(--ink-muted); padding: var(--space-1); cursor: pointer; }
 .composer-select:hover {
