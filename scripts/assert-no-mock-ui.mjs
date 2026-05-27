@@ -111,6 +111,11 @@ for (const check of sourceHygieneChecks) {
   }
 }
 
+const appSource = readFileSync(join(ROOT, "src/App.tsx"), "utf8");
+if (!appSource.includes('data-mode-rail-density="icon-only"')) {
+  failures.push("src/App.tsx: run mode rail must be icon-only; keep detailed mode text in tooltips and composer controls");
+}
+
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 studioCssSource.split("\n").forEach((line, index) => {
   if (!/font-family\s*:/.test(line)) return;

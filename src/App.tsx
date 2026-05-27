@@ -3380,13 +3380,14 @@ export function App() {
           </div>
         </header>
 
-        <section className="console-run-info" data-codex-power-strip="sandbox" data-harness-readiness-contract="mode-rail" aria-label="Run mode">
+        <section className="console-run-info" data-codex-power-strip="sandbox" data-harness-readiness-contract="mode-rail" data-mode-rail-density="icon-only" aria-label="Run mode">
           <HarnessChip
             kind="access"
             icon="access"
             label="Access"
             value={compactPermissionModePowerLabel(permissionMode)}
             title={permissionModePowerDetail(permissionMode)}
+            iconOnly={true}
           />
           <HarnessChip
             kind="reasoning"
@@ -3394,12 +3395,14 @@ export function App() {
             label="Reasoning"
             value={codexReasoningLabel(settingsDraft?.codex?.reasoningEffort ?? "xhigh")}
             title={`Codex reasoning: ${codexReasoningDetail(settingsDraft?.codex?.reasoningEffort ?? "xhigh")}`}
+            iconOnly={true}
           />
           <HarnessChip
             kind="action"
             icon="action"
             label="Action"
             value={effectiveActionLabel}
+            iconOnly={true}
           />
         </section>
 
@@ -5882,11 +5885,12 @@ function HarnessChip(props: {
   label: string;
   value: string;
   title?: string;
+  iconOnly?: boolean;
 }) {
   return (
-    <span className="harness-chip" data-harness-chip={props.kind} aria-label={`${props.label}: ${props.value}`} title={props.title ?? `${props.label}: ${props.value}`}>
+    <span className="harness-chip" data-harness-chip={props.kind} data-icon-only={props.iconOnly ? "true" : undefined} aria-label={`${props.label}: ${props.value}`} title={props.title ?? `${props.label}: ${props.value}`}>
       <StudioControlIcon name={props.icon} />
-      <strong>{props.value}</strong>
+      {props.iconOnly ? null : <strong>{props.value}</strong>}
     </span>
   );
 }
