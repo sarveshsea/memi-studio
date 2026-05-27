@@ -295,12 +295,24 @@ code, kbd, samp {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  max-width: 168px;
+  max-width: 192px;
   border-radius: var(--radius-compact);
   padding: var(--space-0-5) var(--space-1-5);
   font-size: var(--font-size-xs);
   line-height: 1.2;
 }
+.truth-strip-label,
+.truth-strip-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.truth-strip-label { color: inherit; }
+.truth-strip-detail { color: var(--ink-muted); }
+.truth-strip-item[data-truth-status="warn"] .truth-strip-detail { color: var(--warning); }
+.truth-strip-item[data-truth-status="missing"] .truth-strip-detail { color: var(--ink-muted); }
+.truth-strip-item[data-truth-status="unknown"] .truth-strip-detail { color: var(--ink-faint); }
 .truth-strip-item[data-truth-status="ready"] { color: var(--ink); }
 .truth-strip-item[data-truth-status="warn"] { color: var(--warning); }
 .truth-strip-item[data-truth-status="missing"] { color: var(--ink-muted); }
@@ -1483,6 +1495,7 @@ button.active,
   font-weight: var(--font-weight-regular);
   margin-right: 2px;
 }
+.run-spine-receipt small span { margin-left: 2px; }
 .run-spine-receipt[data-status="running"] { border-color: var(--accent); }
 .run-spine-receipt[data-status="warn"] { border-color: var(--danger); }
 .run-spine-log {

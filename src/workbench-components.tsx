@@ -1170,7 +1170,14 @@ export function ProjectSidebar(props: {
     >
       <div className="project-sidebar-main">
         <div className="project-sidebar-top">
-          <button data-action-id="sidebar.collapse" type="button" onClick={props.onToggleCollapsed} aria-label={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+          <button
+            data-action-id="sidebar.collapse"
+            data-icon-tooltip={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            type="button"
+            onClick={props.onToggleCollapsed}
+            aria-label={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
             <SidebarIcon name={props.collapsed ? "panel-open" : "panel-close"} />
             <span>Collapse</span>
           </button>

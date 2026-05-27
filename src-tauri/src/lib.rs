@@ -13,7 +13,7 @@ use std::{
     env,
     ffi::OsString,
     fs,
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -784,6 +784,33 @@ fn restart_studio_runtime_process(
         return status;
     }
 
+    if let Some(error) = workspace_access_error(workspace_root) {
+        let mut status = runtime_status("error", None, workspace_root, None, None, Some(error));
+        status.supervisor_phase = Some("workspace-access-blocked".to_string());
+        status.startup_started_at = Some(startup_started_at.clone());
+        status.startup_ms = Some(elapsed_ms(supervisor_started));
+        let _ = set_runtime_status_for_generation(state, status.clone(), None, generation);
+        append_runtime_lifecycle_log(
+            app,
+            "runtime.workspace-access-blocked",
+            json!({
+                "generation": generation,
+                "workspaceRoot": workspace_root.to_string_lossy().to_string(),
+                "startupMs": status.startup_ms,
+                "error": status.error.clone()
+            }),
+        );
+        let _ = app.emit(
+            "studio-runtime-log",
+            json!({
+                "stream": "system",
+                "message": status.error.clone(),
+                "timestamp": studio::unix_millis().to_string()
+            }),
+        );
+        return status;
+    }
+
     let source = match resolve_runtime_launch_source(app) {
         Ok(source) => source,
         Err(error) => {
@@ -1087,6 +1114,38 @@ fn mark_runtime_stopped_after_stop(state: &AppState) {
             status.error = None;
         }
     }
+}
+
+fn workspace_access_error(workspace_root: &Path) -> Option<String> {
+    if let Err(error) = fs::metadata(workspace_root) {
+        return permission_error_message(workspace_root, workspace_root, &error);
+    }
+    let project_file = workspace_root.join(".memoire").join("project.json");
+    if project_file.exists() {
+        if let Err(error) = fs::OpenOptions::new().read(true).open(&project_file) {
+            return permission_error_message(workspace_root, &project_file, &error);
+        }
+        return None;
+    }
+    if let Err(error) = fs::read_dir(workspace_root) {
+        return permission_error_message(workspace_root, workspace_root, &error);
+    }
+    None
+}
+
+fn permission_error_message(
+    workspace_root: &Path,
+    attempted_path: &Path,
+    error: &std::io::Error,
+) -> Option<String> {
+    if error.kind() != ErrorKind::PermissionDenied {
+        return None;
+    }
+    Some(format!(
+        "macOS blocked access to the saved workspace {} while opening {}. Choose Open folder and select the workspace again, or grant Mémoire Studio access to removable/network volumes in System Settings.",
+        workspace_root.display(),
+        attempted_path.display()
+    ))
 }
 
 fn apply_runtime_diagnostics(
@@ -2816,6 +2875,35 @@ mod runtime_cache_tests {
             "/Applications/Mémoire Studio.app"
         )));
         assert!(is_sensitive_workspace(&home_root().join(".ssh")));
+    }
+
+    #[test]
+    fn workspace_access_preflight_allows_readable_project_config() {
+        let root = temp_runtime_dir("workspace-access-readable");
+        write_file(&root.join(".memoire").join("project.json"), "{}\n");
+
+        assert_eq!(workspace_access_error(&root), None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn workspace_access_preflight_reports_permission_denied_project_config() {
+        let root = temp_runtime_dir("workspace-access-denied");
+        let project_file = root.join(".memoire").join("project.json");
+        write_file(&project_file, "{}\n");
+        let original_permissions = fs::metadata(&project_file)
+            .expect("project metadata")
+            .permissions();
+        let mut locked_permissions = original_permissions.clone();
+        locked_permissions.set_mode(0o000);
+        fs::set_permissions(&project_file, locked_permissions).expect("lock project file");
+
+        let error = workspace_access_error(&root).expect("permission error");
+
+        fs::set_permissions(&project_file, original_permissions).expect("restore project file");
+        assert!(error.contains("macOS blocked access to the saved workspace"));
+        assert!(error.contains("Open folder"));
+        assert!(error.contains(&project_file.to_string_lossy().to_string()));
     }
 
     #[test]

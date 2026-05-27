@@ -121,14 +121,29 @@ if (!appSource.includes('data-mode-rail-density="icon-only"')) {
 if (!appSource.includes('data-composer-tooltip="visible-on-hover"')) {
   failures.push("src/App.tsx: composer icon controls must expose visible hover/focus tooltips");
 }
+if (!appSource.includes('data-icon-tooltip="Command"') || !appSource.includes('data-icon-tooltip="Settings"')) {
+  failures.push("src/App.tsx: topbar icon controls must expose visible hover/focus tooltips");
+}
+if (!appSource.includes("truth-strip-detail")) {
+  failures.push("src/App.tsx: truth strip must show explicit compact state values instead of label-only chips");
+}
+if (!appSource.includes("aria-label={accessibleLabel}")) {
+  failures.push("src/App.tsx: truth strip state values must be exposed to accessibility");
+}
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
 if (!componentsSource.includes("data-icon-tooltip")) {
   failures.push("src/workbench-components.tsx: shared icon controls must emit data-icon-tooltip for visible labels");
 }
+if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}')) {
+  failures.push("src/workbench-components.tsx: collapsed sidebar icon control must expose a visible tooltip");
+}
 if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
   failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");
+}
+if (!studioCssSource.includes(".truth-strip-detail")) {
+  failures.push("src/styles.css: truth strip detail copy must have tokenized compact styling");
 }
 studioCssSource.split("\n").forEach((line, index) => {
   if (!/font-family\s*:/.test(line)) return;

@@ -246,6 +246,7 @@ type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
 interface TruthStripItemModel {
   id: string;
   label: string;
+  detail: string;
   status: TruthStripStatus;
   title?: string;
 }
@@ -895,24 +896,28 @@ export function App() {
     {
       id: "runtime",
       label: "Runtime",
+      detail: runtimeHealthDisplayLabel(runtimeHealth, status?.runtime?.runtimeSource),
       status: runtimeTruthStatus(runtimeHealth),
       title: runtimeTruthTitle(status, runtimeRecoveryMessage),
     },
     {
       id: "codex",
       label: "Codex",
+      detail: truthHarnessStateLabel(codexHarness),
       status: truthHarnessStatus(codexHarness),
       title: truthHarnessLabel(codexHarness, "Codex"),
     },
     {
       id: "claude",
       label: "Claude",
+      detail: truthHarnessStateLabel(claudeHarness),
       status: truthHarnessStatus(claudeHarness),
       title: truthHarnessLabel(claudeHarness, "Claude"),
     },
     {
       id: "workspace",
-      label: worktreeTruthLabel(designTrace, lastFailure),
+      label: "Worktree",
+      detail: worktreeTruthLabel(designTrace, lastFailure),
       status: worktreeTruthStatus(designTrace, lastFailure),
       title: worktreeTruthTitle(designTrace, lastFailure),
     },
@@ -4063,7 +4068,7 @@ export function App() {
             ))}
           </div>
           <div className="topbar-actions" data-topbar-actions="right-aligned">
-            <button className="topbar-icon-button" aria-label="Command" title="Command" data-action-id="command-palette.open" type="button" onClick={() => openCommandPalette()}>
+            <button className="topbar-icon-button" aria-label="Command" title="Command" data-icon-tooltip="Command" data-action-id="command-palette.open" type="button" onClick={() => openCommandPalette()}>
               <StudioControlIcon name="command" />
             </button>
             <div className="theme-toggle" data-theme-toggle aria-label="Theme">
@@ -4072,6 +4077,7 @@ export function App() {
                 aria-pressed={themeMode === "light"}
                 className={themeMode === "light" ? "active" : ""}
                 data-action-id="theme.light"
+                data-icon-tooltip="Light mode"
                 title="Light mode"
                 type="button"
                 onClick={() => setThemeMode("light")}
@@ -4083,6 +4089,7 @@ export function App() {
                 aria-pressed={themeMode === "dark"}
                 className={themeMode === "dark" ? "active" : ""}
                 data-action-id="theme.dark"
+                data-icon-tooltip="Dark mode"
                 title="Dark mode"
                 type="button"
                 onClick={() => setThemeMode("dark")}
@@ -4094,6 +4101,7 @@ export function App() {
               aria-label="Settings"
               className="topbar-icon-button"
               data-action-id="settings.open"
+              data-icon-tooltip="Settings"
               title="Settings"
               type="button"
               onClick={() => openSettingsPanel()}
@@ -4925,10 +4933,9 @@ function RunSpine(props: {
   const changedFiles = props.designTrace?.files ?? [];
   const fileReceipts = changedFiles.slice(0, 5).map((file) => ({
     id: file.path,
-    label: file.status,
+    label: runSpineCompactPath(file.path),
     fields: [
-      { label: "file", value: runSpineCompactPath(file.path) },
-      { label: "delta", value: `+${file.insertions} -${file.deletions}` },
+      { label: file.status, value: `+${file.insertions} -${file.deletions}` },
     ],
     status: file.status === "deleted" ? "warn" : "done",
     title: file.path,
@@ -5014,7 +5021,7 @@ function RunSpine(props: {
                       {receipt.fields.map((field) => (
                         <small key={field.label}>
                           <b>{field.label}</b>
-                          {field.value}
+                          <span>{field.value}</span>
                         </small>
                       ))}
                     </span>
@@ -5671,10 +5678,17 @@ function runDisabledReason(harness: Harness | undefined, harnessStatusCopy: stri
 }
 
 function TruthStripItem({ item }: { item: TruthStripItemModel }) {
+  const accessibleLabel = `${item.label} ${item.detail}`.trim();
   return (
-    <span className="truth-strip-item" data-truth-status={item.status} title={item.title ?? item.label}>
+    <span
+      aria-label={accessibleLabel}
+      className="truth-strip-item"
+      data-truth-status={item.status}
+      title={item.title ?? accessibleLabel}
+    >
       <i className="status-dot" data-auth-status={item.status} aria-hidden="true" />
-      {item.label}
+      <span className="truth-strip-label">{item.label}</span>
+      <span className="truth-strip-detail">{item.detail}</span>
     </span>
   );
 }
@@ -5694,6 +5708,16 @@ function truthHarnessLabel(harness: Harness | undefined, shortName: string): str
   if (harness.authStatus === "signed_in" || harness.authStatus === "ready") return `${shortName} signed in`;
   if (harness.authStatus === "not_required") return `${shortName} available`;
   return harness.installed ? `${shortName} available` : `${shortName} checking`;
+}
+
+function truthHarnessStateLabel(harness: Harness | undefined): string {
+  if (!harness) return "Checking";
+  if (!harness.enabled) return "Off";
+  if (!harness.installed || harness.authStatus === "missing") return "Missing";
+  if (harness.authStatus === "needs_login") return "Login";
+  if (harness.authStatus === "signed_in" || harness.authStatus === "ready") return "Signed in";
+  if (harness.authStatus === "not_required") return "Ready";
+  return harness.installed ? "Ready" : "Checking";
 }
 
 function truthHarnessStatus(harness: Harness | undefined): TruthStripStatus {
