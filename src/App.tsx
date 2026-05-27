@@ -5119,10 +5119,9 @@ function ContextualInspectorPane(props: {
     pendingApprovals,
     lastFailure: props.lastFailure,
   });
-  const [showReadinessDetails, setShowReadinessDetails] = useState(false);
   const [showUsageDetails, setShowUsageDetails] = useState(false);
   const readinessNeedsAttention = readinessItems.some((item) => item.status !== "ready");
-  const showReadinessPanel = readinessNeedsAttention || showReadinessDetails;
+  const showReadinessPanel = readinessNeedsAttention;
   const usageRows = usageLimitRows(props.usageSnapshot);
 
   return (
@@ -5158,7 +5157,7 @@ function ContextualInspectorPane(props: {
               <dd>{compactSessionStatusLabel(props.visibleSessionStatus)}</dd>
             </div>
           </dl>
-          <p>{props.lastFailure ? trimText(props.lastFailure.message, 140) : "Select a run event, changed file, artifact, or approval to inspect details here."}</p>
+          {props.lastFailure ? <p>{trimText(props.lastFailure.message, 140)}</p> : null}
           {showReadinessPanel ? (
             <section className="designer-readiness-panel" aria-label="Designer workbench readiness">
               <header>
@@ -5225,9 +5224,6 @@ function ContextualInspectorPane(props: {
               }}
             >
               Usage details
-            </button>
-            <button data-action-id="inspector.readiness" type="button" onClick={() => setShowReadinessDetails((current) => !current)}>
-              {showReadinessPanel ? "Hide readiness" : "Readiness details"}
             </button>
           </div>
         </section>

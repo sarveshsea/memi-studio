@@ -23,6 +23,9 @@ const checks = [
       "data-harness-study=\"hermes\"",
       "data-composer-controls=\"readable\"",
       "https://github.com/sarveshsea/memoire#examples",
+      "Select a run event, changed file, artifact, or approval to inspect details here.",
+      "Readiness details",
+      "Hide readiness",
     ],
   },
   {
