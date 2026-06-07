@@ -30,10 +30,19 @@ const json = args.has("json");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function request(path, options = {}) {
-  const response = await fetch(`${base}${path}`, options);
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${options.method ?? "GET"} ${path} failed: ${response.status} ${text}`);
-  return text ? JSON.parse(text) : null;
+  const url = `${base}${path}`;
+  try {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${options.method ?? "GET"} ${path} failed: ${response.status} ${text}`);
+    return text ? JSON.parse(text) : null;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const hint = path === "/api/status"
+      ? "Start Mémoire Studio or pass --base=http://127.0.0.1:<port> for a running Studio runtime."
+      : "Confirm the Studio runtime stayed running while the live-agent smoke was executing.";
+    throw new Error(`${options.method ?? "GET"} ${url} failed: ${detail}. ${hint}`);
+  }
 }
 
 async function post(path, body) {

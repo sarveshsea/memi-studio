@@ -25,12 +25,19 @@ function assert(condition, message) {
 async function request(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = `${base}${path}`;
   try {
-    const response = await fetch(`${base}${path}`, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...options, signal: controller.signal });
     const text = await response.text();
     if (!response.ok) throw new Error(`${options.method ?? "GET"} ${path} failed: ${response.status} ${text}`);
     const contentType = response.headers.get("content-type") ?? "";
     return contentType.includes("application/json") && text ? JSON.parse(text) : text;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const hint = path === "/api/status"
+      ? "Start Mémoire Studio or pass --base=http://127.0.0.1:<port> for a running Studio runtime."
+      : "Confirm the Studio runtime stayed running and exposes the required API surface.";
+    throw new Error(`${options.method ?? "GET"} ${url} failed: ${detail}. ${hint}`);
   } finally {
     clearTimeout(timer);
   }

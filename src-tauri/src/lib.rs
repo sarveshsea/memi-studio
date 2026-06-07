@@ -1693,17 +1693,11 @@ fn materialize_runtime_in_cache(
     }
 
     let result = (|| {
-        let staging_bin = staging.join("bin");
         let staging_package = staging.join("package");
-        fs::create_dir_all(&staging_bin).map_err(|err| {
-            format!(
-                "Failed to create Studio runtime cache staging directory {}: {err}",
-                staging_bin.display()
-            )
-        })?;
+        copy_dir_all(&source.package_root, &staging_package)?;
         copy_file_with_permissions(
             &source.binary,
-            &staging_bin.join(
+            &staging_package.join(
                 source
                     .binary
                     .file_name()
@@ -1711,7 +1705,6 @@ fn materialize_runtime_in_cache(
                     .unwrap_or_else(|| STUDIO_RUNTIME_BIN.into()),
             ),
         )?;
-        copy_dir_all(&source.package_root, &staging_package)?;
         write_runtime_cache_manifest(&staging, source, &fingerprint)?;
         if runtime_root.exists() {
             fs::remove_dir_all(&runtime_root).map_err(|err| {
@@ -1751,9 +1744,10 @@ fn materialized_runtime_from_fingerprint(
         .file_name()
         .map(|name| name.to_owned())
         .unwrap_or_else(|| STUDIO_RUNTIME_BIN.into());
+    let package_root = runtime_root.join("package");
     MaterializedRuntime {
-        binary: runtime_root.join("bin").join(binary_name),
-        package_root: runtime_root.join("package"),
+        binary: package_root.join(binary_name),
+        package_root,
         runtime_root,
         source_kind: source.source_kind.clone(),
     }
@@ -1933,7 +1927,26 @@ fn upsert_runtime_signature_manifest(
 }
 
 fn runtime_cache_is_ready(binary: &Path, package_root: &Path) -> bool {
-    binary.is_file() && package_root.join("package.json").is_file()
+    binary.is_file()
+        && package_root.join("package.json").is_file()
+        && runtime_binary_relative_assets_ready(binary, package_root)
+}
+
+fn runtime_binary_relative_assets_ready(binary: &Path, package_root: &Path) -> bool {
+    let Some(binary_dir) = binary.parent() else {
+        return false;
+    };
+    let package_preview = package_root.join("preview");
+    if package_preview.exists()
+        && !binary_dir
+            .join("preview")
+            .join("templates")
+            .join("gallery-page.css")
+            .is_file()
+    {
+        return false;
+    }
+    true
 }
 
 fn runtime_source_fingerprint(binary: &Path, package_root: &Path) -> Result<String, String> {
@@ -2883,6 +2896,26 @@ mod runtime_cache_tests {
             &package_root.join("skills").join("SUPERPOWER.md"),
             "ship it\n",
         );
+        write_file(
+            &package_root
+                .join("studio")
+                .join("harness-manifest.json"),
+            "{\"harnesses\":[]}\n",
+        );
+        write_file(
+            &package_root
+                .join("preview")
+                .join("templates")
+                .join("gallery-page.css"),
+            "body {}\n",
+        );
+        write_file(
+            &package_root
+                .join("preview")
+                .join("templates")
+                .join("gallery-page.client.js"),
+            "console.log('preview')\n",
+        );
         RuntimeLaunchSource {
             binary,
             package_root,
@@ -3055,6 +3088,27 @@ mod runtime_cache_tests {
         assert_eq!(materialized.binary, second.binary);
         assert_eq!(materialized.package_root, second.package_root);
         assert!(materialized.package_root.join("package.json").is_file());
+        assert_eq!(
+            materialized.binary.parent().expect("binary parent"),
+            materialized.package_root
+        );
+        assert!(materialized
+            .package_root
+            .join("studio")
+            .join("harness-manifest.json")
+            .is_file());
+        assert!(materialized
+            .package_root
+            .join("preview")
+            .join("templates")
+            .join("gallery-page.css")
+            .is_file());
+        assert!(materialized
+            .package_root
+            .join("preview")
+            .join("templates")
+            .join("gallery-page.client.js")
+            .is_file());
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(cache_root);
     }
