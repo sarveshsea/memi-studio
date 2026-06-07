@@ -25,14 +25,17 @@ const harnesses = String(args.get("harnesses") ?? args.get("harness") ?? DEFAULT
   .map((item) => item.trim())
   .filter(Boolean);
 const timeoutMs = Number(args.get("timeout-ms") ?? DEFAULT_TIMEOUT_MS);
+const requestTimeoutMs = Number(args.get("request-timeout-ms") ?? Math.min(timeoutMs, 30_000));
 const json = args.has("json");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function request(path, options = {}) {
   const url = `${base}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(url, options);
+    const response = await fetch(url, { ...options, signal: controller.signal });
     const text = await response.text();
     if (!response.ok) throw new Error(`${options.method ?? "GET"} ${path} failed: ${response.status} ${text}`);
     return text ? JSON.parse(text) : null;
@@ -42,6 +45,8 @@ async function request(path, options = {}) {
       ? "Start Mémoire Studio or pass --base=http://127.0.0.1:<port> for a running Studio runtime."
       : "Confirm the Studio runtime stayed running while the live-agent smoke was executing.";
     throw new Error(`${options.method ?? "GET"} ${url} failed: ${detail}. ${hint}`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

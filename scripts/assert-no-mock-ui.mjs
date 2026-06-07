@@ -137,6 +137,7 @@ for (const check of sourceHygieneChecks) {
 }
 
 const appSource = readFileSync(join(ROOT, "src/App.tsx"), "utf8");
+const liveAgentSmokeSource = readFileSync(join(ROOT, "scripts/studio-live-agent-smoke.mjs"), "utf8");
 if (!appSource.includes('data-mode-rail-density="icon-only"')) {
   failures.push("src/App.tsx: run mode rail must be icon-only; keep detailed mode text in tooltips and composer controls");
 }
@@ -163,6 +164,9 @@ if (!appSource.includes("isWorkspaceAccessBlockedMessage") || !appSource.include
 }
 if (!appSource.includes("workspaceRecoveryDisplayMessage") || appSource.includes("trimText(message, 96)")) {
   failures.push("src/App.tsx: runtime recovery strip must show compact workspace recovery copy instead of raw macOS/path diagnostics");
+}
+if (!liveAgentSmokeSource.includes("request-timeout-ms") || !liveAgentSmokeSource.includes("AbortController") || !liveAgentSmokeSource.includes("clearTimeout(timer)")) {
+  failures.push("scripts/studio-live-agent-smoke.mjs: live Codex/Claude smoke requests must be bounded with AbortController and --request-timeout-ms");
 }
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
