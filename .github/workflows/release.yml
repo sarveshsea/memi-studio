@@ -63,6 +63,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Run product hygiene gates
+        run: |
+          npm run test:no-mock-ui
+          npm run test:workbench-context
+          npm run test:runtime-fetch
+
       - name: Fetch sidecar binaries
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

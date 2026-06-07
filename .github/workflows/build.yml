@@ -27,9 +27,25 @@ jobs:
           node-version: "22"
       - run: npm run license:check
 
+  product-hygiene:
+    name: Product hygiene gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:no-mock-ui
+      - run: npm run test:workbench-context
+      - run: npm run test:runtime-fetch
+
   build-macos:
     name: Build macOS (${{ matrix.target }})
-    needs: license-check
+    needs:
+      - license-check
+      - product-hygiene
     runs-on: macos-14
     strategy:
       fail-fast: false
