@@ -4789,16 +4789,19 @@ function RuntimeRecoveryStrip(props: {
   const message = props.message
     ?? (props.health === "starting" ? "Starting local runtime..." : "Runtime unavailable");
   const needsWorkspaceAccess = isWorkspaceAccessBlockedMessage(message);
+  const displayMessage = workspaceRecoveryDisplayMessage(message, props.health);
+  const recoveryLabel = needsWorkspaceAccess ? "Workspace access" : runtimeHealthLabel(props.health);
   return (
     <section
       className="runtime-recovery-strip"
       data-runtime-recovery={props.health}
       data-runtime-health={props.health}
+      data-runtime-recovery-copy="compact"
       aria-label="Runtime recovery"
     >
-      <strong>{runtimeHealthLabel(props.health)}</strong>
-      <span title={message}>{trimText(message, 96)}</span>
-      <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>
+      <strong>{recoveryLabel}</strong>
+      <span title={message}>{displayMessage}</span>
+      {needsWorkspaceAccess ? null : <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>}
       {needsWorkspaceAccess ? (
         <button data-action-id="workspace.reauthorize" type="button" onClick={props.onOpenWorkspace}>Open folder</button>
       ) : (
@@ -4822,6 +4825,14 @@ function isWorkspaceAccessBlockedMessage(message: string | null | undefined): bo
   const normalized = (message ?? "").trim();
   return /\bmacOS blocked access\b/i.test(normalized)
     && /\b(saved workspace|workspace|removable|network volumes?)\b/i.test(normalized);
+}
+
+function workspaceRecoveryDisplayMessage(message: string, health: RuntimeHealth): string {
+  if (isWorkspaceAccessBlockedMessage(message)) {
+    return "Reopen the project folder to restore macOS access.";
+  }
+  if (health === "starting") return "Starting local runtime...";
+  return trimText(message, 72);
 }
 
 function runtimeHealthLabel(health: RuntimeHealth): string {

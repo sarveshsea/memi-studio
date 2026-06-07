@@ -161,6 +161,9 @@ if (!appSource.includes("aria-label={accessibleLabel}")) {
 if (!appSource.includes("isWorkspaceAccessBlockedMessage") || !appSource.includes('data-action-id="workspace.reauthorize"')) {
   failures.push("src/App.tsx: macOS workspace access failures must offer Open folder reauthorization instead of only runtime restart");
 }
+if (!appSource.includes("workspaceRecoveryDisplayMessage") || appSource.includes("trimText(message, 96)")) {
+  failures.push("src/App.tsx: runtime recovery strip must show compact workspace recovery copy instead of raw macOS/path diagnostics");
+}
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
 const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
