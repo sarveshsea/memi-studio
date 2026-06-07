@@ -138,6 +138,7 @@ for (const check of sourceHygieneChecks) {
 
 const appSource = readFileSync(join(ROOT, "src/App.tsx"), "utf8");
 const liveAgentSmokeSource = readFileSync(join(ROOT, "scripts/studio-live-agent-smoke.mjs"), "utf8");
+const liveE2eSmokeSource = readFileSync(join(ROOT, "scripts/studio-live-e2e.mjs"), "utf8");
 if (!appSource.includes('data-mode-rail-density="icon-only"')) {
   failures.push("src/App.tsx: run mode rail must be icon-only; keep detailed mode text in tooltips and composer controls");
 }
@@ -167,6 +168,9 @@ if (!appSource.includes("workspaceRecoveryDisplayMessage") || appSource.includes
 }
 if (!liveAgentSmokeSource.includes("request-timeout-ms") || !liveAgentSmokeSource.includes("AbortController") || !liveAgentSmokeSource.includes("clearTimeout(timer)")) {
   failures.push("scripts/studio-live-agent-smoke.mjs: live Codex/Claude smoke requests must be bounded with AbortController and --request-timeout-ms");
+}
+if (!liveE2eSmokeSource.includes("MEMOIRE_PACKAGE_ROOT") || !liveE2eSmokeSource.includes("studio-e2e-surface-smoke.mjs") || !liveE2eSmokeSource.includes("studio-live-agent-smoke.mjs")) {
+  failures.push("scripts/studio-live-e2e.mjs: live release proof must start packaged runtime resources, run surface smoke, and run live Codex/Claude smoke");
 }
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
