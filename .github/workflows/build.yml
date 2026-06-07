@@ -37,6 +37,10 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Fetch runtime resources for hygiene checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run fetch:runtime -- --all-archs
       - run: npm run test:no-mock-ui
       - run: npm run test:workbench-context
       - run: npm run test:runtime-fetch
