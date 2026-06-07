@@ -315,12 +315,20 @@ function assertOpenCodeContract(manifestPath) {
 const publicPackageName = exportedConst("MEMOIRE_PACKAGE_NAME");
 const publicPackageVersion = exportedConst("MEMOIRE_PACKAGE_VERSION");
 const publicPackageUrl = exportedConst("MEMOIRE_PACKAGE_URL");
+const studioVersion = exportedConst("MEMOIRE_STUDIO_VERSION");
 const tauriRustSource = readFileSync(join(ROOT, "src-tauri/src/lib.rs"), "utf8");
 const studioRustSource = readFileSync(join(ROOT, "src-tauri/src/studio.rs"), "utf8");
 const runtimeResourcePackage = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/package.json"), "utf8"));
 const runtimeInfo = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/studio-runtime-info.json"), "utf8"));
+const widgetMeta = JSON.parse(readFileSync(join(ROOT, "src-tauri/resources/memoire-runtime/plugin/widget-meta.json"), "utf8"));
 assertOpenCodeContract(join(ROOT, "src-tauri", "resources", "harness-manifest.json"));
 assertOpenCodeContract(join(ROOT, "src-tauri", "resources", "memoire-runtime", "studio", "harness-manifest.json"));
+
+if (studioVersion !== packageJson.version || studioVersion !== tauriConfig.version) {
+  failures.push(
+    `src/runtime/package-info.ts: MEMOIRE_STUDIO_VERSION must match package.json and tauri.conf.json version ${packageJson.version}`,
+  );
+}
 
 if (runtimeResourcePackage.name !== publicPackageName) {
   failures.push(`src-tauri/resources/memoire-runtime/package.json: name must be ${publicPackageName}, got ${runtimeResourcePackage.name}`);
@@ -333,6 +341,9 @@ if (runtimeResourcePackage.homepage?.includes("m-moire") || runtimeResourcePacka
 }
 if (runtimeInfo.packageName !== publicPackageName || runtimeInfo.packageVersion !== publicPackageVersion || runtimeInfo.packageUrl !== publicPackageUrl) {
   failures.push("src-tauri/resources/memoire-runtime/studio-runtime-info.json: public package metadata must match src/runtime/package-info.ts");
+}
+if (widgetMeta.packageVersion !== publicPackageVersion) {
+  failures.push("src-tauri/resources/memoire-runtime/plugin/widget-meta.json: packageVersion must match src/runtime/package-info.ts");
 }
 if (!studioRustSource.includes(`${publicPackageName}@${publicPackageVersion}`) || !studioRustSource.includes(publicPackageUrl)) {
   failures.push("src-tauri/src/studio.rs: agent prompt package reference must match src/runtime/package-info.ts");

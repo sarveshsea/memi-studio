@@ -288,6 +288,13 @@ async function overlayPublicPackageMetadata(cfg) {
     await writeJson(runtimeInfoPath, runtimeInfo);
   }
 
+  const pluginWidgetMetaPath = join(RES_DIR, "plugin", "widget-meta.json");
+  if (await exists(pluginWidgetMetaPath)) {
+    const widgetMeta = await readJson(pluginWidgetMetaPath);
+    widgetMeta.packageVersion = publicPackage.version;
+    await writeJson(pluginWidgetMetaPath, widgetMeta);
+  }
+
   console.log(`fetch-runtime: overlaid public package metadata ${publicPackage.name}@${publicPackage.version}`);
 }
 

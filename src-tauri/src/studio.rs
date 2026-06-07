@@ -14,7 +14,7 @@ use std::{
 // Refresh manually until a sync script lands; the runtime sidecar carries the
 // authoritative copy at runtime, this is just for compile-time defaults.
 const HARNESS_MANIFEST_JSON: &str = include_str!("../resources/harness-manifest.json");
-const MEMOIRE_PACKAGE_REFERENCE: &str = "@memi-design/cli@1.0.2";
+const MEMOIRE_PACKAGE_REFERENCE: &str = "@memi-design/cli@1.1.0";
 const MEMOIRE_PACKAGE_URL: &str = "https://www.npmjs.com/package/@memi-design/cli";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
