@@ -252,6 +252,17 @@ for (const scriptName of ["check:rust", "tauri:dev", "tauri:build"]) {
     failures.push(`package.json: ${scriptName} must set ${localCargoTargetEnv} so Rust artifacts stay off external volumes`);
   }
 }
+for (const scriptName of ["tauri:build", "tauri:build:release"]) {
+  const script = packageJson.scripts?.[scriptName] ?? "";
+  if (!script.includes("npm run fetch:runtime -- --all-archs")) {
+    failures.push(`package.json: ${scriptName} must fetch all macOS runtime sidecars before building cross-target DMGs`);
+  }
+}
+const tauriConfig = JSON.parse(readFileSync(join(ROOT, "src-tauri", "tauri.conf.json"), "utf8"));
+const beforeBuildCommand = tauriConfig.build?.beforeBuildCommand ?? "";
+if (!beforeBuildCommand.includes("npm run fetch:runtime -- --all-archs")) {
+  failures.push("src-tauri/tauri.conf.json: beforeBuildCommand must fetch all macOS runtime sidecars for cross-target builds");
+}
 const releaseCargoTargetEnv =
   "CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/Library/Caches/cv.memoire.studio/cargo-target}";
 const releaseBuildScript = packageJson.scripts?.["tauri:build:release"] ?? "";

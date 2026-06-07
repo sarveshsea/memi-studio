@@ -32,8 +32,8 @@
     "license:apply": "node scripts/apply-license-headers.mjs",
     "tauri": "tauri",
     "tauri:dev": "npm run fetch:runtime && CARGO_TARGET_DIR=$HOME/Library/Caches/cv.memoire.studio/cargo-target tauri dev",
-    "tauri:build": "npm run fetch:runtime && node scripts/clean-local-tauri-artifacts.mjs && CARGO_TARGET_DIR=$HOME/Library/Caches/cv.memoire.studio/cargo-target PATH=$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build --config src-tauri/tauri.local.conf.json",
-    "tauri:build:release": "npm run fetch:runtime && CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/Library/Caches/cv.memoire.studio/cargo-target} PATH=$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build"
+    "tauri:build": "npm run fetch:runtime -- --all-archs && node scripts/clean-local-tauri-artifacts.mjs && CARGO_TARGET_DIR=$HOME/Library/Caches/cv.memoire.studio/cargo-target PATH=$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build --config src-tauri/tauri.local.conf.json",
+    "tauri:build:release": "npm run fetch:runtime -- --all-archs && CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/Library/Caches/cv.memoire.studio/cargo-target} PATH=$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.0",
