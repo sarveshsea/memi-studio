@@ -3,9 +3,10 @@
 
 import { execFileSync } from "node:child_process";
 import { rmSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const outDir = mkdtempSync("/private/tmp/memi-workbench-context-");
+const outDir = mkdtempSync(join(tmpdir(), "memi-workbench-context-"));
 
 try {
   execFileSync("./node_modules/.bin/tsc", [
