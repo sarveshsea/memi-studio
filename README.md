@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/memi-icon-dark.png">
+    <img src="docs/assets/memi-icon-light.png" width="140" alt="Mémoire Studio app icon: four glass hearts forming a clover">
+  </picture>
+</p>
+
 # Mémoire Studio
 
 > Native macOS workbench for Codex-first repository runs, Claude Code handoff, live traces, project context, and artifact review.

@@ -743,29 +743,30 @@ export function MemoireLogoMark() {
     <svg className="memoire-logo-mark" viewBox="0 0 512 512" width="24" height="24" aria-hidden="true">
       <defs>
         <path
-          id="memoire-studio-petal"
-          d="M256 220C236 194 196 176 181 139C167 104 184 72 217 67C237 64 250 75 256 88C262 75 275 64 295 67C328 72 345 104 331 139C316 176 276 194 256 220Z"
+          id="memoire-studio-heart"
+          d="M0,80 C -28,64 -95,30 -95,-15 C -95,-52 -68,-78 -36,-78 C -16,-78 -2,-66 0,-45 C 2,-66 16,-78 36,-78 C 68,-78 95,-52 95,-15 C 95,30 28,64 0,80 Z"
         />
-        <mask id="memoire-studio-flower-mask" maskUnits="userSpaceOnUse">
+        <mask id="memoire-studio-clover-mask" maskUnits="userSpaceOnUse">
           <rect width="512" height="512" fill="var(--svg-mask-off)" />
-          <use href="#memoire-studio-petal" fill="var(--svg-mask-on)" />
-          <use href="#memoire-studio-petal" fill="var(--svg-mask-on)" transform="rotate(90 256 256)" />
-          <use href="#memoire-studio-petal" fill="var(--svg-mask-on)" transform="rotate(180 256 256)" />
-          <use href="#memoire-studio-petal" fill="var(--svg-mask-on)" transform="rotate(270 256 256)" />
-          <path d="M256 204C264 232 280 248 308 256C280 264 264 280 256 308C248 280 232 264 204 256C232 248 248 232 256 204Z" fill="var(--svg-mask-off)" />
+          <g fill="var(--svg-mask-on)">
+            <use href="#memoire-studio-heart" transform="translate(256 256) rotate(0) translate(0 -97)" />
+            <use href="#memoire-studio-heart" transform="translate(256 256) rotate(90) translate(0 -97)" />
+            <use href="#memoire-studio-heart" transform="translate(256 256) rotate(180) translate(0 -97)" />
+            <use href="#memoire-studio-heart" transform="translate(256 256) rotate(270) translate(0 -97)" />
+          </g>
           <g fill="var(--svg-mask-off)">
-            <path d="M256 126C243 154 244 188 256 220C268 188 269 154 256 126Z" />
-            <circle cx="256" cy="145" r="15" />
-            <path d="M256 126C243 154 244 188 256 220C268 188 269 154 256 126Z" transform="rotate(90 256 256)" />
-            <circle cx="367" cy="256" r="15" />
-            <path d="M256 126C243 154 244 188 256 220C268 188 269 154 256 126Z" transform="rotate(180 256 256)" />
-            <circle cx="256" cy="367" r="15" />
-            <path d="M256 126C243 154 244 188 256 220C268 188 269 154 256 126Z" transform="rotate(270 256 256)" />
-            <circle cx="145" cy="256" r="15" />
+            <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(0 256 256)" />
+            <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(90 256 256)" />
+            <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(180 256 256)" />
+            <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(270 256 256)" />
+            <rect x="253" y="46" width="6" height="190" rx="3" transform="rotate(45 256 256)" />
+            <rect x="253" y="46" width="6" height="190" rx="3" transform="rotate(135 256 256)" />
+            <rect x="253" y="46" width="6" height="190" rx="3" transform="rotate(225 256 256)" />
+            <rect x="253" y="46" width="6" height="190" rx="3" transform="rotate(315 256 256)" />
           </g>
         </mask>
       </defs>
-      <rect width="512" height="512" fill="currentColor" mask="url(#memoire-studio-flower-mask)" />
+      <rect width="512" height="512" fill="currentColor" mask="url(#memoire-studio-clover-mask)" />
     </svg>
   );
 }
