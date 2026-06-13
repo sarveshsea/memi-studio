@@ -494,3 +494,11 @@ export async function copyText(value: string) {
   if (!value.trim()) return;
   await navigator.clipboard?.writeText(value).catch(() => undefined);
 }
+
+export type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "research" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
+export function formatAutomationDate(value: string | null | undefined): string {
+  if (!value) return "never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${formatTime(value)}`;
+}

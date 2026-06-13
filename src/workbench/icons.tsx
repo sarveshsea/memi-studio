@@ -7,6 +7,8 @@
 
 import { type ReactNode } from "react";
 import { type WorkbenchActionCopy, type WorkbenchIconName } from "../workbench-copy";
+import { type Harness } from "../studio-api";
+import { type CommandPaletteIcon } from "./shared";
 
 export function MemoireLogoMark() {
   return (
@@ -199,4 +201,29 @@ export function SidebarIcon({ name }: { name: "new-chat" | "search" | "plugins" 
   if (name === "settings") return <StudioLineIcon><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.3 3a8 8 0 0 0-1.7 1L5.1 6l-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1l.3 3h5l.3-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1Z" /></StudioLineIcon>;
   if (name === "panel-open") return <StudioLineIcon><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M9 5v14M14 9l3 3-3 3" /></StudioLineIcon>;
   return <StudioLineIcon><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M9 5v14M17 9l-3 3 3 3" /></StudioLineIcon>;
+}
+
+export function harnessIcon(id: Harness["id"]): CommandPaletteIcon {
+  if (id === "claude-code") return "claude";
+  if (id === "hermes") return "hermes";
+  return "codex";
+}
+
+export function CommandPaletteIconGlyph({ name }: { name: CommandPaletteIcon }) {
+  if (name === "settings") return <StudioLineIcon><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.3 3a8 8 0 0 0-1.7 1L5.1 6l-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1l.3 3h5l.3-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1Z" /></StudioLineIcon>;
+  if (name === "system") return <StudioLineIcon><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="8" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="16" cy="18" r="1.5" /></StudioLineIcon>;
+  if (name === "board") return <StudioLineIcon><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 9h3M13 9h3M8 14h8" /></StudioLineIcon>;
+  if (name === "research") return <StudioLineIcon><path d="M5 6h14M7 10h10M9 14h6" /><circle cx="8" cy="18" r="2" /><circle cx="16" cy="18" r="2" /><path d="M10 18h4" /></StudioLineIcon>;
+  if (name === "figma") return <StudioLineIcon><circle cx="9" cy="6" r="3" /><circle cx="15" cy="6" r="3" /><circle cx="9" cy="12" r="3" /><circle cx="15" cy="12" r="3" /><circle cx="9" cy="18" r="3" /></StudioLineIcon>;
+  if (name === "plugins") return <StudioLineIcon><path d="M8 4h8v5h4v8h-5v3H7v-5H4V7h4V4Z" /></StudioLineIcon>;
+  if (name === "automations") return <StudioLineIcon><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></StudioLineIcon>;
+  if (name === "changelog") return <StudioLineIcon><path d="M7 4h10v16H7V4Z" /><path d="M10 8h4M10 12h4M10 16h3" /></StudioLineIcon>;
+  if (name === "advanced") return <StudioLineIcon><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></StudioLineIcon>;
+  if (name === "claude") return <StudioLineIcon><path d="M12 4 5 20M12 4l7 16M8 13h8" /></StudioLineIcon>;
+  if (name === "codex") return <StudioLineIcon><rect x="5" y="5" width="14" height="14" rx="3" /><path d="M9 9h6v6H9z" /></StudioLineIcon>;
+  if (name === "hermes") return <StudioLineIcon><path d="M5 18 12 4l7 14M8 13h8" /><path d="M9 20h6" /></StudioLineIcon>;
+  if (name === "session") return <StudioLineIcon><path d="M5 6h14v12H5z" /><path d="M8 10h8M8 14h5" /></StudioLineIcon>;
+  if (name === "knowledge") return <StudioLineIcon><path d="M6 5h9l3 3v11H6V5Z" /><path d="M9 12h6M9 16h4" /></StudioLineIcon>;
+  if (name === "close") return <StudioLineIcon><path d="m7 7 10 10M17 7 7 17" /></StudioLineIcon>;
+  return <StudioLineIcon><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></StudioLineIcon>;
 }
