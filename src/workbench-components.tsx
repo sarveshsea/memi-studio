@@ -145,15 +145,6 @@ import { CommandPaletteIconGlyph, harnessIcon } from "./workbench/icons";
 import { type CommandPaletteIcon, formatAutomationDate } from "./workbench/shared";
 import { FileReferenceChip } from "./workbench/terminal";
 
-const FIGMA_ACTIONS: Array<{ id: FigmaAction; label: string; primary?: boolean }> = [
-  { id: "fullSync", label: "Full sync", primary: true },
-  { id: "inspectSelection", label: "Inspect" },
-  { id: "pullTokens", label: "Pull tokens" },
-  { id: "pullComponents", label: "Pull components" },
-  { id: "pullStickies", label: "Pull stickies" },
-  { id: "captureScreenshot", label: "Screenshot" },
-];
-
 export function AttachmentShelf(props: {
   attachments: StudioAttachment[];
   onRemove?: (id: string) => void;
@@ -1520,122 +1511,6 @@ export function TraceTaskRow({ task }: { task: StudioTraceTask }) {
   );
 }
 
-export function FigmaDriver(props: {
-  figmaStatus: FigmaStatus | null;
-  figmaActionResult: FigmaActionResult | null;
-  figmaConnecting: boolean;
-  figmaActionRunning: boolean;
-  figmaError: string | null;
-  settingsDraft: StudioConfig | null;
-  settingsSavedAt: string | null;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onOpen: () => void;
-  onAction: (input: FigmaAction | FigmaActionRequest) => void;
-  onPatchSettings: (update: (current: StudioConfig) => StudioConfig) => void;
-  onSaveSettings: () => void;
-}) {
-  const figmaActionRunning = props.figmaActionRunning;
-  const isBridgeRunning = isFigmaBridgeRunning(props.figmaStatus);
-  const isPluginConnected = isFigmaPluginConnected(props.figmaStatus);
-  const pluginState = isPluginConnected ? "connected" : "disconnected";
-  const bridgeState = props.figmaError
-    ? "failed"
-    : props.figmaActionRunning
-      ? "action running"
-      : props.figmaConnecting
-        ? "scanning"
-        : isBridgeRunning
-          ? "running"
-          : "stopped";
-  const bridgeButtonLabel = props.figmaConnecting
-    ? "Scanning"
-    : isBridgeRunning
-      ? `Running :${props.figmaStatus?.port ?? "--"}`
-      : "Start";
-  const bridgeButtonDisabled = props.figmaConnecting || props.figmaActionRunning || isBridgeRunning;
-  const pluginCopy = props.figmaError ?? (isPluginConnected ? "connected" : isBridgeRunning ? "waiting" : "stopped");
-  const lastSync = props.figmaActionResult?.completedAt ? formatTime(props.figmaActionResult.completedAt) : "--";
-  return (
-    <section
-      className="panel figma-driver"
-      data-figma-bridge-card="compact"
-      data-figma-settings="active-driver"
-      data-figma-state={bridgeState}
-      data-plugin-state={pluginState}
-      data-user-settings="studio-settings"
-    >
-      <div className="panel-head">
-        <div className="figma-heading"><FigmaLogoMark /><div><p className="eyebrow">Figma</p><h2>{pluginCopy}</h2></div></div>
-        <span>{props.figmaStatus?.clients.length ?? 0} clients</span>
-      </div>
-      <div className="driver-grid">
-        <label>
-          <span>Port</span>
-          <input
-            inputMode="numeric"
-            value={props.settingsDraft?.figma?.preferredPort ?? ""}
-            onChange={(event) => props.onPatchSettings((current) => ({
-              ...current,
-              figma: {
-                autoStartBridge: current.figma?.autoStartBridge ?? false,
-                preferredPort: event.target.value ? Number(event.target.value) : null,
-                portRange: current.figma?.portRange ?? [9223, 9232],
-                lastFileKey: current.figma?.lastFileKey ?? null,
-                lastConnectedAt: current.figma?.lastConnectedAt ?? null,
-              },
-            }))}
-          />
-        </label>
-        <div className="bridge-state-copy">
-          <span>{props.figmaError ?? `${bridgeState} / ${pluginState}`}</span>
-        </div>
-      </div>
-      <div className="inline-actions">
-        <IconButton actionId="figma.connect" ariaLabel={bridgeButtonLabel} title={bridgeButtonLabel} icon="sync" onClick={props.onConnect} disabled={bridgeButtonDisabled} />
-        <IconButton {...WORKBENCH_ACTIONS.stop} actionId="figma.disconnect" onClick={props.onDisconnect} disabled={!props.figmaStatus?.running || props.figmaActionRunning} />
-        <IconButton {...WORKBENCH_ACTIONS.open} actionId="figma.open" onClick={props.onOpen} disabled={!isBridgeRunning || props.figmaActionRunning} />
-        <IconButton {...WORKBENCH_ACTIONS.save} actionId="settings.save" className="primary" onClick={props.onSaveSettings} disabled={!props.settingsDraft} />
-      </div>
-      <div className="figma-status-grid">
-        <span><strong>{props.figmaStatus?.port ?? "--"}</strong> port</span>
-        <span><strong>{props.figmaStatus?.clients.length ?? 0}</strong> clients</span>
-        <span><strong>{props.figmaStatus?.bridgeStatus ?? "stopped"}</strong> bridge</span>
-        <span><strong>{lastSync}</strong> last sync</span>
-      </div>
-      <div className="figma-clients">
-        {(props.figmaStatus?.clients ?? []).map((client) => (
-          <article key={client.id}>
-            <strong>{client.file || client.id}</strong>
-            <span>{client.editor} · {client.lastPing ?? client.connectedAt}</span>
-          </article>
-        ))}
-        {props.figmaStatus?.clients.length === 0 ? <p className="empty">No clients</p> : null}
-      </div>
-      <div className="figma-actions">
-        {FIGMA_ACTIONS.map((action) => (
-          <button
-            className={action.primary ? "primary" : ""}
-            data-action-id={`figma.action.${action.id}`}
-            disabled={!isPluginConnected || figmaActionRunning}
-            key={action.id}
-            type="button"
-            onClick={() => props.onAction(action.id)}
-          >
-            {action.label}
-          </button>
-        ))}
-      </div>
-      {props.figmaActionResult ? (
-        <pre>{formatDataPreview(props.figmaActionResult).slice(0, 1800)}</pre>
-      ) : null}
-      <div className="settings-actions">
-        <span>{props.settingsSavedAt ? `saved ${props.settingsSavedAt}` : "local settings"}</span>
-      </div>
-    </section>
-  );
-}
-
 export function InputModeSwitcher(props: {
   value: StudioInputMode;
   onChange: (mode: StudioInputMode) => void;
@@ -1659,132 +1534,6 @@ export function InputModeSwitcher(props: {
           {mode.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-type CommandPaletteRowKind = "navigation" | "harness" | "session" | "knowledge" | "empty";
-type CommandPaletteRow = {
-  id: string;
-  kind: CommandPaletteRowKind;
-  icon: CommandPaletteIcon;
-  label: string;
-  detail: string;
-  run: () => void;
-  disabled?: boolean;
-};
-
-export function CommandPalette(props: {
-  open: boolean;
-  query: string;
-  compatibility: StudioCompatibilitySnapshot | null;
-  sessions: SessionSummary[];
-  knowledgeItems: StudioKnowledgeItem[];
-  onQueryChange: (query: string) => void;
-  onClose: () => void;
-  onOpenSettings: () => void;
-  onOpenSettingsSection: (section: string) => void;
-  onOpenDesignSystem: () => void;
-  onOpenBoard: () => void;
-  onOpenResearchLab: () => void;
-  onOpenFigma: () => void;
-  onOpenPlugins: () => void;
-  onOpenAutomations: () => void;
-  onOpenChangelog: () => void;
-  onSelectHarness: (id: Harness["id"]) => void;
-  onOpenSession: (session: SessionSummary) => void;
-  onOpenKnowledgeItem: (item: StudioKnowledgeItem) => void;
-}) {
-  if (!props.open) return null;
-  const query = props.query.toLowerCase();
-  const harnessRows: CommandPaletteRow[] = (props.compatibility?.harnesses ?? [])
-    .filter((harness) => isCoreHarness(harness.id))
-    .filter((harness) => `${harness.label} ${harness.provider} ${harness.authStatus}`.toLowerCase().includes(query))
-    .slice(0, 8)
-    .map((harness) => ({
-      id: `harness.select.${harness.id}`,
-      kind: "harness",
-      icon: harnessIcon(harness.id),
-      label: harness.label,
-      detail: `${harness.authStatus} · ${harness.requiredSetup[0] ?? "ready"}`,
-      run: () => props.onSelectHarness(harness.id),
-    }));
-  const sessionRows: CommandPaletteRow[] = props.sessions
-    .filter((session) => `${session.prompt} ${session.harness} ${session.status}`.toLowerCase().includes(query))
-    .slice(0, 5)
-    .map((session) => ({
-      id: `session.open.${session.id}`,
-      kind: "session",
-      icon: "session",
-      label: trimText(session.prompt, 64),
-      detail: `${session.harness} · ${session.status}`,
-      run: () => props.onOpenSession(session),
-    }));
-  const knowledgeRows: CommandPaletteRow[] = props.knowledgeItems
-    .filter((item) => `${item.title} ${item.summary} ${item.tags.join(" ")}`.toLowerCase().includes(query))
-    .slice(0, 5)
-    .map((item) => ({
-      id: `knowledge.open.${item.id}`,
-      kind: "knowledge",
-      icon: "knowledge",
-      label: item.title,
-      detail: `${knowledgeKindLabel(item.kind)} · ${displaySourceLabel(item.sourcePath)}`,
-      run: () => props.onOpenKnowledgeItem(item),
-    }));
-  const navigationRows: CommandPaletteRow[] = [
-    { id: "settings.open", kind: "navigation" as const, icon: "settings" as const, label: "Settings", detail: "Open Studio settings", run: props.onOpenSettings },
-    { id: "command.open.design-system", kind: "navigation" as const, icon: "system" as const, label: "Design System", detail: "Open editable artifact review and design memory", run: props.onOpenDesignSystem },
-    { id: "command.open.figjam-board", kind: "navigation" as const, icon: "board" as const, label: "FigJam Board", detail: "Open PM board, source export, and sync status", run: props.onOpenBoard },
-    { id: "command.open.research-lab", kind: "navigation" as const, icon: "research" as const, label: "Research Lab", detail: "Open research patterns and scenario simulation", run: props.onOpenResearchLab },
-    { id: "command.open.figma", kind: "navigation" as const, icon: "figma" as const, label: "Figma Bridge", detail: "Open bridge status and plugin actions", run: props.onOpenFigma },
-    { id: "command.open.plugins", kind: "navigation" as const, icon: "plugins" as const, label: "Plugins", detail: "Open memi Notes marketplace", run: props.onOpenPlugins },
-    { id: "command.open.automations", kind: "navigation" as const, icon: "automations" as const, label: "Automations", detail: "Open scheduled Studio work", run: props.onOpenAutomations },
-    { id: "command.open.changelog", kind: "navigation" as const, icon: "changelog" as const, label: "Changelog", detail: "Open local design memory entries", run: props.onOpenChangelog },
-    { id: "command.open.advanced", kind: "navigation" as const, icon: "advanced" as const, label: "Advanced Tools", detail: "Open tools, browser, and runtime diagnostics", run: () => props.onOpenSettingsSection("Advanced") },
-  ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query));
-  const commandPaletteRows: CommandPaletteRow[] = [...navigationRows, ...harnessRows, ...sessionRows, ...knowledgeRows];
-  const rows = commandPaletteRows.length > 0 ? commandPaletteRows : [{
-    id: "command-palette.empty",
-    kind: "empty" as const,
-    icon: "search" as const,
-    label: "No matching actions",
-    detail: "Try searching settings, harnesses, sessions, notes, or files.",
-    run: () => undefined,
-    disabled: true,
-  }];
-  return (
-    <div className="modal-backdrop command-palette-backdrop" data-command-palette="warp-style" role="dialog" aria-modal="true" aria-label="Command palette">
-      <section className="command-palette-panel">
-        <header>
-          <label className="command-palette-search" data-command-palette-search="actions">
-            <span className="command-palette-icon" data-command-palette-icon="search"><CommandPaletteIconGlyph name="search" /></span>
-            <input autoFocus value={props.query} onChange={(event) => props.onQueryChange(event.target.value)} placeholder="Search actions, sessions, notes, files..." />
-          </label>
-          <button className="command-palette-close" data-action-id="command-palette.close" type="button" onClick={props.onClose}>
-            <span className="command-palette-icon" data-command-palette-icon="close"><CommandPaletteIconGlyph name="close" /></span>
-            <span>Close</span>
-          </button>
-        </header>
-        <div className="command-palette-list" data-command-nav="studio-surfaces">
-          {rows.map((row) => (
-            <button
-              data-action-id={row.id}
-              data-command-palette-empty={row.kind === "empty" ? "true" : undefined}
-              data-command-palette-row={row.kind}
-              disabled={row.disabled}
-              key={row.id}
-              type="button"
-              onClick={row.run}
-            >
-              <span className="command-palette-icon" data-command-palette-icon={row.icon}><CommandPaletteIconGlyph name={row.icon} /></span>
-              <span>
-                <strong>{row.label}</strong>
-                <small>{row.detail}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
@@ -1842,3 +1591,9 @@ export { DesignChangelogPage, DesignSystemReviewSurface, SourceReferenceChips } 
 
 // Re-export the automation center so the public surface is unchanged.
 export { AutomationCenter } from "./workbench/automation";
+
+// Re-export the command palette so the public surface is unchanged.
+export { CommandPalette } from "./workbench/command-palette";
+
+// Re-export the figma driver so the public surface is unchanged.
+export { FigmaDriver } from "./workbench/figma";
