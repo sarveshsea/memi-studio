@@ -4068,9 +4068,9 @@ export function App() {
     >
       <div className="harness-console-shell studio-frame" data-studio-workbench="memoire-project-memory">
         <header className="console-topbar" data-top-status-bar="studio-status" data-topbar-density="thirty-percent" data-icon-topbar="memoire-compact">
-          <div className="wordmark-row" aria-label="Mémoire">
+          <div className="wordmark-row" aria-label="memi">
             <MemoireLogoMark />
-            <span className="wordmark-text">Mémoire</span>
+            <span className="wordmark-text">memi</span>
           </div>
           <div className="harness-readiness-row" data-harness-readiness="compact" data-harness-readiness-contract="truth-strip" data-topbar-tags="left-compact" aria-label="Runtime, agent, and workspace status">
             {truthStripItems.map((item) => (
@@ -4916,7 +4916,7 @@ function composerPlaceholder(inputMode: StudioInputMode, chatMode: StudioChatMod
     case "terminal":
       return "Run a command…";
     default:
-      return "Ask Mémoire to design, audit, or build…";
+      return "Ask memi to design, audit, or build…";
   }
 }
 
