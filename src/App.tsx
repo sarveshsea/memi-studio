@@ -219,6 +219,7 @@ import {
   researchLabHarness,
   type WorkbenchRightPaneTab,
 } from "./studio-workbench";
+import { IASurfaceSkeleton, MermaidBoardSurfaceSkeleton } from "./surface-skeletons";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -3955,7 +3956,7 @@ export function App() {
       onUsePrompt: handleUseMermaidBoardAgentPrompt,
     };
     return (
-      <Suspense fallback={<section className="mermaid-board-surface" data-mermaid-board="pm-brainstorm-loading" aria-busy="true" />}>
+      <Suspense fallback={<MermaidBoardSurfaceSkeleton />}>
         <MermaidBoardSurface {...surfaceProps} />
       </Suspense>
     );
@@ -4011,7 +4012,7 @@ export function App() {
       onUsePrompt: handleUseIAAgentPrompt,
     };
     return (
-      <Suspense fallback={<section className="ia-surface" data-information-architecture="mermaid-jam" aria-busy="true" />}>
+      <Suspense fallback={<IASurfaceSkeleton />}>
         <IASurface {...surfaceProps} />
       </Suspense>
     );
