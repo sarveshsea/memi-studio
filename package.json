@@ -3,6 +3,9 @@
   "version": "1.0.4",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0 <25"
+  },
   "license": "FSL-1.1-ALv2",
   "author": "Humyn LLC",
   "homepage": "https://github.com/sarveshsea/memi-studio",

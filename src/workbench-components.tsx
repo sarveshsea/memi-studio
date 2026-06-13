@@ -486,7 +486,7 @@ export function WorkPacketPane(props: {
           <div className="work-packet-empty-body">
             <span className="work-packet-empty-pill">No packet captured yet</span>
             <h3>Run first, packet second</h3>
-            <p>Use the composer to create work. Mémoire will collect the packet when the agent produces something reviewable.</p>
+            <p>Use the composer to create work. memi will collect the packet when the agent produces something reviewable.</p>
             <div className="work-packet-empty-actions">
               {props.onCreatePacket ? (
                 <button
@@ -2722,7 +2722,7 @@ export function CommandPalette(props: {
     { id: "command.open.figjam-board", kind: "navigation" as const, icon: "board" as const, label: "FigJam Board", detail: "Open PM board, source export, and sync status", run: props.onOpenBoard },
     { id: "command.open.research-lab", kind: "navigation" as const, icon: "research" as const, label: "Research Lab", detail: "Open research patterns and scenario simulation", run: props.onOpenResearchLab },
     { id: "command.open.figma", kind: "navigation" as const, icon: "figma" as const, label: "Figma Bridge", detail: "Open bridge status and plugin actions", run: props.onOpenFigma },
-    { id: "command.open.plugins", kind: "navigation" as const, icon: "plugins" as const, label: "Plugins", detail: "Open Mémoire Notes marketplace", run: props.onOpenPlugins },
+    { id: "command.open.plugins", kind: "navigation" as const, icon: "plugins" as const, label: "Plugins", detail: "Open memi Notes marketplace", run: props.onOpenPlugins },
     { id: "command.open.automations", kind: "navigation" as const, icon: "automations" as const, label: "Automations", detail: "Open scheduled Studio work", run: props.onOpenAutomations },
     { id: "command.open.changelog", kind: "navigation" as const, icon: "changelog" as const, label: "Changelog", detail: "Open local design memory entries", run: props.onOpenChangelog },
     { id: "command.open.advanced", kind: "navigation" as const, icon: "advanced" as const, label: "Advanced Tools", detail: "Open tools, browser, and runtime diagnostics", run: () => props.onOpenSettingsSection("Advanced") },
@@ -3105,7 +3105,7 @@ function automationDraftFromTemplate(template: StudioAutomationTemplate | undefi
     templateId: template?.id ?? "design-system-audit",
     kind: template?.kind ?? "cron",
     name: template?.name ?? "Design System Audit",
-    prompt: template?.prompt ?? "Run a Mémoire design-system audit for this workspace.",
+    prompt: template?.prompt ?? "Run a memi design-system audit for this workspace.",
     status: "ACTIVE",
     rrule: template?.rrule ?? "FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago",
@@ -3447,7 +3447,7 @@ export function SettingsPanel(props: {
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.includeMemoireCommands} onChange={(event) => patchCodexConfig({ includeMemoireCommands: event.target.checked })} />
-            <span>Mémoire hints</span>
+            <span>memi hints</span>
           </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={codexConfig.includeCodexCommands} onChange={(event) => patchCodexConfig({ includeCodexCommands: event.target.checked })} />
@@ -3991,7 +3991,7 @@ export function SettingsPanel(props: {
               );
             })}
             {!props.marketplaceNotes ? <p className="empty">Plugin catalog not loaded.</p> : null}
-            {props.marketplaceNotes && filteredNotes.length === 0 ? <p className="empty">No Mémoire Notes found.</p> : null}
+            {props.marketplaceNotes && filteredNotes.length === 0 ? <p className="empty">No memi Notes found.</p> : null}
           </div>
           <section className="marketplace-note-detail" data-marketplace-note-detail="quick-install">
             {note ? (
