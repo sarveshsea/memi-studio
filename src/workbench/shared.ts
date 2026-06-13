@@ -502,3 +502,43 @@ export function formatAutomationDate(value: string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return value;
   return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${formatTime(value)}`;
 }
+
+export function deriveChatFollowUps(props: {
+  designTrace: StudioDesignSystemTrace | null;
+  lastFailure: StudioEvent | null;
+  sessionStatus: string;
+  terminalBlocks: TerminalBlock[];
+}): Array<{ id: string; label: string; prompt: string }> {
+  if (props.lastFailure) return [{ id: "fix-failure", label: "Fix failure", prompt: `Fix this failure:\n${props.lastFailure.message}` }];
+  if (props.designTrace?.files.length) return [
+    { id: "review-diff", label: "Review diff", prompt: "Review the changed files and summarize risk, tests, and cleanup." },
+    { id: "changelog", label: "Changelog", prompt: "Capture the design-related changes in the local design changelog." },
+  ];
+  if (props.sessionStatus === "completed") return [{ id: "next-step", label: "Next step", prompt: "Continue from the verification receipt and handle the next highest-value improvement." }];
+  if (props.terminalBlocks.length) return [{ id: "explain", label: "Explain", prompt: "Explain the latest output and identify the next action." }];
+  return [{ id: "sharpen", label: "Sharpen", prompt: "Turn this prompt into a precise implementation task with acceptance criteria." }];
+}
+
+export function compactStatusLabel(status: string): string {
+  if (status === "completed") return "Done";
+  if (status === "running") return "Run";
+  if (status === "cancelled") return "Stop";
+  if (status === "failed") return "Failed";
+  if (status === "idle" || status === "standby") return "Ready";
+  return status;
+}
+
+export function deriveVerificationSignals(props: {
+  artifacts: DesignSystemArtifact[];
+  designTrace: StudioDesignSystemTrace | null;
+  events: StudioEvent[];
+  lastFailure: StudioEvent | null;
+  sessionStatus: string;
+}): { status: string; summary: string } {
+  if (props.lastFailure) return { status: "Needs attention", summary: trimText(props.lastFailure.message, 96) };
+  const files = props.designTrace?.files.length ?? 0;
+  const evidence = props.artifacts.length + props.events.filter((event) => ["session_done", "artifact", "design_system_artifact", "browser_snapshot", "screenshot"].includes(event.type)).length;
+  if (props.sessionStatus === "completed") return { status: "Verified", summary: `${files} files / ${evidence} evidence` };
+  if (props.sessionStatus === "running") return { status: "Collecting", summary: `${files} files / ${evidence} evidence` };
+  return { status: "Ready", summary: `${files} files / ${evidence} evidence` };
+}
