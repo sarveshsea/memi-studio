@@ -106,6 +106,45 @@
   --radius-compact: 2px;
   --radius-pill: 8px;
   --shadow-panel: 0 18px 48px -28px rgb(8 9 10 / 58%);
+
+  /* ── Modernized design-system scale (additive, v1.1) ──
+     New tokens only. Existing --radius-default/-panel/-compact/-pill and
+     --shadow-panel stay as-is (in use). --radius-round is a TRUE pill
+     (--radius-pill is historically 8px and kept for back-compat). */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-round: 999px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --shadow-sm: 0 2px 8px rgb(8 9 10 / 6%);
+  --shadow-md: 0 6px 16px rgb(8 9 10 / 10%);
+  --shadow-lg: 0 18px 48px color-mix(in srgb, var(--studio-color-shadow-base) 18%, transparent);
+  --focus-ring: 1px solid var(--accent);
+  --focus-ring-offset: 1px;
+  --focus-ring-subtle: 1px solid var(--line-strong);
+  /* Button variants (opt-in via .studio-btn--*). Primary/danger map to
+     existing accent/danger; secondary/ghost are new surface treatments. */
+  --button-primary-bg: var(--accent);
+  --button-primary-fg: var(--primary-foreground);
+  --button-primary-border: var(--accent);
+  --button-secondary-bg: var(--surface);
+  --button-secondary-fg: var(--ink);
+  --button-secondary-border: var(--line);
+  --button-secondary-bg-hover: var(--surface-soft);
+  --button-secondary-bg-active: var(--surface-muted);
+  --button-ghost-bg: transparent;
+  --button-ghost-fg: var(--ink-muted);
+  --button-ghost-border: transparent;
+  --button-ghost-bg-hover: var(--surface-soft);
+  --button-ghost-bg-active: var(--surface-muted);
+  --button-danger-fg: var(--danger);
+  --button-danger-border: var(--danger);
+  --button-danger-bg-hover: color-mix(in srgb, var(--danger) 8%, transparent);
+  --button-danger-bg-active: color-mix(in srgb, var(--danger) 16%, transparent);
+
   font-family: var(--font-studio);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-regular);
@@ -378,6 +417,29 @@ button.active,
 .danger {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+/* Opt-in button variants on the modernized token scale (v1.1). Use
+   alongside the base button class: <button class="studio-btn studio-btn--ghost">.
+   Existing .primary / .danger are untouched. */
+.studio-btn--secondary {
+  border-color: var(--button-secondary-border);
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-fg);
+}
+.studio-btn--secondary:hover { background: var(--button-secondary-bg-hover); }
+.studio-btn--secondary:active { background: var(--button-secondary-bg-active); }
+.studio-btn--ghost {
+  border-color: var(--button-ghost-border);
+  background: var(--button-ghost-bg);
+  color: var(--button-ghost-fg);
+}
+.studio-btn--ghost:hover { background: var(--button-ghost-bg-hover); }
+.studio-btn--ghost:active { background: var(--button-ghost-bg-active); }
+.studio-btn--secondary:focus-visible,
+.studio-btn--ghost:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 .console-layout { min-height: 0; display: grid; grid-template-columns: var(--project-sidebar-width) minmax(0, 1fr); gap: var(--space-2); overflow: hidden; padding: var(--space-2); background: var(--surface-bg); }
 .console-layout[data-sidebar-collapsed="true"] {
