@@ -3,7 +3,7 @@
 
 // Work packet pane: review-packet summary, artifact sections, and starters.
 
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState, memo } from "react";
 import {
   type FigmaAction,
   type FigmaActionRequest,
@@ -134,7 +134,7 @@ import {
   workArtifactKindFromEvent,
   workArtifactKindLabel,
 } from "./shared";
-export function WorkPacketPane(props: {
+function WorkPacketPaneImpl(props: {
   events: StudioEvent[];
   packet: StudioReviewPacket | null;
   session: SessionSummary | null;
@@ -309,3 +309,6 @@ function WorkPacketList({ title, items }: { title: string; items: string[] }) {
     </section>
   );
 }
+
+// Memoized export: re-renders only when its (stabilized) props change.
+export const WorkPacketPane = memo(WorkPacketPaneImpl);

@@ -5,7 +5,7 @@
 // design changelog page. Imports only from leaf modules (shared, icons) and
 // studio-api types.
 
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, memo, useEffect, useState } from "react";
 import {
   type FigmaAction,
   type FigmaActionRequest,
@@ -141,7 +141,7 @@ import { FileReferenceChip } from "./terminal";
 type AgenticOpenSourceReferences = NonNullable<NonNullable<DesignSystemArtifact["agentic"]>["openSourceReferences"]>;
 type AgenticInteractionPatterns = NonNullable<NonNullable<DesignSystemArtifact["agentic"]>["interactionPatterns"]>;
 
-export function DesignSystemReviewSurface(props: {
+function DesignSystemReviewSurfaceImpl(props: {
   artifact: DesignSystemArtifact | null;
   figmaStatus?: FigmaStatus | null;
   onReviewSection: (
@@ -648,7 +648,7 @@ function reviewStateLabel(state: DesignSystemArtifactReviewState): string {
 
 type DesignChangelogFilter = "all" | "agent" | "manual" | "needs-evidence" | "archived";
 
-export function DesignChangelogPage(props: {
+function DesignChangelogPageImpl(props: {
   entries: DesignChangelogEntry[];
   loading: boolean;
   error: string | null;
@@ -807,3 +807,8 @@ function matchesDesignChangelogFilter(entry: DesignChangelogEntry, filter: Desig
   if (filter === "needs-evidence") return entry.captureWarnings.length > 0 || entry.fileRefs.length === 0;
   return true;
 }
+
+// Memoized exports: these surfaces are expensive and only need to re-render when
+// their (now stabilized) props change. See src/use-stable-callback.ts.
+export const DesignSystemReviewSurface = memo(DesignSystemReviewSurfaceImpl);
+export const DesignChangelogPage = memo(DesignChangelogPageImpl);
