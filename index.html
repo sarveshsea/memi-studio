@@ -7,10 +7,63 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>Mémoire Studio</title>
+    <title>memi</title>
+    <!--
+      Boot splash: shown immediately (before the JS bundle parses and React
+      mounts) so first launch never flashes white while the runtime sidecar
+      materializes. React's createRoot() replaces #root's contents on mount.
+      Literal hex is used here only because the design-system CSS tokens are not
+      loaded yet; the values mirror the dark theme (surface-bg / ink / accent).
+    -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #08090a; }
+      #boot-splash {
+        position: fixed; inset: 0; z-index: 1;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; background: #08090a; color: #f7f8f8;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #boot-splash .boot-mark { width: 72px; height: 72px; animation: boot-pulse 1.6s ease-in-out infinite; }
+      #boot-splash .boot-word { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+      #boot-splash .boot-status { font-size: 12px; color: #9aa0a6; letter-spacing: 0.01em; }
+      @keyframes boot-pulse {
+        0%, 100% { opacity: 0.55; transform: scale(0.97); }
+        50% { opacity: 1; transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-mark { animation: none; opacity: 1; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-splash" role="status" aria-label="Starting memi">
+        <svg class="boot-mark" viewBox="0 0 512 512" aria-hidden="true">
+          <defs>
+            <path id="boot-heart" d="M0,80 C -28,64 -95,30 -95,-15 C -95,-52 -68,-78 -36,-78 C -16,-78 -2,-66 0,-45 C 2,-66 16,-78 36,-78 C 68,-78 95,-52 95,-15 C 95,30 28,64 0,80 Z" />
+            <mask id="boot-clover" maskUnits="userSpaceOnUse">
+              <rect width="512" height="512" fill="#000" />
+              <g fill="#fff">
+                <use href="#boot-heart" transform="translate(256 256) rotate(0) translate(0 -97)" />
+                <use href="#boot-heart" transform="translate(256 256) rotate(90) translate(0 -97)" />
+                <use href="#boot-heart" transform="translate(256 256) rotate(180) translate(0 -97)" />
+                <use href="#boot-heart" transform="translate(256 256) rotate(270) translate(0 -97)" />
+              </g>
+              <g fill="#000">
+                <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(0 256 256)" />
+                <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(90 256 256)" />
+                <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(180 256 256)" />
+                <rect x="252.5" y="106" width="7" height="142" rx="3.5" transform="rotate(270 256 256)" />
+              </g>
+            </mask>
+          </defs>
+          <rect width="512" height="512" fill="#ff5470" mask="url(#boot-clover)" />
+        </svg>
+        <div class="boot-word">memi</div>
+        <div class="boot-status">Starting the studio runtime…</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

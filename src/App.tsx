@@ -220,6 +220,7 @@ import {
   type WorkbenchRightPaneTab,
 } from "./studio-workbench";
 import { IASurfaceSkeleton, MermaidBoardSurfaceSkeleton } from "./surface-skeletons";
+import { useStableCallback } from "./use-stable-callback";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -3962,12 +3963,46 @@ export function App() {
     );
   }
 
-  function renderWorkPacketPane() {
-    const starters = STARTER_PROMPTS.slice(0, 4).map((starter) => ({
+  // Stable handler identities + memoized starters so the React.memo'd right-pane
+  // surfaces (WorkPacketPane, DesignSystemReviewSurface, DesignChangelogPage) skip
+  // re-renders when unrelated state (e.g. the composer) changes. Safe: App has no
+  // early return before this point and every handler below is a hoisted function.
+  const stableReviewArtifactSection = useStableCallback(reviewArtifactSection);
+  const stableFixDesignSystemSection = useStableCallback(handleFixDesignSystemSection);
+  const stableSaveDesignSystemArtifact = useStableCallback(saveDesignSystemArtifact);
+  const stableUseDesignSystemArtifact = useStableCallback(useDesignSystemArtifact);
+  const stableRefreshDesignChangelog = useStableCallback(refreshDesignChangelog);
+  const stableCreateDesignChangelogEntry = useStableCallback(handleCreateDesignChangelogEntry);
+  const stableUpdateDesignChangelogEntry = useStableCallback(handleUpdateDesignChangelogEntry);
+  const stableArchiveDesignChangelogEntry = useStableCallback(handleArchiveDesignChangelogEntry);
+  const stableRestoreDesignChangelogEntry = useStableCallback(handleRestoreDesignChangelogEntry);
+  const stableExportDesignChangelog = useStableCallback(handleExportDesignChangelog);
+  const stableRefreshReviewPackets = useStableCallback(refreshReviewPackets);
+  const stableOpenChangelogSurface = useStableCallback(openChangelogSurface);
+  const stableOpenFigmaSurface = useStableCallback(openFigmaSurface);
+  const stableBrowseTemplates = useStableCallback(openPluginsSurface);
+  const stableExportReviewPacket = useStableCallback(() => void handleExportReviewPacket());
+  const stableOpenBoardFromPacket = useStableCallback(() => chooseRightPane("mermaid-board", "Packet feeds PM Board"));
+  const stableCreatePacket = useStableCallback(() => {
+    startNewChat();
+    requestAnimationFrame(() => {
+      const promptEl = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]');
+      promptEl?.focus();
+    });
+  });
+  const stableOpenWorkspaceFromPacket = useStableCallback(() => { void handleOpenWorkspace(); });
+  const stableViewPacketExamples = useStableCallback(() => window.open("https://github.com/sarveshsea/memi#examples", "_blank"));
+  const stableApplyStarterPrompt = useStableCallback(applyStarterPrompt);
+  const workPacketStarters = useMemo(
+    () => STARTER_PROMPTS.slice(0, 4).map((starter) => ({
       label: starter.label,
       description: starter.template,
-      onSelect: () => applyStarterPrompt(starter),
-    }));
+      onSelect: () => stableApplyStarterPrompt(starter),
+    })),
+    [stableApplyStarterPrompt],
+  );
+
+  function renderWorkPacketPane() {
     return (
       <section className="agent-cockpit-pane" data-agent-cockpit="work-packet" data-pane-intent-surface="work-packet">
         <WorkPacketPane
@@ -3975,22 +4010,16 @@ export function App() {
           session={session}
           events={events}
           harnessLabel={currentHarness?.label ?? selectedHarness}
-          starters={starters}
-          onRefresh={refreshReviewPackets}
-          onExport={() => void handleExportReviewPacket()}
-          onOpenBoard={() => chooseRightPane("mermaid-board", "Packet feeds PM Board")}
-          onOpenChangelog={openChangelogSurface}
-          onOpenFigma={openFigmaSurface}
-          onCreatePacket={() => {
-            startNewChat();
-            requestAnimationFrame(() => {
-              const promptEl = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]');
-              promptEl?.focus();
-            });
-          }}
-          onOpenWorkspace={() => { void handleOpenWorkspace(); }}
-          onBrowseTemplates={openPluginsSurface}
-          onViewExamples={() => window.open("https://github.com/sarveshsea/memi#examples", "_blank")}
+          starters={workPacketStarters}
+          onRefresh={stableRefreshReviewPackets}
+          onExport={stableExportReviewPacket}
+          onOpenBoard={stableOpenBoardFromPacket}
+          onOpenChangelog={stableOpenChangelogSurface}
+          onOpenFigma={stableOpenFigmaSurface}
+          onCreatePacket={stableCreatePacket}
+          onOpenWorkspace={stableOpenWorkspaceFromPacket}
+          onBrowseTemplates={stableBrowseTemplates}
+          onViewExamples={stableViewPacketExamples}
         />
         {reviewPacketError ? <p className="error">{reviewPacketError}</p> : null}
       </section>
@@ -4027,10 +4056,10 @@ export function App() {
         <DesignSystemReviewSurface
           artifact={activeDesignArtifact}
           figmaStatus={figmaStatus}
-          onReviewSection={reviewArtifactSection}
-          onFixSection={handleFixDesignSystemSection}
-          onSaveArtifact={saveDesignSystemArtifact}
-          onUseSystem={useDesignSystemArtifact}
+          onReviewSection={stableReviewArtifactSection}
+          onFixSection={stableFixDesignSystemSection}
+          onSaveArtifact={stableSaveDesignSystemArtifact}
+          onUseSystem={stableUseDesignSystemArtifact}
         />
       );
     }
@@ -4043,12 +4072,12 @@ export function App() {
           entries={designChangelogEntries}
           loading={designChangelogLoading}
           error={designChangelogError}
-          onRefresh={refreshDesignChangelog}
-          onCreate={handleCreateDesignChangelogEntry}
-          onUpdate={handleUpdateDesignChangelogEntry}
-          onArchive={handleArchiveDesignChangelogEntry}
-          onRestore={handleRestoreDesignChangelogEntry}
-          onExport={handleExportDesignChangelog}
+          onRefresh={stableRefreshDesignChangelog}
+          onCreate={stableCreateDesignChangelogEntry}
+          onUpdate={stableUpdateDesignChangelogEntry}
+          onArchive={stableArchiveDesignChangelogEntry}
+          onRestore={stableRestoreDesignChangelogEntry}
+          onExport={stableExportDesignChangelog}
         />
       );
     }
