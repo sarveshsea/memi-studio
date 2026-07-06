@@ -643,6 +643,7 @@ export function App() {
   useEffect(() => {
     if (!isFigmaBridgeRunning(figmaStatus)) return;
     const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void getFigmaStatus()
         .then(setFigmaStatus)
         .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
@@ -1141,6 +1142,7 @@ export function App() {
     if (runtimeHealth !== "ready" || recentSessions.length > 0 || session || !status?.projectRoot) return undefined;
     let attempts = 0;
     const interval = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       attempts += 1;
       void listSessions()
         .then((nextSessions) => {

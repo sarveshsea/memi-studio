@@ -179,6 +179,11 @@ export function useRuntimeLifecycle(refresh: () => Promise<void>): RuntimeLifecy
     // latency; it exists to recover if an event was ever missed.
     const delay = runtimeHealth === "starting" ? 2000 : 5000;
     const interval = window.setInterval(() => {
+      // This is the fallback only — the pushed lifecycle event subscription
+      // above is the primary signal and isn't gated by tab visibility, so
+      // pausing this reconciliation poll while hidden doesn't delay real
+      // readiness detection, just stops burning CPU/network unattended.
+      if (document.visibilityState === "hidden") return;
       if (runtimeStartupRefreshInFlightRef.current) return;
       runtimeStartupRefreshInFlightRef.current = true;
       void refresh().finally(() => {
