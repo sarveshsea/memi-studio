@@ -621,7 +621,7 @@ export function App() {
     const timer = window.setInterval(() => {
       void getFigmaStatus()
         .then(setFigmaStatus)
-        .catch(() => undefined);
+        .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     }, 2000);
     return () => window.clearInterval(timer);
   }, [figmaStatus?.bridgeStatus, figmaStatus?.running]);
@@ -669,7 +669,7 @@ export function App() {
           return { ...current, [selectedHarness]: registry.defaultModelId };
         });
       })
-      .catch(() => undefined);
+      .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     return () => { cancelled = true; };
   }, [selectedHarness, harnessModelRegistries]);
 
@@ -697,8 +697,8 @@ export function App() {
           }
           if (["artifact", "design_system_artifact", "design_decision", "session_done"].includes(event.type)) {
             window.setTimeout(() => {
-              void listDesignSystemArtifacts().then(updateDesignArtifacts).catch(() => undefined);
-              void listReviewPackets().then(setReviewPackets).catch(() => undefined);
+              void listDesignSystemArtifacts().then(updateDesignArtifacts).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
+              void listReviewPackets().then(setReviewPackets).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
             }, TRACE_REFRESH_DELAY_MS);
           }
         }
@@ -945,7 +945,7 @@ export function App() {
     if (harnessReadinessRefreshAttemptsRef.current >= 3) return undefined;
     harnessReadinessRefreshAttemptsRef.current += 1;
     const timeout = window.setTimeout(() => {
-      void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+      void listHarnesses({ refresh: true }).then(setHarnesses).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     }, 650);
     return () => window.clearTimeout(timeout);
   }, [claudeHarness, codexHarness, runtimeHealth]);
@@ -1167,7 +1167,7 @@ export function App() {
         .then((nextSessions) => {
           if (nextSessions.length > 0) setRecentSessions(nextSessions);
         })
-        .catch(() => undefined);
+        .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       if (attempts >= 6) window.clearInterval(interval);
     }, 750);
     return () => window.clearInterval(interval);
@@ -1277,7 +1277,7 @@ export function App() {
       if (nextRuntimeHealth === "ready" && primaryHarnessStatusIncomplete) {
         harnessReadinessRefreshAttemptsRef.current = 0;
         window.setTimeout(() => {
-          void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+          void listHarnesses({ refresh: true }).then(setHarnesses).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth: nextRuntimeHealth }), { severity: "background" }));
         }, 650);
       }
       setError(null);
@@ -1816,7 +1816,7 @@ export function App() {
 
   function openFigmaSurface() {
     chooseRightPane("figma", "Figma bridge opened");
-    void getFigmaStatus().then(setFigmaStatus).catch(() => undefined);
+    void getFigmaStatus().then(setFigmaStatus).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth })));
   }
 
   function openDesignSystemSurface() {
@@ -2963,7 +2963,7 @@ export function App() {
       }
       setMermaidBoardExports(payload?.exports ?? []);
       const source = payload?.exports?.[0]?.integration;
-      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       chooseRightPane("mermaid-board", "Exported Mermaid Jam source");
       setError(null);
     } catch (nextError) {
@@ -3013,7 +3013,7 @@ export function App() {
       setMermaidBoardExports(payload?.exports ?? []);
       if (payload?.sync?.status !== "synced") {
         const source = payload?.sync?.integration ?? payload?.exports?.[0]?.integration;
-        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       }
       chooseRightPane("mermaid-board", payload?.sync?.status === "synced" ? "Synced board to FigJam" : "Mermaid Jam source ready");
       setError(null);
@@ -3099,7 +3099,7 @@ export function App() {
       if (payload?.board) setIaBoard(hydrateMermaidBoardAgentSurface(payload.board));
       setIaBoardExports(payload?.exports ?? []);
       const source = payload?.exports?.[0]?.integration;
-      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       chooseRightPane("ia", "IA export ready");
       setError(null);
     } catch (nextError) {
@@ -3147,7 +3147,7 @@ export function App() {
       setIaBoardExports(payload?.exports ?? []);
       if (payload?.sync?.status !== "synced") {
         const source = payload?.sync?.integration ?? payload?.exports?.[0]?.integration;
-        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       }
       chooseRightPane("ia", payload?.sync?.status === "synced" ? "IA synced" : "IA source ready");
       setError(null);

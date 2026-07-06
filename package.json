@@ -28,6 +28,7 @@
     "test:runtime-fetch": "node scripts/fetch-runtime-cache.test.mjs",
     "test:workbench-context": "node scripts/run-workbench-context-tests.mjs",
     "test:no-mock-ui": "node scripts/assert-no-mock-ui.mjs",
+    "test:no-empty-catch": "node scripts/assert-no-empty-catch.mjs",
     "test:live-agents": "node scripts/studio-live-agent-smoke.mjs",
     "test:live-e2e": "node scripts/studio-live-e2e.mjs",
     "test:e2e-surfaces": "node scripts/studio-e2e-surface-smoke.mjs",
