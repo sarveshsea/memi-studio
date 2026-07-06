@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 // Copyright 2026 Humyn LLC
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import {
   forceCenter,
   forceCollide,
@@ -237,6 +237,13 @@ import {
   workspaceRecoveryDisplayMessage,
   type RuntimeHealth,
 } from "./hooks/use-runtime-lifecycle";
+import {
+  useWorkbenchUiPrefs,
+  clampNumber,
+  DEFAULT_CHAT_RAIL_WIDTH_PERCENT,
+  MIN_CHAT_RAIL_WIDTH_PERCENT,
+  MAX_CHAT_RAIL_WIDTH_PERCENT,
+} from "./hooks/use-workbench-ui-prefs";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -429,13 +436,6 @@ const SESSION_EVENT_LIMIT = 120;
 const SESSION_START_TIMEOUT_MS = 30_000;
 const TRACE_REFRESH_DELAY_MS = 350;
 const WORKTREE_TRACE_REFRESH_MS = 12_000;
-const PROJECT_SIDEBAR_COLLAPSED_KEY = "memoire.studio.projectSidebarCollapsed";
-const PROJECT_SIDEBAR_EXPANDED_KEY = "memoire.studio.expandedProjectIds";
-const CHAT_RAIL_WIDTH_KEY = "memoire.studio.chatRailWidthPercent";
-const CHAT_MEMORY_PINS_KEY = "memoire.studio.chatMemoryPins";
-const DEFAULT_CHAT_RAIL_WIDTH_PERCENT = 48;
-const MIN_CHAT_RAIL_WIDTH_PERCENT = 36;
-const MAX_CHAT_RAIL_WIDTH_PERCENT = 68;
 
 interface StudioActionRegistryItem {
   id: string;
@@ -509,7 +509,6 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [chatSearchQuery, setChatSearchQuery] = useState("");
-  const [chatMemoryPins, setChatMemoryPins] = useState<string[]>(() => readStringArrayPreference(CHAT_MEMORY_PINS_KEY).slice(0, 6));
   const [contextQuery, setContextQuery] = useState("");
   const [contextFilter, setContextFilter] = useState("all");
   const [prompt, setPrompt] = useState("");
@@ -590,13 +589,19 @@ export function App() {
   const [collapsedBlockIds, setCollapsedBlockIds] = useState<Set<string>>(new Set());
   const [userPinnedToBottom, setUserPinnedToBottom] = useState(true);
   const [attachments, setAttachments] = useState<StudioAttachment[]>([]);
-  const [projectSidebarCollapsed, setProjectSidebarCollapsed] = useState(() =>
-    readBooleanPreference(PROJECT_SIDEBAR_COLLAPSED_KEY, typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches),
-  );
-  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>(() => readStringArrayPreference(PROJECT_SIDEBAR_EXPANDED_KEY));
-  const [chatRailWidthPercent, setChatRailWidthPercent] = useState(() =>
-    readNumberPreference(CHAT_RAIL_WIDTH_KEY, DEFAULT_CHAT_RAIL_WIDTH_PERCENT, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT),
-  );
+  const {
+    projectSidebarCollapsed,
+    setProjectSidebarCollapsed,
+    expandedProjectIds,
+    setExpandedProjectIds,
+    toggleProjectFolder,
+    chatRailWidthPercent,
+    setChatRailWidthPercent,
+    handleChatRailPointerDown,
+    handleChatRailResizeKey,
+    chatMemoryPins,
+    setChatMemoryPins,
+  } = useWorkbenchUiPrefs();
 
   useEffect(() => {
     void refresh();
@@ -623,21 +628,6 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem(PROJECT_SIDEBAR_COLLAPSED_KEY, JSON.stringify(projectSidebarCollapsed));
-  }, [projectSidebarCollapsed]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PROJECT_SIDEBAR_EXPANDED_KEY, JSON.stringify(expandedProjectIds));
-  }, [expandedProjectIds]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CHAT_RAIL_WIDTH_KEY, JSON.stringify(chatRailWidthPercent));
-  }, [chatRailWidthPercent]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CHAT_MEMORY_PINS_KEY, JSON.stringify(chatMemoryPins.slice(0, 6)));
-  }, [chatMemoryPins]);
 
   useEffect(() => {
     if (!isFigmaBridgeRunning(figmaStatus)) return;
@@ -1952,12 +1942,6 @@ export function App() {
     }
   }
 
-  function toggleProjectFolder(projectId: string) {
-    setExpandedProjectIds((current) =>
-      current.includes(projectId) ? current.filter((candidate) => candidate !== projectId) : [projectId, ...current],
-    );
-  }
-
   async function openContextItem(item: ProjectMemoryItem) {
     setSelectedContextItem(item);
     setContextItemDetail(null);
@@ -2251,52 +2235,6 @@ export function App() {
   function handleComposerDrop(event: DragEvent<HTMLTextAreaElement>) {
     event.preventDefault();
     if (event.dataTransfer.files.length) void addFilesToComposer(event.dataTransfer.files, "drop");
-  }
-
-  function handleChatRailPointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const container = event.currentTarget.parentElement;
-    const bounds = container?.getBoundingClientRect();
-    const totalWidth = Math.max(bounds?.width ?? window.innerWidth, 1);
-
-    const applyWidth = (clientX: number) => {
-      const left = bounds?.left ?? 0;
-      const nextWidth = ((clientX - left) / totalWidth) * 100;
-      setChatRailWidthPercent(clampNumber(nextWidth, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT));
-    };
-
-    applyWidth(event.clientX);
-
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
-      applyWidth(moveEvent.clientX);
-    };
-    const handlePointerUp = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
-  function handleChatRailResizeKey(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      const direction = event.key === "ArrowLeft" ? -2 : 2;
-      setChatRailWidthPercent((current) => clampNumber(current + direction, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT));
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      setChatRailWidthPercent(MIN_CHAT_RAIL_WIDTH_PERCENT);
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      setChatRailWidthPercent(MAX_CHAT_RAIL_WIDTH_PERCENT);
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      setChatRailWidthPercent(DEFAULT_CHAT_RAIL_WIDTH_PERCENT);
-    }
   }
 
   function removeAttachment(id: string) {
@@ -6135,35 +6073,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function readBooleanPreference(key: string, fallback: boolean): boolean {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw === null ? fallback : JSON.parse(raw) === true;
-  } catch {
-    return fallback;
-  }
-}
-
-function readStringArrayPreference(key: string): string[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function readNumberPreference(key: string, fallback: number, min: number, max: number): number {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw === null ? fallback : Number(JSON.parse(raw));
-    return Number.isFinite(parsed) ? clampNumber(parsed, min, max) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function permissionModePowerLabel(mode: StudioPermissionMode): string {
   if (mode === "plan") return "Read";
   if (mode === "full_access") return "Full";
@@ -6178,8 +6087,4 @@ function permissionModePowerDetail(mode: StudioPermissionMode): string {
 
 function isNearScrollBottom(element: HTMLElement, threshold = 96): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
