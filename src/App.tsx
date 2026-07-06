@@ -138,8 +138,6 @@ import {
   type StudioToolCallResult,
   type StudioTraceSnapshot,
   type StudioUsageSnapshot,
-  type StudioRecentWorkspace,
-  type StudioWorkspacePermissions,
   type StudioAttachment,
   type StudioAttachmentSource,
   type StudioActiveProcess,
@@ -244,6 +242,7 @@ import {
   MIN_CHAT_RAIL_WIDTH_PERCENT,
   MAX_CHAT_RAIL_WIDTH_PERCENT,
 } from "./hooks/use-workbench-ui-prefs";
+import { useWorkspaceState } from "./hooks/use-workspace-state";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -471,7 +470,15 @@ export function App() {
   const cancelledStartRef = useRef(false);
   const runtimeReadyHydrationRef = useRef<string | null>(null);
   const worktreeTraceRefreshInFlightRef = useRef(false);
-  const [status, setStatus] = useState<StudioStatus | null>(null);
+  const {
+    status,
+    setStatus,
+    recentWorkspaces,
+    setRecentWorkspaces,
+    workspacePermissions,
+    setWorkspacePermissions,
+    hasWorkspace,
+  } = useWorkspaceState();
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
   const [selectedAction, setSelectedAction] = useState<StudioAction>(DEFAULT_COMPOSER_STATE.action);
@@ -580,8 +587,6 @@ export function App() {
   const [figmaError, setFigmaError] = useState<string | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<StudioConfig | null>(null);
   const [settingsSavedAt, setSettingsSavedAt] = useState<string | null>(null);
-  const [recentWorkspaces, setRecentWorkspaces] = useState<StudioRecentWorkspace[]>([]);
-  const [workspacePermissions, setWorkspacePermissions] = useState<StudioWorkspacePermissions | null>(null);
   const [selectedContextItem, setSelectedContextItem] = useState<ProjectMemoryItem | null>(null);
   const [contextItemDetail, setContextItemDetail] = useState<ProjectMemoryItem | null>(null);
   const [selectedKnowledgeItem, setSelectedKnowledgeItem] = useState<StudioKnowledgeItem | null>(null);
@@ -746,7 +751,6 @@ export function App() {
   const isSessionActive = isStartingSession || sessionStatus === "running" || sessionStatus === "queued";
   const harnessStatusCopy = harnessReadinessLabel(currentHarness);
   const effectiveRuntimeMetrics = status?.metrics ?? runtimeMetrics;
-  const hasWorkspace = Boolean((status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "").trim());
   const canRunSession = Boolean(hasWorkspace && runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
   const runDisabledMessage = runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace, effectiveAction, runtimeRecoveryMessage);
   const canContinueConversation = Boolean(activeConversationId && session && (session.status === "completed" || session.status === "interrupted") && (session.conversationId ?? session.id) === activeConversationId);
