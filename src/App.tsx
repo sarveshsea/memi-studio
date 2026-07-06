@@ -80,8 +80,6 @@ import {
   openWorkspace,
   startSession,
   subscribeDownloadEvents,
-  subscribeRuntimeLifecycle,
-  subscribeRuntimeLog,
   subscribeSession,
   updateNoteForkFile,
   validateNoteFork,
@@ -134,7 +132,6 @@ import {
   type StudioKnowledgeItem,
   type StudioPermissionMode,
   type StudioReviewPacket,
-  type StudioRuntimeLifecycleEvent,
   type StudioRuntimeMetrics,
   type StudioStatus,
   type StudioToolDefinition,
@@ -229,6 +226,17 @@ import {
 import { IASurfaceSkeleton, MermaidBoardSurfaceSkeleton } from "./surface-skeletons";
 import { useStableCallback } from "./use-stable-callback";
 import { notify } from "./notification-center";
+import {
+  useRuntimeLifecycle,
+  runtimeHealthFromStatus,
+  runtimeLifecycleEventIsFinalFailure,
+  runtimeLifecyclePhaseLabel,
+  runtimeHealthLabel,
+  runtimeHealthDisplayLabel,
+  isWorkspaceAccessBlockedMessage,
+  workspaceRecoveryDisplayMessage,
+  type RuntimeHealth,
+} from "./hooks/use-runtime-lifecycle";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -248,7 +256,6 @@ const DESIGN_LANE_ACTIONS = new Set<StudioAction>([
 ]);
 
 type RightPaneTab = WorkbenchRightPaneTab;
-type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
 // Client-side session-start lifecycle: covers the pre-session-id window
 // (queued/starting) where a request can still be aborted locally. Once a
 // session id exists, session/sessionStatus (deriveSessionStatus) take over
@@ -419,7 +426,6 @@ const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavaila
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
-const RUNTIME_LOG_TAIL_LIMIT = 200;
 const SESSION_START_TIMEOUT_MS = 30_000;
 const TRACE_REFRESH_DELAY_MS = 350;
 const WORKTREE_TRACE_REFRESH_MS = 12_000;
@@ -459,7 +465,6 @@ export function App() {
   const traceRefreshTimerRef = useRef<number | null>(null);
   const pendingTraceSessionIdRef = useRef<string | null>(null);
   const harnessReadinessRefreshAttemptsRef = useRef(0);
-  const runtimeStartupRefreshInFlightRef = useRef(false);
   // Distinguishes a user-initiated cancel from a timeout firing — both abort
   // the same in-flight request with the same AbortError, but should show
   // different messages (quiet vs "took too long to start").
@@ -525,10 +530,14 @@ export function App() {
   const [sessionLifecycle, setSessionLifecycle] = useState<SessionLifecycle>({ state: "idle" });
   const isStartingSession = sessionLifecycle.state === "starting";
   const [error, setError] = useState<string | null>(null);
-  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth>("starting");
-  const [runtimeRecoveryMessage, setRuntimeRecoveryMessage] = useState<string | null>(null);
-  const [runtimeLifecycleEvent, setRuntimeLifecycleEvent] = useState<StudioRuntimeLifecycleEvent | null>(null);
-  const [runtimeLogTail, setRuntimeLogTail] = useState<Array<{ stream: string; message: string; timestamp: string }>>([]);
+  const {
+    runtimeHealth,
+    setRuntimeHealth,
+    runtimeRecoveryMessage,
+    setRuntimeRecoveryMessage,
+    runtimeLifecycleEvent,
+    runtimeLogTail,
+  } = useRuntimeLifecycle(refresh);
   const [runtimeMetrics, setRuntimeMetrics] = useState<StudioRuntimeMetrics | null>(null);
   const [usageSnapshot, setUsageSnapshot] = useState<StudioUsageSnapshot | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -1113,50 +1122,6 @@ export function App() {
     };
   }, []);
 
-  // Live push feed of every runtime supervisor transition — primary
-  // readiness signal now, replacing the poll below for latency. Mount-once:
-  // the subscription itself never depends on component state.
-  useEffect(() => {
-    const unsubscribeLifecycle = subscribeRuntimeLifecycle((event) => {
-      // Note: intentionally does NOT touch runtimeRecoveryMessage — that
-      // stays sourced from refresh()'s actual backend error string (needed
-      // verbatim for the workspace-access-blocked heuristic below). The
-      // phase label derived from this event is surfaced as a separate,
-      // display-only prop instead of overwriting the raw error.
-      setRuntimeLifecycleEvent(event);
-      const nextHealth = runtimeHealthFromLifecycleEvent(event);
-      if (nextHealth) setRuntimeHealth(nextHealth);
-      if (nextHealth === "ready") {
-        void refresh();
-      }
-    });
-    const unsubscribeLog = subscribeRuntimeLog((line) => {
-      setRuntimeLogTail((current) => [...current, line].slice(-RUNTIME_LOG_TAIL_LIMIT));
-    });
-    return () => {
-      unsubscribeLifecycle();
-      unsubscribeLog();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (runtimeHealth !== "starting" && runtimeHealth !== "degraded") return undefined;
-    // Reconciliation fallback only — the lifecycle-event subscription above is
-    // now the primary readiness signal, so this no longer needs sub-second
-    // latency; it exists to recover if an event was ever missed.
-    const delay = runtimeHealth === "starting" ? 2000 : 5000;
-    const interval = window.setInterval(() => {
-      if (runtimeStartupRefreshInFlightRef.current) return;
-      runtimeStartupRefreshInFlightRef.current = true;
-      void refresh().finally(() => {
-        runtimeStartupRefreshInFlightRef.current = false;
-      });
-    }, delay);
-    return () => {
-      window.clearInterval(interval);
-      runtimeStartupRefreshInFlightRef.current = false;
-    };
-  }, [runtimeHealth]);
 
   useEffect(() => {
     if (runtimeHealth !== "ready") {
@@ -4977,106 +4942,7 @@ function RuntimeRecoveryStrip(props: {
   );
 }
 
-/**
- * Maps a pushed runtime lifecycle event to a health value. Returns null for
- * events with no health implication (raw stdout/stderr lines, pid-file
- * write failures) so the caller can leave the current health untouched.
- */
-function runtimeHealthFromLifecycleEvent(event: StudioRuntimeLifecycleEvent): RuntimeHealth | null {
-  const shouldRestart = event.payload.shouldRestart === true;
-  const exitedCleanly = event.payload.success === true;
-  switch (event.event) {
-    case "runtime.supervisor.queued":
-    case "runtime.supervisor.preparing":
-    case "runtime.spawned":
-      return "starting";
-    case "runtime.ready":
-    case "runtime.attached-existing":
-      return "ready";
-    case "runtime.status-timeout":
-    case "runtime.workspace-access-blocked":
-    case "runtime.port-blocked":
-    case "runtime.resolve-failed":
-    case "runtime.cache-failed":
-    case "runtime.spawn-failed":
-      return "degraded";
-    case "runtime.startup-timeout-recovery":
-      return shouldRestart ? "starting" : "degraded";
-    case "runtime.exit":
-      return exitedCleanly ? "offline" : shouldRestart ? "starting" : "degraded";
-    case "runtime.stop":
-      return "offline";
-    default:
-      return null;
-  }
-}
-
-/** A terminal failure the supervisor has given up retrying — distinct from a transient "degraded" that may still self-heal. */
-function runtimeLifecycleEventIsFinalFailure(event: StudioRuntimeLifecycleEvent | null): boolean {
-  if (!event) return false;
-  if (event.event === "runtime.startup-timeout-recovery") return event.payload.shouldRestart === false;
-  if (event.event === "runtime.exit") return event.payload.success !== true && event.payload.shouldRestart === false;
-  return false;
-}
-
-/** Human-readable phase label for the live status chip / recovery strip, derived from the last pushed lifecycle event. */
-function runtimeLifecyclePhaseLabel(event: StudioRuntimeLifecycleEvent | null): string | null {
-  if (!event) return null;
-  const shouldRestart = event.payload.shouldRestart === true;
-  const exitedCleanly = event.payload.success === true;
-  switch (event.event) {
-    case "runtime.supervisor.queued": return "Queued";
-    case "runtime.supervisor.preparing": return "Preparing runtime";
-    case "runtime.spawned": return "Starting runtime";
-    case "runtime.ready": return "Runtime ready";
-    case "runtime.attached-existing": return "Attached to existing runtime";
-    case "runtime.status-timeout": return "Runtime did not answer in time";
-    case "runtime.workspace-access-blocked": return "Workspace access blocked";
-    case "runtime.port-blocked": return "Port already in use";
-    case "runtime.resolve-failed": return "Could not resolve runtime";
-    case "runtime.cache-failed": return "Failed to prepare runtime cache";
-    case "runtime.spawn-failed": return "Failed to start runtime";
-    case "runtime.startup-timeout-recovery": return shouldRestart ? "Retrying after timeout" : "Gave up after timeout";
-    case "runtime.exit": return exitedCleanly ? "Runtime stopped" : shouldRestart ? "Retrying after crash" : "Runtime crashed — won't auto-retry";
-    case "runtime.stop": return "Runtime stopped";
-    default: return null;
-  }
-}
-
-function runtimeHealthFromStatus(status: StudioStatus): RuntimeHealth {
-  const runtimeStatus = status.runtime?.status;
-  if (runtimeStatus === "running") return "ready";
-  if (runtimeStatus === "starting") return "starting";
-  if (runtimeStatus === "stopped" || runtimeStatus === "error") return "degraded";
-  if (status.status === "running" || status.status === "ready") return "ready";
-  return "degraded";
-}
-
-function isWorkspaceAccessBlockedMessage(message: string | null | undefined): boolean {
-  const normalized = (message ?? "").trim();
-  return /\bmacOS blocked access\b/i.test(normalized)
-    && /\b(saved workspace|workspace|removable|network volumes?)\b/i.test(normalized);
-}
-
-function workspaceRecoveryDisplayMessage(message: string, health: RuntimeHealth): string {
-  if (isWorkspaceAccessBlockedMessage(message)) {
-    return "Reopen the project folder to restore macOS access.";
-  }
-  if (health === "starting") return "Starting local runtime...";
-  return trimText(message, 72);
-}
-
-function runtimeHealthLabel(health: RuntimeHealth): string {
-  if (health === "ready") return "Ready";
-  if (health === "starting") return "Starting";
-  if (health === "degraded") return "Degraded";
-  return "Offline";
-}
-
-function runtimeHealthDisplayLabel(health: RuntimeHealth, source?: string | null): string {
-  if (source === "attached-existing-runtime") return "Attached";
-  return runtimeHealthLabel(health);
-}
+// runtime lifecycle classification functions moved to ./hooks/use-runtime-lifecycle
 
 function runtimeTruthTitle(status: StudioStatus | null, recoveryMessage?: string | null): string {
   if (status?.runtime?.runtimeSource === "attached-existing-runtime") {
