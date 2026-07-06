@@ -175,6 +175,7 @@ import {
   RuntimeStatusChip,
   SettingsPanel,
   StudioControlIcon,
+  WelcomeSurface,
   WorkPacketPane,
   ActionChip,
   IconButton,
@@ -3852,6 +3853,17 @@ export function App() {
               >
                 {isStartingSession ? <span aria-hidden="true">...</span> : null}
               </IconButton>
+              {currentHarness?.authStatus === "needs_login" ? (
+                <button
+                  data-action-id="harness.reauthenticate"
+                  type="button"
+                  className="run-reauth-button"
+                  title={`Open Settings to re-authenticate ${currentHarness.label}`}
+                  onClick={() => openSettingsPanel("Agents")}
+                >
+                  Log in
+                </button>
+              ) : null}
             </div>
             {runBlockedMessage ? (
               <p className="composer-blocked-reason" data-composer-blocked-reason="run">{runBlockedMessage}</p>
@@ -4223,6 +4235,7 @@ export function App() {
           />
           <section className="console-content" data-console-content="primary">
             {error ? <div className="error">{error}</div> : null}
+            {hasWorkspace ? (
             <section
               className="agent-workbench-shell"
               data-agent-workbench="design-system"
@@ -4283,6 +4296,14 @@ export function App() {
                 </section>
               </section>
             </section>
+            ) : (
+              <WelcomeSurface
+                recentWorkspaces={recentWorkspaces}
+                onOpenFolder={() => void handleOpenWorkspace()}
+                onOpenRecent={(path) => void handleOpenWorkspace(path)}
+                onCreateWorkspace={() => void handleCreateWorkspace()}
+              />
+            )}
           </section>
         </section>
       </div>

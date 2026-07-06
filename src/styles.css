@@ -1382,6 +1382,21 @@ button.active,
 .work-packet-empty-starter-chip { min-height: 26px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); color: var(--ink); padding: var(--space-0) var(--space-2); font-size: var(--font-size-xs); cursor: pointer; }
 .work-packet-empty-starter-chip:hover { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 720px) { .work-packet-empty { grid-template-columns: minmax(0, 1fr); } }
+.welcome-surface { min-width: 0; display: grid; gap: var(--space-4); place-content: center; justify-items: center; text-align: center; height: 100%; padding: var(--space-4); }
+.welcome-surface-hero { display: grid; gap: var(--space-2); max-width: 480px; justify-items: center; }
+.welcome-surface-hero h2 { margin: var(--space-0); color: var(--ink); font-weight: var(--font-weight-medium); }
+.welcome-surface-hero p { margin: var(--space-0); color: var(--ink-muted); line-height: 1.5; }
+.welcome-surface-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1); margin-top: var(--space-1); }
+.welcome-surface-actions button { min-height: 32px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); color: var(--ink); padding: var(--space-1) var(--space-2); font-size: var(--font-size-sm); cursor: pointer; }
+.welcome-surface-actions button:hover { border-color: var(--line-strong); background: var(--surface-soft); }
+.welcome-surface-actions button.primary { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.welcome-surface-actions button.primary:hover { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+.welcome-surface-recent { display: grid; gap: var(--space-1); width: 100%; max-width: 420px; text-align: left; }
+.welcome-surface-recent-label { color: var(--ink-muted); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+.welcome-surface-recent-row { min-height: var(--control-height); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); padding: var(--space-1) var(--space-2); cursor: pointer; }
+.welcome-surface-recent-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-surface-recent-row > small { color: var(--ink-muted); }
+.welcome-surface-recent-row:hover { border-color: var(--line-strong); background: var(--surface-soft); }
 .conversation-scroll-region {
   flex: 1 1 auto;
   min-width: 0;
@@ -1993,6 +2008,8 @@ button.active,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.run-reauth-button { min-height: var(--control-height); flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--accent); border-radius: var(--radius-default); background: var(--accent); color: var(--surface); padding: var(--space-1) var(--space-2); font-size: var(--font-size-sm); cursor: pointer; }
+.run-reauth-button:hover { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
 .control-icon { width: var(--space-4); height: var(--space-4); flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .submit-button { margin-inline-start: auto; flex: 0 0 var(--run-button-width); max-width: var(--run-button-width); border-radius: var(--radius-default); }
 .review-chip {

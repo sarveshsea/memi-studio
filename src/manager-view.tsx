@@ -29,6 +29,8 @@ export interface ManagerViewProps {
   onSelect?: (task: ManagerTask) => void;
   onCancel?: (task: ManagerTask) => void;
   onApprove?: (task: ManagerTask) => void;
+  /** Optional — renders a "Create workspace" empty-state CTA when the workspace list is empty. */
+  onCreateWorkspace?: () => void;
 }
 
 const DEFAULT_SORT: ManagerSort = { field: "updatedAt", direction: "desc" };
@@ -147,6 +149,16 @@ export function ManagerView(props: ManagerViewProps) {
                 </small>
               </button>
             ))}
+            {workspaces.length === 0 && props.onCreateWorkspace ? (
+              <button
+                style={ITEM_BUTTON_BASE}
+                onClick={props.onCreateWorkspace}
+                type="button"
+              >
+                <span>Create workspace</span>
+                <small style={{ color: "var(--ink-muted)" }}>+</small>
+              </button>
+            ) : null}
           </div>
         </WorkbenchPanel>
       </div>
