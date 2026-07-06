@@ -403,6 +403,19 @@ export interface StudioRuntimeStatus {
   error?: string | null;
 }
 
+/**
+ * Pushed by the Rust supervisor (`studio-runtime-state` Tauri event) on every
+ * runtime lifecycle transition — spawn, ready, timeout, exit, restart
+ * decision. `event` mirrors the Rust-side lifecycle log event name (e.g.
+ * "runtime.spawned", "runtime.ready", "runtime.exit"); `payload` carries the
+ * same fields already written to the durable lifecycle log.
+ */
+export interface StudioRuntimeLifecycleEvent {
+  event: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
 export interface DesktopAppConfig {
   schemaVersion: 1;
   workspaceRoot: string;

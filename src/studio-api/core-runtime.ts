@@ -2,6 +2,7 @@
 // Copyright 2026 Humyn LLC
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   fetchJSON,
   fetchRuntimeStatusWithoutToken,
@@ -11,6 +12,7 @@ import {
 import type {
   DesktopAppConfig,
   StudioRecentWorkspace,
+  StudioRuntimeLifecycleEvent,
   StudioRuntimeMetrics,
   StudioRuntimeStatus,
   StudioStatus,
@@ -146,4 +148,51 @@ export async function createWorkspace(input: { parentPath?: string | null; name:
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ parentPath: input.parentPath ?? null, name: input.name }),
   });
+}
+
+/**
+ * Live push feed of every runtime supervisor state transition (spawn, ready,
+ * timeout, exit, restart decision) — the same events already written to the
+ * durable lifecycle log. Lets the UI react to readiness/failure instantly
+ * instead of waiting on the next status poll. No-ops outside Tauri (browser
+ * dev mode against the runtime directly has no supervisor to listen to).
+ * Returns an unsubscribe function.
+ */
+export function subscribeRuntimeLifecycle(handler: (event: StudioRuntimeLifecycleEvent) => void): () => void {
+  if (!hasTauri()) return () => {};
+  let unlisten: (() => void) | undefined;
+  let cancelled = false;
+  void listen<StudioRuntimeLifecycleEvent>("studio-runtime-state", (event) => {
+    if (!cancelled) handler(event.payload);
+  }).then((fn) => {
+    if (cancelled) {
+      fn();
+      return;
+    }
+    unlisten = fn;
+  });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
+/** Live tail of the runtime process's stdout/stderr, for the recovery card's log view. Returns an unsubscribe function. */
+export function subscribeRuntimeLog(handler: (line: { stream: string; message: string; timestamp: string }) => void): () => void {
+  if (!hasTauri()) return () => {};
+  let unlisten: (() => void) | undefined;
+  let cancelled = false;
+  void listen<{ stream: string; message: string; timestamp: string }>("studio-runtime-log", (event) => {
+    if (!cancelled) handler(event.payload);
+  }).then((fn) => {
+    if (cancelled) {
+      fn();
+      return;
+    }
+    unlisten = fn;
+  });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
 }

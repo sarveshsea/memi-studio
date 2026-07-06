@@ -68,6 +68,10 @@ export { CommandPalette } from "./workbench/command-palette";
 // Re-export the figma driver so the public surface is unchanged.
 export { FigmaDriver } from "./workbench/figma";
 
+// Runtime status chip (2.4 Phase A) — no prior public surface to preserve.
+export { RuntimeStatusChip } from "./workbench/runtime-status-chip";
+export type { RuntimeStatusChipHealth } from "./workbench/runtime-status-chip";
+
 // Re-export the work packet pane so the public surface is unchanged.
 export { WorkPacketPane } from "./workbench/work-packet";
 

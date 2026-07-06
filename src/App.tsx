@@ -79,6 +79,8 @@ import {
   openWorkspace,
   startSession,
   subscribeDownloadEvents,
+  subscribeRuntimeLifecycle,
+  subscribeRuntimeLog,
   subscribeSession,
   updateNoteForkFile,
   validateNoteFork,
@@ -131,6 +133,7 @@ import {
   type StudioKnowledgeItem,
   type StudioPermissionMode,
   type StudioReviewPacket,
+  type StudioRuntimeLifecycleEvent,
   type StudioRuntimeMetrics,
   type StudioStatus,
   type StudioToolDefinition,
@@ -169,6 +172,7 @@ import {
   FigmaDriver,
   MemoireLogoMark,
   ProjectSidebar,
+  RuntimeStatusChip,
   SettingsPanel,
   StudioControlIcon,
   WorkPacketPane,
@@ -403,6 +407,7 @@ const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavaila
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
+const RUNTIME_LOG_TAIL_LIMIT = 200;
 const TRACE_REFRESH_DELAY_MS = 350;
 const WORKTREE_TRACE_REFRESH_MS = 12_000;
 const PROJECT_SIDEBAR_COLLAPSED_KEY = "memoire.studio.projectSidebarCollapsed";
@@ -504,6 +509,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth>("starting");
   const [runtimeRecoveryMessage, setRuntimeRecoveryMessage] = useState<string | null>(null);
+  const [runtimeLifecycleEvent, setRuntimeLifecycleEvent] = useState<StudioRuntimeLifecycleEvent | null>(null);
+  const [runtimeLogTail, setRuntimeLogTail] = useState<Array<{ stream: string; message: string; timestamp: string }>>([]);
   const [runtimeMetrics, setRuntimeMetrics] = useState<StudioRuntimeMetrics | null>(null);
   const [usageSnapshot, setUsageSnapshot] = useState<StudioUsageSnapshot | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -1088,9 +1095,38 @@ export function App() {
     };
   }, []);
 
+  // Live push feed of every runtime supervisor transition — primary
+  // readiness signal now, replacing the poll below for latency. Mount-once:
+  // the subscription itself never depends on component state.
+  useEffect(() => {
+    const unsubscribeLifecycle = subscribeRuntimeLifecycle((event) => {
+      // Note: intentionally does NOT touch runtimeRecoveryMessage — that
+      // stays sourced from refresh()'s actual backend error string (needed
+      // verbatim for the workspace-access-blocked heuristic below). The
+      // phase label derived from this event is surfaced as a separate,
+      // display-only prop instead of overwriting the raw error.
+      setRuntimeLifecycleEvent(event);
+      const nextHealth = runtimeHealthFromLifecycleEvent(event);
+      if (nextHealth) setRuntimeHealth(nextHealth);
+      if (nextHealth === "ready") {
+        void refresh();
+      }
+    });
+    const unsubscribeLog = subscribeRuntimeLog((line) => {
+      setRuntimeLogTail((current) => [...current, line].slice(-RUNTIME_LOG_TAIL_LIMIT));
+    });
+    return () => {
+      unsubscribeLifecycle();
+      unsubscribeLog();
+    };
+  }, []);
+
   useEffect(() => {
     if (runtimeHealth !== "starting" && runtimeHealth !== "degraded") return undefined;
-    const delay = runtimeHealth === "starting" ? 750 : 2000;
+    // Reconciliation fallback only — the lifecycle-event subscription above is
+    // now the primary readiness signal, so this no longer needs sub-second
+    // latency; it exists to recover if an event was ever missed.
+    const delay = runtimeHealth === "starting" ? 2000 : 5000;
     const interval = window.setInterval(() => {
       if (runtimeStartupRefreshInFlightRef.current) return;
       runtimeStartupRefreshInFlightRef.current = true;
@@ -3394,6 +3430,7 @@ export function App() {
         <header className="panel-head">
           <div>
             <h2>{runPanelTitle}</h2>
+            <RuntimeStatusChip health={runtimeHealth} phaseLabel={runtimeLifecyclePhaseLabel(runtimeLifecycleEvent)} />
           </div>
           <div className="inline-actions">
             <IconButton actionId="right-pane.tab.run" ariaLabel="Run pane" title="Run" icon="details" onClick={() => chooseRightPane("run", "Run pane opened")} />
@@ -3431,6 +3468,9 @@ export function App() {
           <RuntimeRecoveryStrip
             health={runtimeHealth}
             message={runtimeRecoveryMessage}
+            phaseLabel={runtimeLifecyclePhaseLabel(runtimeLifecycleEvent)}
+            isFinalFailure={runtimeLifecycleEventIsFinalFailure(runtimeLifecycleEvent)}
+            logTail={runtimeLogTail}
             canRestart={canRestartStudioRuntime()}
             onRetry={refresh}
             onRestart={() => void handleRestartStudioRuntime()}
@@ -4810,6 +4850,9 @@ function updateSessionSummaryCollection(
 function RuntimeRecoveryStrip(props: {
   health: RuntimeHealth;
   message: string | null;
+  phaseLabel?: string | null;
+  isFinalFailure?: boolean;
+  logTail?: Array<{ stream: string; message: string; timestamp: string }>;
   canRestart: boolean;
   onRetry: () => void;
   onRestart: () => void;
@@ -4819,14 +4862,26 @@ function RuntimeRecoveryStrip(props: {
   const message = props.message
     ?? (props.health === "starting" ? "Starting local runtime..." : "Runtime unavailable");
   const needsWorkspaceAccess = isWorkspaceAccessBlockedMessage(message);
-  const displayMessage = workspaceRecoveryDisplayMessage(message, props.health);
-  const recoveryLabel = needsWorkspaceAccess ? "Workspace access" : runtimeHealthLabel(props.health);
+  // The live phase label (from the pushed lifecycle event) is more specific
+  // and more current than the polled fallback message — prefer it, unless
+  // the workspace-access-blocked heuristic needs to take over the whole strip.
+  const displayMessage = needsWorkspaceAccess
+    ? workspaceRecoveryDisplayMessage(message, props.health)
+    : props.phaseLabel ?? workspaceRecoveryDisplayMessage(message, props.health);
+  const recoveryLabel = needsWorkspaceAccess
+    ? "Workspace access"
+    : props.isFinalFailure
+      ? "Won't auto-retry"
+      : runtimeHealthLabel(props.health);
+  const [logExpanded, setLogExpanded] = useState(false);
+  const logTail = props.logTail ?? [];
   return (
     <section
       className="runtime-recovery-strip"
       data-runtime-recovery={props.health}
       data-runtime-health={props.health}
       data-runtime-recovery-copy="compact"
+      data-runtime-final-failure={props.isFinalFailure ? "true" : "false"}
       aria-label="Runtime recovery"
     >
       <strong>{recoveryLabel}</strong>
@@ -4838,8 +4893,89 @@ function RuntimeRecoveryStrip(props: {
         <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
       )}
       <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
+      {logTail.length > 0 ? (
+        <button
+          data-action-id="runtime.recovery.toggle-log"
+          type="button"
+          className="runtime-recovery-log-toggle"
+          onClick={() => setLogExpanded((current) => !current)}
+        >
+          {logExpanded ? "Hide log" : "View log"}
+        </button>
+      ) : null}
+      {logExpanded && logTail.length > 0 ? (
+        <pre className="runtime-recovery-log-tail" data-runtime-log-tail="expanded">
+          {logTail.map((line) => `[${line.stream}] ${line.message}`).join("\n")}
+        </pre>
+      ) : null}
     </section>
   );
+}
+
+/**
+ * Maps a pushed runtime lifecycle event to a health value. Returns null for
+ * events with no health implication (raw stdout/stderr lines, pid-file
+ * write failures) so the caller can leave the current health untouched.
+ */
+function runtimeHealthFromLifecycleEvent(event: StudioRuntimeLifecycleEvent): RuntimeHealth | null {
+  const shouldRestart = event.payload.shouldRestart === true;
+  const exitedCleanly = event.payload.success === true;
+  switch (event.event) {
+    case "runtime.supervisor.queued":
+    case "runtime.supervisor.preparing":
+    case "runtime.spawned":
+      return "starting";
+    case "runtime.ready":
+    case "runtime.attached-existing":
+      return "ready";
+    case "runtime.status-timeout":
+    case "runtime.workspace-access-blocked":
+    case "runtime.port-blocked":
+    case "runtime.resolve-failed":
+    case "runtime.cache-failed":
+    case "runtime.spawn-failed":
+      return "degraded";
+    case "runtime.startup-timeout-recovery":
+      return shouldRestart ? "starting" : "degraded";
+    case "runtime.exit":
+      return exitedCleanly ? "offline" : shouldRestart ? "starting" : "degraded";
+    case "runtime.stop":
+      return "offline";
+    default:
+      return null;
+  }
+}
+
+/** A terminal failure the supervisor has given up retrying — distinct from a transient "degraded" that may still self-heal. */
+function runtimeLifecycleEventIsFinalFailure(event: StudioRuntimeLifecycleEvent | null): boolean {
+  if (!event) return false;
+  if (event.event === "runtime.startup-timeout-recovery") return event.payload.shouldRestart === false;
+  if (event.event === "runtime.exit") return event.payload.success !== true && event.payload.shouldRestart === false;
+  return false;
+}
+
+/** Human-readable phase label for the live status chip / recovery strip, derived from the last pushed lifecycle event. */
+function runtimeLifecyclePhaseLabel(event: StudioRuntimeLifecycleEvent | null): string | null {
+  if (!event) return null;
+  const shouldRestart = event.payload.shouldRestart === true;
+  const exitedCleanly = event.payload.success === true;
+  switch (event.event) {
+    case "runtime.supervisor.queued": return "Queued";
+    case "runtime.supervisor.preparing": return "Preparing runtime";
+    case "runtime.spawned": return "Starting runtime";
+    case "runtime.ready": return "Runtime ready";
+    case "runtime.attached-existing": return "Attached to existing runtime";
+    case "runtime.status-timeout": return "Runtime did not answer in time";
+    case "runtime.workspace-access-blocked": return "Workspace access blocked";
+    case "runtime.port-blocked": return "Port already in use";
+    case "runtime.resolve-failed": return "Could not resolve runtime";
+    case "runtime.cache-failed": return "Failed to prepare runtime cache";
+    case "runtime.spawn-failed": return "Failed to start runtime";
+    case "runtime.startup-timeout-recovery": return shouldRestart ? "Retrying after timeout" : "Gave up after timeout";
+    case "runtime.exit": return exitedCleanly ? "Runtime stopped" : shouldRestart ? "Retrying after crash" : "Runtime crashed — won't auto-retry";
+    case "runtime.stop": return "Runtime stopped";
+    default: return null;
+  }
 }
 
 function runtimeHealthFromStatus(status: StudioStatus): RuntimeHealth {
