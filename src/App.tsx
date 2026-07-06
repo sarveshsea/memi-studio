@@ -249,6 +249,14 @@ const DESIGN_LANE_ACTIONS = new Set<StudioAction>([
 
 type RightPaneTab = WorkbenchRightPaneTab;
 type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
+// Client-side session-start lifecycle: covers the pre-session-id window
+// (queued/starting) where a request can still be aborted locally. Once a
+// session id exists, session/sessionStatus (deriveSessionStatus) take over
+// as the source of truth — this type intentionally does not track
+// "running"/"done" in detail, only the cancellable starting window.
+type SessionLifecycle =
+  | { state: "idle" }
+  | { state: "starting"; abortController: AbortController };
 type TruthStripStatus = "ready" | "warn" | "missing" | "unknown";
 type DesignerReadinessStatus = "ready" | "warn" | "missing";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
@@ -412,6 +420,7 @@ const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeSt
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
 const RUNTIME_LOG_TAIL_LIMIT = 200;
+const SESSION_START_TIMEOUT_MS = 30_000;
 const TRACE_REFRESH_DELAY_MS = 350;
 const WORKTREE_TRACE_REFRESH_MS = 12_000;
 const PROJECT_SIDEBAR_COLLAPSED_KEY = "memoire.studio.projectSidebarCollapsed";
@@ -451,6 +460,10 @@ export function App() {
   const pendingTraceSessionIdRef = useRef<string | null>(null);
   const harnessReadinessRefreshAttemptsRef = useRef(0);
   const runtimeStartupRefreshInFlightRef = useRef(false);
+  // Distinguishes a user-initiated cancel from a timeout firing — both abort
+  // the same in-flight request with the same AbortError, but should show
+  // different messages (quiet vs "took too long to start").
+  const cancelledStartRef = useRef(false);
   const runtimeReadyHydrationRef = useRef<string | null>(null);
   const worktreeTraceRefreshInFlightRef = useRef(false);
   const [status, setStatus] = useState<StudioStatus | null>(null);
@@ -509,7 +522,8 @@ export function App() {
   const [selectedEffort, setSelectedEffort] = useState<StudioEffort | null>(null);
   const [events, setEvents] = useState<StudioEvent[]>([]);
   const [serverTrace, setServerTrace] = useState<StudioTraceSnapshot | null>(null);
-  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [sessionLifecycle, setSessionLifecycle] = useState<SessionLifecycle>({ state: "idle" });
+  const isStartingSession = sessionLifecycle.state === "starting";
   const [error, setError] = useState<string | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth>("starting");
   const [runtimeRecoveryMessage, setRuntimeRecoveryMessage] = useState<string | null>(null);
@@ -2362,7 +2376,9 @@ export function App() {
     setRunBlockedMessage(null);
     setCollapsedBlockIds(new Set());
     setStartingPrompt(text.trim());
-    setIsStartingSession(true);
+    const abortController = new AbortController();
+    setSessionLifecycle({ state: "starting", abortController });
+    const timeoutId = window.setTimeout(() => abortController.abort(), SESSION_START_TIMEOUT_MS);
     const continuingConversationId = options.conversationIdOverride !== undefined
       ? options.conversationIdOverride
       : canContinueConversation
@@ -2381,7 +2397,7 @@ export function App() {
         ...(conversationGoal.trim() ? { goal: conversationGoal.trim() } : {}),
         ...(activeModelId ? { model: activeModelId } : {}),
         ...(selectedEffort && effortOptions.includes(selectedEffort) ? { effort: selectedEffort } : {}),
-      });
+      }, { signal: abortController.signal });
       setAttachments([]);
       setSession(nextSession);
       setGoalEditorOpen(false);
@@ -2389,17 +2405,41 @@ export function App() {
       setRecentSessions((current) => [nextSession, ...current.filter((candidate) => candidate.id !== nextSession.id)].slice(0, 8));
       await refreshSessionTrace(nextSession.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const wasAborted = err instanceof DOMException && err.name === "AbortError";
+      if (wasAborted) {
+        const timedOut = !cancelledStartRef.current;
+        const message = timedOut
+          ? "Session took too long to start."
+          : "Session start cancelled.";
+        setError(message);
+        if (timedOut) notify(classifyError(new Error(message), { hasWorkspace, runtimeHealth }));
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        notify(classifyError(err, { hasWorkspace, runtimeHealth }));
+      }
       if (options.restorePromptOnFailure) {
         setPrompt((current) => current.trim() ? current : text);
       }
     } finally {
+      window.clearTimeout(timeoutId);
+      cancelledStartRef.current = false;
       setStartingPrompt("");
-      setIsStartingSession(false);
+      setSessionLifecycle((current) => current.state === "starting" ? { state: "idle" } : current);
     }
   }
 
+  function cancelStartingSession() {
+    if (sessionLifecycle.state !== "starting") return;
+    cancelledStartRef.current = true;
+    sessionLifecycle.abortController.abort();
+  }
+
   async function cancel() {
+    if (isStartingSession) {
+      cancelStartingSession();
+      return;
+    }
     if (!session) return;
     await cancelSession(session.id);
     await refreshSessionTrace(session.id);
@@ -3830,7 +3870,7 @@ export function App() {
                 <StudioControlIcon name="warning" />
                 <span>{usageLimitChipLabel(usageSnapshot, usageWarning)}</span>
               </button>
-              {session && isSessionActive ? (
+              {(session || isStartingSession) && isSessionActive ? (
                 <IconButton
                   {...workbenchAction("stop")}
                   actionId={workbenchAction("stop").id}
