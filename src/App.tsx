@@ -136,7 +136,6 @@ import {
   type StudioStatus,
   type StudioToolDefinition,
   type StudioToolCallResult,
-  type StudioTraceSnapshot,
   type StudioUsageSnapshot,
   type StudioAttachment,
   type StudioAttachmentSource,
@@ -243,6 +242,7 @@ import {
   MAX_CHAT_RAIL_WIDTH_PERCENT,
 } from "./hooks/use-workbench-ui-prefs";
 import { useWorkspaceState } from "./hooks/use-workspace-state";
+import { useSessionRecords } from "./hooks/use-session-records";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -520,8 +520,16 @@ export function App() {
   const [contextFilter, setContextFilter] = useState("all");
   const [prompt, setPrompt] = useState("");
   const [slashCommandIndex, setSlashCommandIndex] = useState(0);
-  const [session, setSession] = useState<SessionSummary | null>(null);
-  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
+  const {
+    session,
+    setSession,
+    recentSessions,
+    setRecentSessions,
+    events,
+    setEvents,
+    serverTrace,
+    setServerTrace,
+  } = useSessionRecords();
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversationGoal, setConversationGoal] = useState<string>("");
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
@@ -531,8 +539,6 @@ export function App() {
   const [harnessModelRegistries, setHarnessModelRegistries] = useState<Record<string, HarnessModelRegistry>>({});
   const [selectedModelByHarness, setSelectedModelByHarness] = useState<Record<string, string>>({});
   const [selectedEffort, setSelectedEffort] = useState<StudioEffort | null>(null);
-  const [events, setEvents] = useState<StudioEvent[]>([]);
-  const [serverTrace, setServerTrace] = useState<StudioTraceSnapshot | null>(null);
   const [sessionLifecycle, setSessionLifecycle] = useState<SessionLifecycle>({ state: "idle" });
   const isStartingSession = sessionLifecycle.state === "starting";
   const [error, setError] = useState<string | null>(null);
