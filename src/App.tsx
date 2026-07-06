@@ -18,6 +18,7 @@ import {
   callComputerAction,
   canRestartStudioRuntime,
   captureAttachment,
+  classifyError,
   captureDesignSystemArtifact,
   captureReviewPacket,
   archiveDesignChangelogEntry,
@@ -171,6 +172,7 @@ import {
   DesignSystemReviewSurface,
   FigmaDriver,
   MemoireLogoMark,
+  NotificationCenter,
   ProjectSidebar,
   RuntimeStatusChip,
   SettingsPanel,
@@ -226,6 +228,7 @@ import {
 } from "./studio-workbench";
 import { IASurfaceSkeleton, MermaidBoardSurfaceSkeleton } from "./surface-skeletons";
 import { useStableCallback } from "./use-stable-callback";
+import { notify } from "./notification-center";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -4189,6 +4192,7 @@ export function App() {
                 <StudioControlIcon name="dark" />
               </button>
             </div>
+            <NotificationCenter />
             <button
               aria-label="Settings"
               className="topbar-icon-button"
