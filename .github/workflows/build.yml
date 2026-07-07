@@ -53,8 +53,6 @@ jobs:
       - license-check
       - product-hygiene
     runs-on: macos-14
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
     strategy:
       fail-fast: false
       matrix:
@@ -84,7 +82,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
+            ~/Library/Caches/cv.memoire.studio/cargo-target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.target }}-
@@ -105,7 +103,7 @@ jobs:
         with:
           name: memi-studio-${{ matrix.arch }}
           path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
-            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            ~/Library/Caches/cv.memoire.studio/cargo-target/${{ matrix.target }}/release/bundle/macos/*.app
+            ~/Library/Caches/cv.memoire.studio/cargo-target/${{ matrix.target }}/release/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
