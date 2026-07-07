@@ -3247,77 +3247,89 @@ export function App() {
             </button>
           </div>
         </header>
-        <div className="scenario-controls">
-          <label data-research-evidence-source={researchSource}>
-            <span>Source</span>
-            <select aria-label="Research source" value={researchSource} onChange={(event) => setResearchSource(event.target.value)}>
-              <option value="research-store">Research store</option>
-              <option value="agent-captures">Agent captures</option>
-              <option value="browser-evidence">Browser evidence</option>
-              <option value="knowledge">Knowledge</option>
-              <option value="manual">Manual brief</option>
-            </select>
-          </label>
-          <label>
-            <span>Hypothesis</span>
-            <input value={scenarioHypothesis} onChange={(event) => setScenarioHypothesis(event.target.value)} />
-          </label>
-          <label>
-            <span>Variable</span>
-            <input value={scenarioVariable} onChange={(event) => setScenarioVariable(event.target.value)} />
-          </label>
-        </div>
-        <div className="research-source-strip" data-research-source-strip="research-lab">
-          {researchSources.length ? researchSources.slice(0, 5).map((source) => (
-            <span key={`${source.url}-${source.title}`} title={source.url}>{trimText(source.title || source.url, 34)}</span>
-          )) : <button data-smart-empty-state="memory-sync" type="button" onClick={() => void refreshKnowledge()}>Sync</button>}
-        </div>
-        <div className="research-lab-surfaces" data-research-lab="pm-harness-study">
-          <article data-harness-study={harnessStudy?.harnessId ?? researchStudyHarness?.id ?? "primary"}>
-            <span>Harness Study</span>
-            <strong>{harnessStudy ? `${harnessStudy.label} ${harnessStudy.available ? "ready" : "offline"}` : "Not run"}</strong>
-            <small>{harnessStudy?.model ?? `Study ${researchStudyHarness?.label ?? "agent"}`}</small>
-            <div>
-              {harnessStudy?.toolsets?.enabled?.slice(0, 4).map((toolset) => (
-                <em key={toolset}>{toolset}</em>
+        <section className="scenario-lab-tier" data-scenario-lab-tier="setup">
+          <p className="eyebrow">Setup</p>
+          <div className="scenario-controls">
+            <label>
+              <span>Source</span>
+              <select aria-label="Research source" value={researchSource} onChange={(event) => setResearchSource(event.target.value)}>
+                <option value="research-store">Research store</option>
+                <option value="agent-captures">Agent captures</option>
+                <option value="browser-evidence">Browser evidence</option>
+                <option value="knowledge">Knowledge</option>
+                <option value="manual">Manual brief</option>
+              </select>
+            </label>
+            <label>
+              <span>Hypothesis</span>
+              <input value={scenarioHypothesis} onChange={(event) => setScenarioHypothesis(event.target.value)} />
+            </label>
+            <label>
+              <span>Variable</span>
+              <input value={scenarioVariable} onChange={(event) => setScenarioVariable(event.target.value)} />
+            </label>
+          </div>
+          <div className="research-source-strip" data-research-source-strip="research-lab">
+            {researchSources.length ? researchSources.slice(0, 5).map((source) => (
+              <span key={`${source.url}-${source.title}`} title={source.url}>{trimText(source.title || source.url, 34)}</span>
+            )) : <button data-smart-empty-state="memory-sync" type="button" onClick={() => void refreshKnowledge()}>Sync</button>}
+            {researchSources.length > 5 ? <span className="scenario-more-count">+{researchSources.length - 5} more</span> : null}
+          </div>
+        </section>
+        <section className="scenario-lab-tier" data-scenario-lab-tier="run">
+          <p className="eyebrow">Run</p>
+          <div className="research-lab-surfaces" data-research-lab="pm-harness-study">
+            <article data-harness-study={harnessStudy?.harnessId ?? researchStudyHarness?.id ?? "primary"}>
+              <span>Harness Study</span>
+              <strong>{harnessStudy ? `${harnessStudy.label} ${harnessStudy.available ? "ready" : "offline"}` : "Not run"}</strong>
+              <small>{harnessStudy?.model ?? `Study ${researchStudyHarness?.label ?? "agent"}`}</small>
+              <div>
+                {harnessStudy?.toolsets?.enabled?.slice(0, 4).map((toolset) => (
+                  <em key={toolset}>{toolset}</em>
+                ))}
+              </div>
+            </article>
+            <article data-pm-pattern-library>
+              <span>PM Pattern Library</span>
+              <strong>{researchPatterns.length ? `${researchPatterns.length} patterns` : "No patterns"}</strong>
+              {researchPatterns.slice(0, 3).map((pattern) => (
+                <small key={pattern.id} title={pattern.summary}>{pattern.category}: {trimText(pattern.title, 42)}</small>
               ))}
+              {!researchPatterns.length ? <small>Run patterns</small> : null}
+            </article>
+            <article data-research-evidence-source={researchSource}>
+              <span>Evidence Intake</span>
+              <strong>{researchSource.replace(/-/g, " ")}</strong>
+              <small>{researchSources.length ? `${researchSources.length} sources` : "Sync or capture agent evidence"}</small>
+            </article>
+            <article data-scenario-compare-view="hypothesis-matrix-summary">
+              <span>Hypothesis Matrix</span>
+              <strong>{scenarioMatrix?.runs?.length ? `${scenarioMatrix.runs.length} runs` : "No runs"}</strong>
+              <small>{scenarioMatrix?.comparison?.winnerRunId ?? "Run matrix"}</small>
+            </article>
+          </div>
+          {scenarioModels.length ? (
+            <div className="scenario-model-matrix" data-scenario-model-matrix="codex-first">
+              {scenarioModels.slice(0, 5).map((profile) => (
+                <article key={profile.id}>
+                  <span>{profile.provider}</span>
+                  <strong>{profile.label}</strong>
+                  <small>{profile.available ? "ready" : "offline"} / {profile.model}</small>
+                </article>
+              ))}
+              {scenarioModels.length > 5 ? <span className="scenario-more-count">+{scenarioModels.length - 5} more</span> : null}
             </div>
-          </article>
-          <article data-pm-pattern-library>
-            <span>PM Pattern Library</span>
-            <strong>{researchPatterns.length ? `${researchPatterns.length} patterns` : "No patterns"}</strong>
-            {researchPatterns.slice(0, 3).map((pattern) => (
-              <small key={pattern.id} title={pattern.summary}>{pattern.category}: {trimText(pattern.title, 42)}</small>
-            ))}
-            {!researchPatterns.length ? <small>Run patterns</small> : null}
-          </article>
-          <article data-research-evidence-source={researchSource}>
-            <span>Evidence Intake</span>
-            <strong>{researchSource.replace(/-/g, " ")}</strong>
-            <small>{researchSources.length ? `${researchSources.length} sources` : "Sync or capture agent evidence"}</small>
-          </article>
-          <article data-scenario-compare-view="hypothesis-matrix-summary">
-            <span>Hypothesis Matrix</span>
-            <strong>{scenarioMatrix?.runs?.length ? `${scenarioMatrix.runs.length} runs` : "No runs"}</strong>
-            <small>{scenarioMatrix?.comparison?.winnerRunId ?? "Run matrix"}</small>
-          </article>
-        </div>
-        <div className="scenario-model-matrix" data-scenario-model-matrix="codex-first">
-          {scenarioModels.length ? scenarioModels.slice(0, 5).map((profile) => (
-            <article key={profile.id}>
-              <span>{profile.provider}</span>
-              <strong>{profile.label}</strong>
-              <small>{profile.available ? "ready" : "offline"} / {profile.model}</small>
-            </article>
-          )) : (
-            <article>
-              <span>Models</span>
-              <strong>Not loaded</strong>
-              <small>Run matrix</small>
-            </article>
+          ) : (
+            <div className="pane-empty-state" data-empty-variant="compact" data-scenario-model-matrix="codex-first">
+              <h3>No models loaded</h3>
+              <p>Run the matrix to load available model profiles for this scenario.</p>
+            </div>
           )}
-        </div>
-        <div className="scenario-grid">
+        </section>
+        <section className="scenario-lab-tier" data-scenario-lab-tier="results">
+          <p className="eyebrow">Results</p>
+          {!latestMatrixRun ? <p className="scenario-preview-caption">Preview — run matrix to populate</p> : null}
+          <div className="scenario-grid">
           <section className="scenario-graph-panel" aria-label="Agent cohort graph" data-scenario-live-graph="round-state" data-scenario-cohort-editor="research-backed">
             <svg viewBox="0 0 460 280" role="img" aria-label="Scenario agent graph">
               {edges.map(([sourceId, targetId]) => {
@@ -3431,6 +3443,7 @@ export function App() {
                 <small title={item.outputPath}>{item.outputPath}</small>
               </article>
             ))}
+            {scenarioFigJamExports.length > 3 ? <span className="scenario-more-count">+{scenarioFigJamExports.length - 3} more</span> : null}
           </section>
           <section className="scenario-compare-view" aria-label="Hypothesis comparison" data-scenario-compare-view="hypothesis-matrix">
             <div>
@@ -3439,7 +3452,8 @@ export function App() {
             </div>
             <p>{scenarioMatrix?.comparison?.summary ?? "No matrix"}</p>
           </section>
-        </div>
+          </div>
+        </section>
       </section>
     );
   }
@@ -3942,6 +3956,7 @@ export function App() {
   }
 
   function renderChangesCockpitPane() {
+    const hasChanges = (designTrace?.files.length ?? 0) > 0;
     return (
       <section className="agent-cockpit-pane" data-agent-cockpit="changes" data-pane-intent-surface="changes">
         <section className="design-system-trace-panel cockpit-card" data-design-system-trace="backend-review">
@@ -3954,16 +3969,19 @@ export function App() {
             <strong>{designTrace?.reviewLabel ?? "Trace idle"}</strong>
             <small>{designTrace?.status ?? "checking"}</small>
           </div>
-          <div className="trace-file-list">
-            {(designTrace?.designSystemFiles.length ? designTrace.designSystemFiles : designTrace?.files ?? []).slice(0, 12).map((file) => (
-              <article key={file.path}>
-                <span>{file.path}</span>
-                <small>{file.kind} · {file.status} · +{file.insertions} -{file.deletions}</small>
-              </article>
-            ))}
-            {designTrace && designTrace.files.length === 0 ? <span className="empty">Clean</span> : null}
-            {designTrace?.error ? <span className="error">{designTrace.error}</span> : null}
-          </div>
+          {hasChanges ? (
+            <ChangedFilesPanel
+              trace={designTrace}
+              variant="full"
+              onReview={() => chooseRightPane("design-system", "Trace review opened")}
+              onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
+            />
+          ) : (
+            <div className="pane-empty-state" data-empty-variant="compact" data-smart-empty-state="changes-clean">
+              <h3>Clean worktree</h3>
+              <p>No changed files since the last trace refresh. Run the agent or refresh to pick up new edits.</p>
+            </div>
+          )}
         </section>
       </section>
     );
@@ -4957,23 +4975,25 @@ function RuntimeRecoveryStrip(props: {
     >
       <strong>{recoveryLabel}</strong>
       <span title={message}>{displayMessage}</span>
-      {needsWorkspaceAccess ? null : <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>}
-      {needsWorkspaceAccess ? (
-        <button data-action-id="workspace.reauthorize" type="button" onClick={props.onOpenWorkspace}>Open folder</button>
-      ) : (
-        <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
-      )}
-      <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
-      {logTail.length > 0 ? (
-        <button
-          data-action-id="runtime.recovery.toggle-log"
-          type="button"
-          className="runtime-recovery-log-toggle"
-          onClick={() => setLogExpanded((current) => !current)}
-        >
-          {logExpanded ? "Hide log" : "View log"}
-        </button>
-      ) : null}
+      <div className="runtime-recovery-actions">
+        {needsWorkspaceAccess ? null : <button data-action-id="runtime.retry" type="button" onClick={props.onRetry}>Retry</button>}
+        {needsWorkspaceAccess ? (
+          <button data-action-id="workspace.reauthorize" type="button" onClick={props.onOpenWorkspace}>Open folder</button>
+        ) : (
+          <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
+        )}
+        <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
+        {logTail.length > 0 ? (
+          <button
+            data-action-id="runtime.recovery.toggle-log"
+            type="button"
+            className="runtime-recovery-log-toggle"
+            onClick={() => setLogExpanded((current) => !current)}
+          >
+            {logExpanded ? "Hide log" : "View log"}
+          </button>
+        ) : null}
+      </div>
       {logExpanded && logTail.length > 0 ? (
         <pre className="runtime-recovery-log-tail" data-runtime-log-tail="expanded">
           {logTail.map((line) => `[${line.stream}] ${line.message}`).join("\n")}

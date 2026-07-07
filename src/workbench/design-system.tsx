@@ -242,8 +242,11 @@ function DesignSystemReviewSurfaceImpl(props: {
             <p className="eyebrow">Design system</p>
             <h2>Memory</h2>
           </div>
-          <span>idle</span>
         </header>
+        <div className="pane-empty-state" data-empty-variant="compact">
+          <h3>No design system artifact yet</h3>
+          <p>Artifacts capture tokens, components, and brand references pulled from Figma or captured live from an agent session, then land here for review before they become the system of record.</p>
+        </div>
       </section>
     );
   }
@@ -292,7 +295,9 @@ function DesignSystemReviewSurfaceImpl(props: {
           return (
             <article className="review-section" data-review-section={section.kind} data-review-state={section.reviewState} key={section.id}>
               <button className="review-section-trigger" data-action-id={`artifact.section.${section.kind}`} type="button" onClick={() => toggle(section.id)}>
-                <span>{open ? "v" : ">"}</span>
+                <span className="review-section-disclosure" data-open={String(open)} aria-hidden="true">
+                  <StudioControlIcon name={open ? "collapse" : "expand"} />
+                </span>
                 <strong>{section.title}</strong>
                 <small>{section.summary}</small>
                 <em>{reviewStateLabel(section.reviewState)}</em>
@@ -436,12 +441,15 @@ export function SourceReferenceChips({ refs }: { refs: DesignSystemArtifact["sou
 }
 
 function DesignSystemSandbox({ artifact, figmaStatus }: { artifact: DesignSystemArtifact; figmaStatus: FigmaStatus | null }) {
-  const bridge = isFigmaPluginConnected(figmaStatus) ? "plugin connected" : isFigmaBridgeRunning(figmaStatus) ? "bridge running" : "bridge stopped";
+  const pluginConnected = isFigmaPluginConnected(figmaStatus);
+  const bridgeRunning = isFigmaBridgeRunning(figmaStatus);
+  const bridge = pluginConnected ? "plugin connected" : bridgeRunning ? "bridge running" : "bridge stopped";
+  const figmaAccent = pluginConnected ? "accent" : bridgeRunning ? "ok" : "warn";
   return (
     <section className="design-system-sandbox" data-design-system-sandbox="local-container">
       <article className="metric-chip"><strong>Refs</strong><span>{artifact.sections.length} / {artifact.sourceRefs.length}</span></article>
       <article className="metric-chip"><strong>Agent</strong><span>{artifact.createdByHarness}</span></article>
-      <article className="metric-chip"><strong>Figma</strong><span>{bridge}{figmaStatus?.port ? ` / :${figmaStatus.port}` : ""}</span></article>
+      <article className="metric-chip" data-status-accent={figmaAccent}><strong>Figma</strong><span>{bridge}{figmaStatus?.port ? ` / :${figmaStatus.port}` : ""}</span></article>
       <article className="metric-chip"><strong>Handoff</strong><span>tokens / components</span></article>
     </section>
   );
@@ -719,30 +727,57 @@ function DesignChangelogPageImpl(props: {
         <button aria-selected={filter === "archived"} className={filter === "archived" ? "active" : ""} data-design-changelog-filter="archived" data-action-id="design-changelog.filter.archived" type="button" onClick={() => setFilter("archived")}>Archived</button>
       </div>
 
-      {props.error ? <p className="design-changelog-warning">{props.error}</p> : null}
+      {props.error ? (
+        <div className="design-changelog-error-banner" data-status-accent="danger" role="alert">
+          <p>{props.error}</p>
+        </div>
+      ) : null}
 
       <div className="design-changelog-layout">
         <div className="design-changelog-list" data-design-changelog-list="timeline">
-          {filteredEntries.map((entry) => (
-            <article className="design-changelog-card" data-design-changelog-entry={entry.id} data-status={entry.status} key={entry.id}>
-              <button data-action-id={`design-changelog.edit.${entry.id}`} type="button" onClick={() => openEntry(entry)}>
-                <span>{entry.authoredBy === "human" ? "Manual" : "Agent captured"}</span>
-                <strong>{entry.title}</strong>
-                <small>{entry.harness ?? "studio"} / {entry.action ?? "design"} / {formatTime(entry.updatedAt)}</small>
-                <p>{entry.summary}</p>
-                <span>{entry.tags.slice(0, 4).join(" / ") || "untagged"}</span>
-                <span>{entry.fileRefs.length} files / {entry.eventIds.length} events</span>
-              </button>
-              {entry.captureWarnings.length > 0 ? (
-                <p className="design-changelog-warning">{entry.captureWarnings[0]}</p>
-              ) : null}
-            </article>
-          ))}
-          {filteredEntries.length === 0 ? <p className="empty">No changelog entries for this filter.</p> : null}
+          {props.loading && filteredEntries.length === 0 ? (
+            <div className="surface-skeleton" data-skeleton="design-changelog" aria-busy="true">
+              <div className="skeleton-block skeleton-row" aria-hidden="true" />
+              <div className="skeleton-block skeleton-row" aria-hidden="true" />
+              <div className="skeleton-block skeleton-row" aria-hidden="true" />
+            </div>
+          ) : null}
+          {filteredEntries.map((entry) => {
+            const cardAccent = entry.captureWarnings.length > 0 ? "warn" : entry.authoredBy === "agent" ? "accent" : undefined;
+            const extraWarnings = entry.captureWarnings.slice(1);
+            return (
+              <article className="design-changelog-card" data-design-changelog-entry={entry.id} data-status={entry.status} data-status-accent={cardAccent} key={entry.id}>
+                <button data-action-id={`design-changelog.edit.${entry.id}`} type="button" onClick={() => openEntry(entry)}>
+                  <span>{entry.authoredBy === "human" ? "Manual" : "Agent captured"}</span>
+                  <strong>{entry.title}</strong>
+                  <small>{entry.harness ?? "studio"} / {entry.action ?? "design"} / {formatTime(entry.updatedAt)}</small>
+                  <p>{entry.summary}</p>
+                  <div className="design-changelog-tags">
+                    {entry.tags.length ? entry.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>) : <span>untagged</span>}
+                  </div>
+                  <span>{entry.fileRefs.length} files / {entry.eventIds.length} events</span>
+                </button>
+                {entry.captureWarnings.length > 0 ? (
+                  <p className="design-changelog-warning design-changelog-warning-compact">
+                    {entry.captureWarnings[0]}
+                    {extraWarnings.length > 0 ? (
+                      <span title={extraWarnings.join("\n")}> +{extraWarnings.length} more</span>
+                    ) : null}
+                  </p>
+                ) : null}
+              </article>
+            );
+          })}
+          {!props.loading && filteredEntries.length === 0 ? (
+            <div className="pane-empty-state" data-empty-variant="compact">
+              <h3>No changelog entries</h3>
+              <p>No changelog entries for this filter. Design decisions captured from agent sessions or logged manually will show up here.</p>
+            </div>
+          ) : null}
         </div>
 
         <aside className="design-changelog-editor" data-design-changelog-editor="local-project-memory" aria-label="Changelog editor">
-          <div className="drawer-section-head">
+          <div className="drawer-section-head design-changelog-editor-head">
             <span>{selectedEntry ? "Edit entry" : "New entry"}</span>
             <small>{selectedEntry?.status ?? "active"}</small>
           </div>

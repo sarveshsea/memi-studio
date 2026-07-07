@@ -2,7 +2,7 @@
 // Copyright 2026 Humyn LLC
 
 import { describe, expect, it } from "vitest";
-import { formatScoreDelta, groupIssuesBySeverity, severityOrder, verdictTone } from "../format";
+import { formatScoreDelta, groupIssuesBySeverity, severityOrder, sparklineHeights, verdictTone } from "../format";
 import type { StudioAppQualityIssue } from "../../studio-api/shared-types";
 
 function makeIssue(overrides: Partial<StudioAppQualityIssue> = {}): StudioAppQualityIssue {
@@ -70,5 +70,35 @@ describe("verdictTone", () => {
   it("is critical below 70", () => {
     expect(verdictTone(69)).toBe("critical");
     expect(verdictTone(0)).toBe("critical");
+  });
+});
+
+describe("sparklineHeights", () => {
+  it("returns an empty array for no scores", () => {
+    expect(sparklineHeights([])).toEqual([]);
+  });
+
+  it("returns a single mid-height bar for one entry", () => {
+    expect(sparklineHeights([96])).toEqual([50]);
+  });
+
+  it("returns uniform mid heights for a flat band", () => {
+    expect(sparklineHeights([80, 80, 80])).toEqual([50, 50, 50]);
+  });
+
+  it("scales to the observed score band with small padding instead of always anchoring to [0, 100]", () => {
+    const heights = sparklineHeights([92, 94, 96]);
+    // Observed band [92, 96] padded to [90, 98]: flat 92-96 should no longer render as
+    // uniformly flat bars against a fixed 0-100 scale.
+    expect(heights[0]).toBeCloseTo(25, 5);
+    expect(heights[1]).toBeCloseTo(50, 5);
+    expect(heights[2]).toBeCloseTo(75, 5);
+    const spread = Math.max(...heights) - Math.min(...heights);
+    expect(spread).toBeGreaterThan(0);
+  });
+
+  it("keeps a visible minimum height for the lowest bar", () => {
+    const heights = sparklineHeights([0, 100]);
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(6);
   });
 });

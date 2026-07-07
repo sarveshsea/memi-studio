@@ -9,7 +9,7 @@
 import { StudioControlIcon } from "../workbench/icons";
 import type { StudioAppQualityIssue, StudioDesignAuditResult } from "../studio-api/shared-types";
 import type { StudioError } from "../studio-api/errors";
-import { formatScoreDelta, groupIssuesBySeverity, severityOrder, verdictTone } from "./format";
+import { formatScoreDelta, groupIssuesBySeverity, severityOrder, sparklineHeights, verdictTone } from "./format";
 
 export interface DesignHealthSurfaceProps {
   result: StudioDesignAuditResult | null;
@@ -28,9 +28,9 @@ const SEVERITY_LABEL: Record<StudioAppQualityIssue["severity"], string> = {
   low: "Low",
 };
 
-function SummaryStat(props: { label: string; value: number | string }) {
+function SummaryStat(props: { label: string; value: number | string; statusAccent?: "ok" | "warn" }) {
   return (
-    <div className="design-health-stat">
+    <div className="design-health-stat" data-status-accent={props.statusAccent}>
       <span className="design-health-stat-value">{props.value}</span>
       <span className="design-health-stat-label">{props.label}</span>
     </div>
@@ -84,18 +84,16 @@ function IssueSeveritySections(props: { issues: StudioAppQualityIssue[] }) {
 }
 
 function ScoreHistorySparkline(props: { history: StudioDesignAuditResult["history"] }) {
-  if (props.history.length < 2) return null;
+  if (props.history.length < 1) return null;
   const scores = props.history.map((entry) => entry.score);
-  const max = Math.max(...scores, 100);
-  const min = Math.min(...scores, 0);
-  const range = Math.max(max - min, 1);
+  const heights = sparklineHeights(scores);
   return (
     <div className="design-health-sparkline" aria-hidden="true">
-      {scores.map((score, index) => (
+      {heights.map((height, index) => (
         <span
           key={index}
           className="design-health-sparkline-bar"
-          style={{ height: `${Math.max(((score - min) / range) * 100, 6)}%` }}
+          style={{ height: `${height}%` }}
         />
       ))}
     </div>
@@ -129,8 +127,14 @@ export function DesignHealthSurface(props: DesignHealthSurfaceProps) {
       {error ? <p className="design-health-error" role="alert">{error.message}</p> : null}
 
       {!result && !loading && !runInFlight ? (
-        <div className="design-health-empty-state">
+        <div className="pane-empty-state">
+          <h3>No design audit yet</h3>
           <p>Run your first design audit to see a score, findings, and history for this workspace.</p>
+          <div className="pane-empty-state-actions">
+            <button type="button" className="primary" data-action-id="design-audit.run-empty" onClick={onRunAudit}>
+              <StudioControlIcon name="run" /> Run audit
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -152,7 +156,11 @@ export function DesignHealthSurface(props: DesignHealthSurfaceProps) {
             <SummaryStat label="Files scanned" value={result.diagnosis.summary.scannedFiles} />
             <SummaryStat label="Components" value={result.diagnosis.summary.components} />
             <SummaryStat label="CSS variables" value={result.diagnosis.summary.cssVariables} />
-            <SummaryStat label="Raw hex colors" value={result.diagnosis.summary.hexColors} />
+            <SummaryStat
+              label="Raw hex colors"
+              value={result.diagnosis.summary.hexColors}
+              statusAccent={result.diagnosis.summary.hexColors === 0 ? "ok" : "warn"}
+            />
           </div>
 
           {!result.baselineExists ? (
@@ -169,7 +177,7 @@ export function DesignHealthSurface(props: DesignHealthSurfaceProps) {
 
           <IssueSeveritySections issues={result.active} />
 
-          <details className="design-health-suppressed" open>
+          <details className="design-health-suppressed" open={result.suppressed.length > 0}>
             <summary>{result.suppressed.length} finding(s) accepted as baseline</summary>
             {result.suppressed.length > 0 ? (
               <ul className="design-health-issue-list">

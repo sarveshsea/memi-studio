@@ -427,10 +427,16 @@ export function MemoryTable(props: {
     return (
       <div className="memory-context-list compact-context" data-compact-memory-list role="list" aria-label={props.title}>
         {props.items.length === 0 ? (
-          <button className="smart-empty-action" data-action-id="memory.empty.sync" data-smart-empty-state="memory-sync" type="button" onClick={props.onSync}>
-            <StudioControlIcon name="memory" />
-            <span>Sync</span>
-          </button>
+          <div className="pane-empty-state" data-empty-variant="compact">
+            <h3>No project memory yet</h3>
+            <p>Memory captures decisions, references, and context as the agent works. Sync to pull in what's already indexed.</p>
+            <div className="pane-empty-state-actions">
+              <button className="primary" data-action-id="memory.empty.sync" data-smart-empty-state="memory-sync" type="button" onClick={props.onSync}>
+                <StudioControlIcon name="memory" />
+                <span>Sync</span>
+              </button>
+            </div>
+          </div>
         ) : null}
         {props.items.map((item) => (
           <article
@@ -596,6 +602,7 @@ export function ContextRail(props: {
               aria-pressed={props.contextFilter === filter.id}
               className={props.contextFilter === filter.id ? "active" : ""}
               data-action-id={`context.filter.${filter.id}`}
+              data-empty={filter.id !== "all" && filter.count === 0 ? "true" : undefined}
               key={filter.id}
               onClick={() => props.onFilterChange(filter.id)}
               type="button"
@@ -745,25 +752,36 @@ export function AgentLogsPanel({ events, session }: { events: StudioEvent[]; ses
   );
 }
 
+function changedFileStatusAccent(status: string): "ok" | "accent" | "danger" | "warn" {
+  const normalized = status.toLowerCase();
+  if (normalized.startsWith("add")) return "ok";
+  if (normalized.startsWith("modif") || normalized.startsWith("change")) return "accent";
+  if (normalized.startsWith("delet") || normalized.startsWith("remov")) return "danger";
+  return "warn";
+}
+
 export function ChangedFilesPanel(props: {
   trace: StudioDesignSystemTrace | null;
+  variant?: "inline" | "full";
   onReview: () => void;
   onSelectFile?: (file: StudioDesignSystemTraceFile) => void;
 }) {
   const [showFiles, setShowFiles] = useState(false);
+  const variant = props.variant ?? "inline";
   const files = props.trace?.files ?? [];
   const totalInsertions = props.trace?.insertions ?? 0;
   const totalDeletions = props.trace?.deletions ?? 0;
-  const previewFiles = files.slice(0, 6);
+  const previewFiles = variant === "full" ? files : files.slice(0, 6);
+  const truncated = variant !== "full" && files.length > previewFiles.length;
   const clean = files.length === 0 && !props.trace?.error;
   return (
-    <section className="inline-changed-files" data-changed-files-panel="inline-review" data-smart-empty-state={clean ? "changes-clean" : undefined}>
+    <section className="inline-changed-files" data-changed-files-panel="inline-review" data-changed-files-variant={variant} data-smart-empty-state={clean ? "changes-clean" : undefined}>
       <div className="drawer-section-head">
         <span>{clean ? "Clean" : "Changed"}</span>
         <div className="change-metrics">
           <span>{files.length} files</span>
-          <span>+{totalInsertions}</span>
-          <span>-{totalDeletions}</span>
+          <span className="diff-add">+{totalInsertions}</span>
+          <span className="diff-del">-{totalDeletions}</span>
         </div>
         <button data-action-id="changed-files.review" type="button" onClick={props.onReview}>Review</button>
       </div>
@@ -771,15 +789,17 @@ export function ChangedFilesPanel(props: {
         <details className="changed-file-disclosure" open={showFiles} onToggle={(event) => setShowFiles(event.currentTarget.open)}>
           <summary aria-label="Show changed files" title="Show changed files">
             <StudioControlIcon name={showFiles ? "collapse" : "expand"} />
-            <span>{previewFiles.length}</span>
+            <span>{truncated ? `${previewFiles.length} of ${files.length}` : previewFiles.length}</span>
           </summary>
           {showFiles ? (
             <div className="changed-file-list">
               {previewFiles.map((file) => (
-                <details className="changed-file-row" data-file-kind={file.kind} key={file.path}>
+                <details className="changed-file-row" data-file-kind={file.kind} data-status-accent={changedFileStatusAccent(file.status)} key={file.path}>
                   <summary>
                     <span title={file.path}>{displaySourceLabel(file.path)}</span>
-                    <small>+{file.insertions} -{file.deletions}</small>
+                    <small>
+                      <span className="diff-add">+{file.insertions}</span> <span className="diff-del">-{file.deletions}</span>
+                    </small>
                   </summary>
                   <p>{file.kind} / {file.status}{file.designSystem ? " / design-system" : ""}</p>
                   <div className="changed-file-actions">
@@ -954,6 +974,8 @@ export function KnowledgeReader(props: {
   onRefresh: () => void;
 }) {
   const detail = props.itemDetail ?? props.selectedItem;
+  const filterCounts = (id: string) =>
+    id === "all" ? props.items.length : props.items.filter((item) => item.kind === id || item.tags.includes(id)).length;
   const filters = [
     { id: "all", label: "All" },
     { id: "markdown", label: "Markdown" },
@@ -984,6 +1006,7 @@ export function KnowledgeReader(props: {
             aria-pressed={props.filter === filter.id}
             className={props.filter === filter.id ? "active" : ""}
             data-action-id={`knowledge.filter.${filter.id}`}
+            data-empty={filter.id !== "all" && filterCounts(filter.id) === 0 ? "true" : undefined}
             key={filter.id}
             onClick={() => props.onFilterChange(filter.id)}
             type="button"
@@ -993,7 +1016,12 @@ export function KnowledgeReader(props: {
         ))}
       </div>
       <div className="knowledge-list" role="list">
-        {props.items.length === 0 ? <p className="empty">No notes</p> : null}
+        {props.items.length === 0 ? (
+          <div className="pane-empty-state" data-empty-variant="compact">
+            <h3>No notes</h3>
+            <p>Design references and captured notes will show up here once the agent reads or saves something.</p>
+          </div>
+        ) : null}
         {props.items.map((item) => (
           <button
             className={detail?.id === item.id ? "knowledge-row active" : "knowledge-row"}
