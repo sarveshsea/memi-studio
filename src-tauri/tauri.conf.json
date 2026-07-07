@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Mémoire Studio",
+        "title": "memi",
         "width": 1360,
         "height": 860,
         "minWidth": 960,
