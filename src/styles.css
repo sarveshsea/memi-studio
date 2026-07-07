@@ -378,8 +378,7 @@ code, kbd, samp {
   place-items: center;
   padding: var(--space-0);
 }
-.truth-strip-item,
-.figma-status-grid span {
+.truth-strip-item {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -687,6 +686,7 @@ button.active,
 .artifact-canvas[data-artifact-canvas="run"] .artifact-pane-body,
 .artifact-canvas[data-artifact-canvas="changes"] .artifact-pane-body,
 .artifact-canvas[data-artifact-canvas="figma"] .artifact-pane-body,
+.artifact-canvas[data-artifact-canvas="design-audit"] .artifact-pane-body,
 .artifact-canvas[data-artifact-canvas="memory"] .artifact-pane-body { display: grid; }
 .agent-cockpit-pane { min-width: 0; min-height: 0; display: grid; align-content: start; gap: var(--space-2); overflow-y: auto; padding: var(--space-2); }
 .agent-cockpit-pane small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1135,7 +1135,6 @@ button.active,
 .scenario-controls label { min-width: 0; display: grid; gap: var(--space-1); }
 .scenario-controls span,
 .scenario-node-detail span,
-.scenario-interview-panel span,
 .scenario-report-panel span,
 .scenario-model-matrix span,
 .scenario-model-matrix small,
@@ -1151,7 +1150,6 @@ button.active,
 .scenario-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.8fr); gap: var(--space-3); }
 .scenario-graph-panel,
 .scenario-timeline-panel,
-.scenario-interview-panel,
 .scenario-report-panel,
 .scenario-transcript-viewer,
 .scenario-cost-panel,
@@ -1178,14 +1176,12 @@ button.active,
 .scenario-node-detail { min-width: 0; display: grid; gap: var(--space-1); }
 .scenario-node-detail small,
 .scenario-timeline-panel p,
-.scenario-interview-panel p,
 .scenario-report-panel li,
 .scenario-transcript-viewer p,
 .scenario-cost-panel p,
 .scenario-figjam-export p,
 .scenario-compare-view p { color: var(--ink-muted); line-height: 1.45; }
 .scenario-timeline-panel,
-.scenario-interview-panel,
 .scenario-report-panel,
 .scenario-transcript-viewer,
 .scenario-cost-panel,
@@ -1194,7 +1190,6 @@ button.active,
 .scenario-timeline-panel article { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); border-bottom: 1px solid var(--line); padding-bottom: var(--space-2); }
 .scenario-timeline-panel article:last-child { border-bottom: 0; padding-bottom: var(--space-0); }
 .scenario-timeline-panel article > span { color: var(--agentic-accent); font-size: var(--font-size-xs); }
-.scenario-interview-panel div,
 .scenario-report-panel div,
 .scenario-transcript-viewer div,
 .scenario-cost-panel div,
@@ -1400,7 +1395,6 @@ button.active,
 .work-artifact-card { min-width: 0; display: grid; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); padding: var(--space-2); }.work-artifact-card header { min-width: 0; display: grid; gap: var(--space-0-5); }.work-artifact-card span, .work-artifact-card p { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }.work-artifact-card p { margin: var(--space-0); white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.work-artifact-card footer { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); }.work-artifact-card button { min-height: var(--control-height-compact); padding: var(--space-0-5) var(--space-1); }
 .work-packet-pane { min-width: 0; min-height: 0; display: grid; align-content: start; gap: var(--space-2); overflow-y: auto; padding: var(--space-2); }.work-packet-pane > header { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); border-bottom: 1px solid var(--line); padding-bottom: var(--space-2); }.work-packet-pane h2, .work-packet-pane h3, .work-packet-pane p { margin: var(--space-0); }.work-packet-pane p, .work-packet-pane span, .work-packet-pane small { color: var(--ink-muted); }.work-packet-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--space-1); }.work-packet-summary-grid article, .work-packet-section article { min-width: 0; display: grid; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); padding: var(--space-2); }.work-packet-section { min-width: 0; display: grid; gap: var(--space-1); }.work-packet-section article span, .work-packet-section article small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-packet-empty { min-width: 0; display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); padding: var(--space-3); }
-.work-packet-empty-illustration { display: none; }
 .work-packet-empty-svg { width: 100%; max-width: 240px; height: auto; }
 .work-packet-empty-body { min-width: 0; display: grid; gap: var(--space-1); align-content: start; }
 .work-packet-empty-pill { justify-self: start; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); color: var(--ink-muted); padding: var(--space-0) var(--space-1-5); font-size: var(--font-size-xs); }
@@ -2513,7 +2507,7 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
 .tui-inline summary { cursor: pointer; color: var(--ink-muted); font-size: var(--font-size-xs); }
 .result-details { margin-top: var(--space-2); }
 .result-pre { border-top: 1px solid var(--line); background: var(--feed-bg); }
-@media (max-width: 900px) { .console-topbar { gap: var(--space-1); } .wordmark-row { min-width: 0; } .project-sidebar span, .project-sidebar small, .project-sidebar-section-label, .project-session-list, .project-folder-row .sidebar-icon:last-child { display: none; } .console-layout, .console-layout[data-sidebar-collapsed="false"] { grid-template-columns: var(--project-sidebar-collapsed-width) minmax(0, 1fr); gap: var(--space-2); padding: var(--space-2); } .project-sidebar { width: var(--project-sidebar-collapsed-width); } .project-sidebar button { grid-template-columns: auto; justify-content: center; } .agent-workbench, .agent-workbench[data-agent-workbench="resizable-conversation-artifacts"] { grid-template-columns: minmax(0, 1fr); overflow: hidden; } .chat-resize-handle { display: none; } .artifact-canvas { display: none; } .artifact-canvas[data-agent-cockpit-shell="right-pane"] { display: grid; } .artifact-pane-tabs { padding: var(--space-1); } .agent-pane-intent { grid-template-columns: minmax(0, 1fr); } .scenario-lab, .mermaid-board-surface { padding: var(--space-3); } .scenario-lab-head, .scenario-interview-panel div, .scenario-report-panel div, .scenario-figjam-export div, .mermaid-board-header { flex-direction: column; align-items: stretch; } .scenario-controls, .scenario-grid, .scenario-figjam-export dl, .mermaid-board-layout, .mermaid-board-brief { grid-template-columns: minmax(0, 1fr); } .mermaid-board-prompt-chips { justify-content: flex-start; } .scenario-graph-panel { grid-row: auto; } .mermaid-board-canvas { min-height: 520px; } }
+@media (max-width: 900px) { .console-topbar { gap: var(--space-1); } .wordmark-row { min-width: 0; } .project-sidebar span, .project-sidebar small, .project-sidebar-section-label, .project-session-list, .project-folder-row .sidebar-icon:last-child { display: none; } .console-layout, .console-layout[data-sidebar-collapsed="false"] { grid-template-columns: var(--project-sidebar-collapsed-width) minmax(0, 1fr); gap: var(--space-2); padding: var(--space-2); } .project-sidebar { width: var(--project-sidebar-collapsed-width); } .project-sidebar button { grid-template-columns: auto; justify-content: center; } .agent-workbench, .agent-workbench[data-agent-workbench="resizable-conversation-artifacts"] { grid-template-columns: minmax(0, 1fr); overflow: hidden; } .chat-resize-handle { display: none; } .artifact-canvas { display: none; } .artifact-canvas[data-agent-cockpit-shell="right-pane"] { display: grid; } .artifact-pane-tabs { padding: var(--space-1); } .agent-pane-intent { grid-template-columns: minmax(0, 1fr); } .scenario-lab, .mermaid-board-surface { padding: var(--space-3); } .scenario-lab-head, .scenario-report-panel div, .scenario-figjam-export div, .mermaid-board-header { flex-direction: column; align-items: stretch; } .scenario-controls, .scenario-grid, .scenario-figjam-export dl, .mermaid-board-layout, .mermaid-board-brief { grid-template-columns: minmax(0, 1fr); } .mermaid-board-prompt-chips { justify-content: flex-start; } .scenario-graph-panel { grid-row: auto; } .mermaid-board-canvas { min-height: 520px; } }
 @media (max-width: 900px) { .agent-workbench, .agent-workbench[data-agent-workbench="resizable-conversation-artifacts"] { grid-template-rows: minmax(620px, 1fr) minmax(420px, auto); overflow-y: auto; } .agent-chat-rail { min-height: 620px; } }
 @media (max-width: 900px) { .design-changelog-page { padding: var(--space-2); } .design-changelog-header { align-items: stretch; flex-direction: column; } .design-changelog-layout { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .design-changelog-list, .design-changelog-editor { overflow: visible; } }
 .command-palette-backdrop, .settings-backdrop, .automations-backdrop { align-items: center; justify-content: center; padding: var(--space-4); }
@@ -3002,7 +2996,6 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
 .design-health-issue { border: 1px solid var(--line); border-radius: var(--radius-default); padding: var(--space-2); display: grid; gap: var(--space-1); }
 .design-health-issue-head { display: flex; align-items: center; gap: var(--space-1-5); }
 .design-health-issue-severity { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.02em; padding: 0 var(--space-1); border-radius: var(--radius-compact); }
-.design-health-issue-severity[data-severity="critical"], .design-health-issue-severity[data-severity="high"] { color: var(--danger); }
 .design-health-issue-severity[data-severity="medium"] { color: var(--warning); }
 .design-health-issue-severity[data-severity="low"] { color: var(--ink-muted); }
 .design-health-issue-effort { margin-left: auto; font-size: var(--font-size-xs); color: var(--ink-muted); }
@@ -3010,3 +3003,357 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
 .design-health-issue-evidence { margin: 0; padding: 0; list-style: none; font-size: var(--font-size-xs); color: var(--ink-faint); font-family: var(--font-mono); }
 .design-health-empty-findings { color: var(--ink-muted); font-size: var(--font-size-sm); }
 .design-health-suppressed summary { cursor: pointer; font-size: var(--font-size-sm); color: var(--ink-muted); margin: var(--space-2) 0; }
+
+/* ---- Shared panel primitives (2.4 panel quality pass) ----------------- */
+/* One empty-state and one status-accent convention for every right-pane
+   panel, so individual surfaces stop inventing their own. Modeled on the
+   two treatments that already worked: .welcome-surface and
+   .mermaid-board-empty. */
+.pane-empty-state {
+  min-width: 0;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-4);
+  text-align: center;
+}
+.pane-empty-state h3 { margin: var(--space-0); color: var(--ink); font-size: var(--font-size-md); font-weight: var(--font-weight-medium); }
+.pane-empty-state p { margin: var(--space-0); max-width: 420px; color: var(--ink-muted); font-size: var(--font-size-sm); line-height: 1.5; }
+.pane-empty-state[data-empty-variant="compact"] { min-height: 0; padding: var(--space-2); }
+.pane-empty-state-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1); }
+.pane-empty-state-actions button { min-height: var(--control-height-compact); display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface); color: var(--ink); padding: var(--space-1) var(--space-2); font-size: var(--font-size-sm); cursor: pointer; }
+.pane-empty-state-actions button:hover { border-color: var(--line-strong); background: var(--surface-soft); }
+.pane-empty-state-actions button.primary { border-color: var(--accent); background: var(--accent); color: var(--primary-foreground); }
+
+/* Status accent: a left-border signal any panel can key off a data
+   attribute, generalizing the Inspector's data-runtime-health treatment. */
+[data-status-accent] { border-left: 3px solid var(--line); }
+[data-status-accent="ok"] { border-left-color: var(--ok); }
+[data-status-accent="warn"] { border-left-color: var(--warning); }
+[data-status-accent="danger"] { border-left-color: var(--danger); }
+[data-status-accent="accent"] { border-left-color: var(--accent); }
+
+/* Selected states the JSX already wires (className="active" +
+   aria-pressed) but no rule ever matched — Memory filter chips and
+   knowledge rows. Convention copied from .design-changelog-filters
+   button.active. */
+.context-filter-row button.active,
+.context-filter-row button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.knowledge-row.active { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Focus baseline for interactive rows/chips whose generic outline blends
+   into their own colored borders. */
+.run-spine-receipt:focus-visible,
+.run-spine-summary-button:focus-visible,
+.harness-chip[data-icon-only="true"]:focus-visible,
+.context-filter-row button:focus-visible,
+.knowledge-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* ---- work-packet (panel quality pass) ---- */
+.work-packet-summary-grid strong { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--ink); }
+.work-packet-summary-grid span { font-size: var(--font-size-xs); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.work-packet-header-meta { display: flex; flex-wrap: wrap; gap: var(--space-1-5); margin-top: var(--space-0-5); }
+.work-packet-header-meta:empty { display: none; }
+.work-packet-header-meta span { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); color: var(--ink-muted); padding: var(--space-0) var(--space-1-5); font-size: var(--font-size-xs); }
+.work-packet-header-meta span[data-work-packet-meta="harness"] { color: var(--ink); border-color: var(--line-strong); }
+.work-packet-artifact-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1-5); margin-top: var(--space-0-5); }
+.work-packet-artifact-status { display: inline-flex; align-items: center; border-radius: var(--radius-default); background: var(--surface); color: var(--ink-muted); padding: var(--space-0) var(--space-1); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.work-packet-artifact-status[data-work-artifact-status="ready"] { color: var(--ok); }
+.work-packet-artifact-status[data-work-artifact-status="needs_review"] { color: var(--warning); }
+.work-packet-artifact-status[data-work-artifact-status="archived"] { color: var(--ink-faint); }
+.work-packet-artifact-confidence { color: var(--ink-muted); font-size: var(--font-size-xs); }
+.work-packet-artifact-filerefs { margin-top: var(--space-1); font-size: var(--font-size-xs); color: var(--ink-muted); }
+.work-packet-artifact-filerefs summary { cursor: pointer; color: var(--ink); }
+.work-packet-artifact-filerefs summary:hover { color: var(--accent); }
+.work-packet-artifact-filerefs ul { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; gap: var(--space-0-5); }
+.work-packet-artifact-filerefs li { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-1-5); border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--surface-soft); padding: var(--space-0-5) var(--space-1); }
+.work-packet-fileref-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); color: var(--ink); }
+.work-packet-fileref-status { color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: var(--font-size-xs); }
+.work-packet-fileref-stats { display: inline-flex; gap: var(--space-1); font-family: var(--font-mono); }
+.work-packet-fileref-insertions { color: var(--ok); }
+.work-packet-fileref-deletions { color: var(--danger); }
+.work-packet-source-strip-empty { border-style: dashed; }
+.work-packet-source-strip-empty p { max-width: none; }
+
+/* ---- figma (panel quality pass) ---- */
+.figma-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-default);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.figma-error span {
+  color: var(--danger);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+.figma-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--space-2);
+}
+.figma-stat {
+  display: grid;
+  gap: var(--space-0-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  padding: var(--space-2);
+}
+.figma-stat-value {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink);
+}
+.figma-stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--ink-muted);
+}
+.figma-action-result {
+  display: grid;
+  gap: var(--space-1);
+}
+.figma-action-result-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ---- ia (panel quality pass) ---- */
+/* ia-surface.tsx: error alert (was unstyled ".error", only .console-content > .error matched anything) */
+.ia-error {
+  margin: var(--space-0);
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line));
+  border-radius: var(--radius-default);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+}
+
+/* ia-surface.tsx: prompt-row shortcut buttons in the IA empty state (previously unstyled) */
+.ia-prompt-row button {
+  min-height: var(--control-height-compact);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  background: var(--surface);
+  color: var(--ink-muted);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+.ia-prompt-row button:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+/* ia-surface.tsx: give ragged .ia-lane-grid lanes a consistent rhythm */
+.ia-lane {
+  min-height: 160px;
+}
+
+/* ia-surface.tsx: "+N more" affordance when a lane truncates nodes past slice(0, 5) */
+.ia-lane-more {
+  justify-self: start;
+  color: var(--ink-faint);
+  font-size: var(--font-size-xs);
+  padding: var(--space-0) var(--space-1);
+}
+
+/* surface-skeletons.tsx: IASurfaceSkeleton structural regions mirroring the real
+   ia-surface layout (header row + lane grid + mermaid previews strip) so the
+   Suspense swap doesn't reflow the pane. Structural only, no text content. */
+.ia-surface-skeleton-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.ia-surface-skeleton-lane {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+  min-height: 160px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-default);
+  background: var(--surface-soft);
+}
+.ia-surface-skeleton-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+/* ---- mermaid-board (panel quality pass) ---- */
+.mermaid-board-node[data-mermaid-board-node="persona"] { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.mermaid-board-node[data-mermaid-board-node="metric"] { background: color-mix(in srgb, var(--warning) 9%, var(--surface)); }
+.mermaid-board-node[data-mermaid-board-node="spec"] { background: color-mix(in srgb, var(--line-strong) 12%, var(--surface)); }
+.mermaid-board-node[data-mermaid-board-node="comment"] { background: color-mix(in srgb, var(--ink-muted) 8%, var(--surface)); }
+.mermaid-board-lane[data-mermaid-board-lane-overflow="true"] { border-style: dashed; background: color-mix(in srgb, var(--warning) 6%, var(--surface)); }
+.mermaid-board-lane[data-mermaid-board-lane-overflow="true"] header span { color: var(--ink-muted); }
+.mermaid-board-evidence-group { min-width: 0; display: grid; gap: var(--space-1); }
+.mermaid-board-evidence-group > span { color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); text-transform: uppercase; }
+.mermaid-board-evidence-entries { min-width: 0; display: grid; gap: var(--space-1); margin: var(--space-0); padding: var(--space-0); list-style: none; }
+.mermaid-board-evidence-entries li { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-default); background: var(--feed-bg); padding: var(--space-1) var(--space-2); }
+.mermaid-board-evidence-entries code { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--ink-muted); word-break: break-all; }
+
+/* ---- design-health (panel quality pass) ---- */
+.design-health-issue-severity[data-severity="critical"] {
+  color: var(--danger);
+  font-weight: var(--font-weight-semibold);
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+}
+.design-health-issue-severity[data-severity="high"] {
+  color: var(--danger);
+}
+
+/* ---- design-system (panel quality pass) ---- */
+/* design-system.tsx: empty-state artifact review copy uses existing .pane-empty-state primitive (no new rules needed). */
+
+/* (c) data-review-state accents on the section disclosure trigger */
+.review-section[data-review-state="needs_work"] > .review-section-trigger { border-left: 3px solid var(--danger); }
+.review-section[data-review-state="looks_good"] > .review-section-trigger,
+.review-section[data-review-state="reviewed"] > .review-section-trigger { border-left: 3px solid var(--ok); }
+.review-section[data-review-state="unreviewed"] > .review-section-trigger { border-left: 3px solid var(--line); }
+
+/* (d) disclosure glyph: rotate the expand/collapse icon based on open state instead of ascii v/> */
+.review-section-disclosure { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--ink-muted); transition: transform 0.15s ease; }
+.review-section-disclosure svg { width: 14px; height: 14px; }
+.review-section-disclosure[data-open="true"] { color: var(--ink); }
+
+/* (e) artifact title editor reads as a heading, not a stray form field */
+.artifact-title-editor input { border-color: transparent; background: transparent; font-weight: var(--font-weight-medium); padding: var(--space-0-5) var(--space-1); }
+.artifact-title-editor input:hover { border-color: var(--line); }
+.artifact-title-editor input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+
+/* (h) page-level changelog error banner (bordered, distinct from per-card compact warning) */
+.design-changelog-error-banner { border: 1px solid var(--line); border-radius: var(--radius-default); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); padding: var(--space-2) var(--space-3); }
+.design-changelog-error-banner p { margin: var(--space-0); color: var(--danger); font-size: var(--font-size-sm); }
+
+/* (h) per-card warning stays compact, with room for the "+N more" affordance */
+.design-changelog-warning-compact { display: flex; flex-wrap: wrap; gap: var(--space-0-5); padding: var(--space-0) var(--space-2) var(--space-2); }
+.design-changelog-warning-compact span { color: var(--ink-muted); cursor: default; }
+
+/* (j) changelog tags render as pills instead of a plain slash-joined string */
+.design-changelog-tags { display: flex; flex-wrap: wrap; gap: var(--space-0-5); }
+.design-changelog-tags span { border: 1px solid var(--line); border-radius: var(--radius-compact); background: var(--surface-soft); color: var(--ink-muted); padding: 0 var(--space-1); font-size: var(--font-size-xs); }
+
+/* (k) editor drawer head row framing, matching .inspector-pane-head's bordered head convention */
+.design-changelog-editor-head { border-bottom: 1px solid var(--line); padding-bottom: var(--space-2); margin-bottom: var(--space-1); }
+
+/* ---- panels (panel quality pass) ---- */
+/* panels.tsx swarm pass: empty-state dimming, changed-files accents/diff colors, hover/focus, full variant */
+.context-filter-row button[data-empty="true"],
+.knowledge-reader-panel .context-filter-row button[data-empty="true"] {
+  opacity: 0.5;
+  color: var(--ink-faint);
+}
+
+.diff-add { color: var(--ok); }
+.diff-del { color: var(--danger); }
+
+.changed-file-disclosure summary:hover,
+.changed-file-disclosure summary:focus-visible {
+  color: var(--ink);
+}
+.changed-file-disclosure summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-default);
+}
+.changed-file-row summary:hover {
+  background: var(--surface-muted);
+}
+.changed-file-row summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-default);
+}
+
+[data-changed-files-variant="full"] .changed-file-list {
+  max-height: none;
+}
+
+/* ---- app-tsx (panel quality pass) ---- */
+/* --- Panel pass: Inspector/Run console + Research Lab + Changes tab (App.tsx owner) --- */
+
+/* (b) RuntimeRecoveryStrip: action buttons in one flex row instead of relying on the strip's fixed grid-template-columns */
+.runtime-recovery-actions {
+  grid-column: 3 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: end;
+}
+
+/* (c) Let inspector metadata values (paths/commands) wrap instead of force-truncating to one line */
+.inspector-metadata dd {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* (d) Run-spine receipt status styling: done/idle/running all get explicit treatment */
+.run-spine-receipt[data-status="done"] { border-color: var(--ok); }
+.run-spine-receipt[data-status="idle"] { border-color: var(--line); background: var(--surface-muted); color: var(--ink-muted); }
+.run-spine-receipt[data-status="running"] { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+
+/* (e) Runtime recovery log toggle: compact button consistent with the strip's other actions */
+.runtime-recovery-log-toggle {
+  min-height: var(--control-height-compact);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-compact);
+  background: var(--surface);
+  color: var(--ink-muted);
+  padding: var(--space-0-5) var(--space-1-5);
+  font-size: var(--font-size-xs);
+}
+.runtime-recovery-log-toggle:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+/* (g) Research Lab tiering: Setup / Run / Results with .eyebrow headers, "+N more" counts, preview caption, full-width empty state */
+.scenario-lab-tier {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-3);
+}
+.scenario-lab-tier:last-child { border-bottom: 0; padding-bottom: var(--space-0); }
+.scenario-lab-tier > .eyebrow { margin-bottom: 0; }
+.scenario-lab-tier[data-scenario-lab-tier="results"] .pane-empty-state { grid-column: 1 / -1; }
+.scenario-more-count {
+  align-self: center;
+  color: var(--ink-faint);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.scenario-preview-caption {
+  margin: var(--space-0);
+  color: var(--ink-faint);
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+.scenario-lab-tier[data-scenario-lab-tier="run"] .pane-empty-state[data-scenario-model-matrix] {
+  min-height: 0;
+}

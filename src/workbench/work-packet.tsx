@@ -163,8 +163,9 @@ function WorkPacketPaneImpl(props: {
           </div>
           <button data-action-id="work-packet.refresh" type="button" onClick={props.onRefresh}>Refresh</button>
         </header>
-        <ResearchSourceStrip sources={sources} />
+        <ResearchSourceStrip sources={sources} onSync={props.onRefresh} />
         <section className="work-packet-empty" data-empty-state="work-packet">
+          <WorkPacketEmptyIllustration />
           <div className="work-packet-empty-body">
             <span className="work-packet-empty-pill">No packet captured yet</span>
             <h3>Run first, packet second</h3>
@@ -189,7 +190,53 @@ function WorkPacketPaneImpl(props: {
                   Open folder
                 </button>
               ) : null}
+              {props.onBrowseTemplates ? (
+                <button
+                  type="button"
+                  data-action-id="work-packet.browse-templates"
+                  onClick={props.onBrowseTemplates}
+                >
+                  Browse templates
+                </button>
+              ) : null}
+              {props.onViewExamples ? (
+                <button
+                  type="button"
+                  data-action-id="work-packet.view-examples"
+                  onClick={props.onViewExamples}
+                >
+                  View examples
+                </button>
+              ) : null}
+              {props.onOpenBoard ? (
+                <button
+                  type="button"
+                  data-action-id="work-packet.open-board"
+                  onClick={props.onOpenBoard}
+                >
+                  Open board
+                </button>
+              ) : null}
             </div>
+            {props.starters?.length ? (
+              <div className="work-packet-empty-starters">
+                <span className="work-packet-empty-starters-label">Starters</span>
+                <div className="work-packet-empty-starters-row">
+                  {props.starters.map((starter) => (
+                    <button
+                      key={starter.label}
+                      type="button"
+                      className="work-packet-empty-starter-chip"
+                      data-action-id="work-packet.starter"
+                      title={starter.description}
+                      onClick={starter.onSelect}
+                    >
+                      {starter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </section>
@@ -202,13 +249,17 @@ function WorkPacketPaneImpl(props: {
           <span>Work Packet / {packet.reviewState}</span>
           <h2>{packet.title}</h2>
           <p>{packet.objective}</p>
+          <p className="work-packet-header-meta">
+            {props.harnessLabel ? <span data-work-packet-meta="harness">{props.harnessLabel}</span> : null}
+            {props.session ? <span data-work-packet-meta="session">{props.session.prompt ? trimText(props.session.prompt, 48) : props.session.id}</span> : null}
+          </p>
         </div>
         <div className="work-packet-actions">
           <button data-action-id="work-packet.refresh" type="button" onClick={props.onRefresh}>Refresh</button>
           <button data-action-id="work-packet.export" type="button" onClick={props.onExport}>Export</button>
         </div>
       </header>
-      <ResearchSourceStrip sources={sources} />
+      <ResearchSourceStrip sources={sources} onSync={props.onRefresh} />
       <div className="work-packet-summary-grid">
         <article><span>Created Work</span><strong>{packet.artifacts.length}</strong></article>
         <article><span>Visuals</span><strong>{packet.artifacts.filter((artifact) => artifact.kind === "visual").length}</strong></article>
@@ -231,12 +282,26 @@ function WorkPacketPaneImpl(props: {
   );
 }
 
-function ResearchSourceStrip({ sources }: { sources: ResearchSource[] }) {
+function ResearchSourceStrip({ sources, onSync }: { sources: ResearchSource[]; onSync: () => void }) {
+  if (!sources.length) {
+    return (
+      <div
+        className="pane-empty-state work-packet-source-strip-empty"
+        data-empty-variant="compact"
+        data-smart-empty-state="memory-sync"
+      >
+        <p>No research sources synced yet. memi pulls sources into memory as the agent works.</p>
+        <div className="pane-empty-state-actions">
+          <button type="button" data-action-id="memory.empty.sync" onClick={onSync}>Sync memory</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="research-source-strip" data-research-source-strip="work-packet">
-      {sources.length ? sources.slice(0, 6).map((source) => (
+      {sources.slice(0, 6).map((source) => (
         <span key={`${source.url}-${source.title}`} title={source.url}>{trimText(source.title || source.url, 36)}</span>
-      )) : <span data-smart-empty-state="memory-sync">Sync</span>}
+      ))}
     </div>
   );
 }
@@ -284,16 +349,53 @@ function WorkPacketEmptyIllustration() {
   );
 }
 
+function workArtifactStatusAccent(status: StudioWorkArtifact["status"]): "ok" | "warn" | "accent" {
+  if (status === "ready") return "ok";
+  if (status === "needs_review") return "warn";
+  return "accent";
+}
+
+function workArtifactStatusLabel(status: StudioWorkArtifact["status"]): string {
+  if (status === "needs_review") return "Needs review";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function WorkPacketSection({ title, items }: { title: string; items: StudioWorkArtifact[] }) {
   return (
     <section className="work-packet-section" data-work-packet-section={title.toLowerCase().replace(/\s+/g, "-")}>
       <h3>{title}</h3>
-      {items.length === 0 ? <p>No items captured.</p> : null}
+      {items.length === 0 ? (
+        <div className="pane-empty-state" data-empty-variant="compact">
+          <p>No items captured.</p>
+        </div>
+      ) : null}
       {items.slice(0, 8).map((item) => (
-        <article key={item.id} data-work-artifact-kind={item.kind}>
+        <article key={item.id} data-work-artifact-kind={item.kind} data-status-accent={workArtifactStatusAccent(item.status)}>
           <strong>{item.title}</strong>
           <span>{item.summary || item.body}</span>
-          {item.fileRefs.length ? <small>{item.fileRefs.length} file refs</small> : null}
+          <div className="work-packet-artifact-meta">
+            <span className="work-packet-artifact-status" data-work-artifact-status={item.status}>{workArtifactStatusLabel(item.status)}</span>
+            {item.confidence !== null ? (
+              <span className="work-packet-artifact-confidence">{Math.round(item.confidence * 100)}% confidence</span>
+            ) : null}
+          </div>
+          {item.fileRefs.length ? (
+            <details className="work-packet-artifact-filerefs">
+              <summary>{item.fileRefs.length} file refs</summary>
+              <ul>
+                {item.fileRefs.map((fileRef) => (
+                  <li key={fileRef.path} data-file-ref-status={fileRef.status}>
+                    <span className="work-packet-fileref-path" title={fileRef.path}>{fileRef.path}</span>
+                    <span className="work-packet-fileref-status">{fileRef.status}</span>
+                    <span className="work-packet-fileref-stats">
+                      <span className="work-packet-fileref-insertions">+{fileRef.insertions}</span>
+                      <span className="work-packet-fileref-deletions">-{fileRef.deletions}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </article>
       ))}
     </section>
@@ -304,7 +406,11 @@ function WorkPacketList({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="work-packet-section" data-work-packet-section={title.toLowerCase().replace(/\s+/g, "-")}>
       <h3>{title}</h3>
-      {items.length === 0 ? <p>No items captured.</p> : null}
+      {items.length === 0 ? (
+        <div className="pane-empty-state" data-empty-variant="compact">
+          <p>No items captured.</p>
+        </div>
+      ) : null}
       {items.slice(0, 8).map((item) => <article key={item}><span>{item}</span></article>)}
     </section>
   );

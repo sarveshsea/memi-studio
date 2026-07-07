@@ -45,13 +45,27 @@ export default function IASurface(props: IASurfaceProps) {
         </div>
       </header>
 
-      {props.error ? <p className="error">{props.error}</p> : null}
+      {props.error ? (
+        <p className="ia-error" role="alert" data-status-accent="danger">
+          {props.error}
+        </p>
+      ) : null}
       {!props.board ? (
-        <div className="ia-empty-state" data-smart-empty-state="ia">
-          <button type="button" data-action-id="board.capture_ia.empty" onClick={props.onCapture} disabled={props.loading || !props.coreRuntimeReady}>
-            <StudioControlIcon name={props.loading ? "sync" : "ia"} />
-            <span>{props.loading ? "Loading" : "Capture"}</span>
-          </button>
+        <div className="pane-empty-state" data-smart-empty-state="ia">
+          <h3>Capture your app's information architecture</h3>
+          <p>IA capture maps sitemap, navigation, and user journeys into lanes you can review and export to FigJam.</p>
+          <div className="pane-empty-state-actions">
+            <button
+              type="button"
+              className="primary"
+              data-action-id="board.capture_ia.empty"
+              onClick={props.onCapture}
+              disabled={props.loading || !props.coreRuntimeReady}
+            >
+              <StudioControlIcon name={props.loading ? "sync" : "ia"} />
+              <span>{props.loading ? "Loading" : "Capture"}</span>
+            </button>
+          </div>
           <div className="ia-prompt-row">
             {IA_PROMPTS.map((prompt) => (
               <button key={prompt} data-action-id={`ia.prompt.${shortPromptLabel(prompt).toLowerCase()}`} type="button" onClick={() => props.onUsePrompt(prompt)}>{shortPromptLabel(prompt)}</button>
@@ -79,11 +93,19 @@ export default function IASurface(props: IASurfaceProps) {
                     <span>{trimText(node.body || node.mermaidSource || "No source", 110)}</span>
                   </article>
                 ))}
+                {nodes.length > 5 ? <span className="ia-lane-more">+{nodes.length - 5} more</span> : null}
               </section>
             ))}
           </div>
           <section className="ia-mermaid-previews" data-ia-mermaid-previews>
-            {mermaidNodes.length ? mermaidNodes.map((node) => <MermaidPreview key={node.id} node={node} />) : <span className="empty">No Mermaid</span>}
+            {mermaidNodes.length ? (
+              mermaidNodes.map((node) => <MermaidPreview key={node.id} node={node} />)
+            ) : (
+              <div className="pane-empty-state" data-empty-variant="compact">
+                <h3>No Mermaid diagrams yet</h3>
+                <p>Capture IA with a fenced Mermaid diagram to see a rendered preview here.</p>
+              </div>
+            )}
           </section>
         </>
       )}

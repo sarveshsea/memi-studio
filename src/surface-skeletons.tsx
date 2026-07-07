@@ -25,18 +25,33 @@ export function MermaidBoardSurfaceSkeleton() {
   );
 }
 
+const IA_SKELETON_LANE_KEYS = ["lane-1", "lane-2", "lane-3"] as const;
+const IA_SKELETON_PREVIEW_KEYS = ["preview-1", "preview-2"] as const;
+
 export function IASurfaceSkeleton() {
   return (
     <section
-      className="surface-skeleton"
+      className="surface-skeleton ia-surface-skeleton"
       data-skeleton="ia"
       data-information-architecture="mermaid-jam"
       aria-busy="true"
     >
-      {SKELETON_ROW_KEYS.map((key) => (
-        <div key={key} className={`skeleton-block ${key === "head" ? "skeleton-row" : "skeleton-bar"}`} aria-hidden="true" />
-      ))}
-      <div className="skeleton-block skeleton-canvas" aria-hidden="true" />
+      <div className="skeleton-block skeleton-row" aria-hidden="true" />
+      <div className="skeleton-block skeleton-bar" aria-hidden="true" />
+      <div className="ia-surface-skeleton-lanes" aria-hidden="true">
+        {IA_SKELETON_LANE_KEYS.map((key) => (
+          <div key={key} className="ia-surface-skeleton-lane">
+            <div className="skeleton-block skeleton-bar" aria-hidden="true" />
+            <div className="skeleton-block skeleton-bar" aria-hidden="true" />
+            <div className="skeleton-block skeleton-bar" aria-hidden="true" />
+          </div>
+        ))}
+      </div>
+      <div className="ia-surface-skeleton-previews" aria-hidden="true">
+        {IA_SKELETON_PREVIEW_KEYS.map((key) => (
+          <div key={key} className="skeleton-block skeleton-canvas" aria-hidden="true" />
+        ))}
+      </div>
     </section>
   );
 }

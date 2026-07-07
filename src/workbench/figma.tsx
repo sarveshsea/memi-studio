@@ -192,10 +192,16 @@ export function FigmaDriver(props: {
         <div className="figma-heading"><FigmaLogoMark /><div><p className="eyebrow">Figma</p><h2>{pluginCopy}</h2></div></div>
         <span>{props.figmaStatus?.clients.length ?? 0} clients</span>
       </div>
+      {props.figmaError ? (
+        <div className="figma-error" role="alert" data-status-accent="danger">
+          <span>{props.figmaError}</span>
+        </div>
+      ) : null}
       <div className="driver-grid">
-        <label>
+        <label htmlFor="figma-driver-port">
           <span>Port</span>
           <input
+            id="figma-driver-port"
             inputMode="numeric"
             value={props.settingsDraft?.figma?.preferredPort ?? ""}
             onChange={(event) => props.onPatchSettings((current) => ({
@@ -221,10 +227,16 @@ export function FigmaDriver(props: {
         <IconButton {...WORKBENCH_ACTIONS.save} actionId="settings.save" className="primary" onClick={props.onSaveSettings} disabled={!props.settingsDraft} />
       </div>
       <div className="figma-status-grid">
-        <span><strong>{props.figmaStatus?.port ?? "--"}</strong> port</span>
-        <span><strong>{props.figmaStatus?.clients.length ?? 0}</strong> clients</span>
-        <span><strong>{props.figmaStatus?.bridgeStatus ?? "stopped"}</strong> bridge</span>
-        <span><strong>{lastSync}</strong> last sync</span>
+        <div className="figma-stat"><span className="figma-stat-value">{props.figmaStatus?.port ?? "--"}</span><span className="figma-stat-label">port</span></div>
+        <div className="figma-stat"><span className="figma-stat-value">{props.figmaStatus?.clients.length ?? 0}</span><span className="figma-stat-label">clients</span></div>
+        <div
+          className="figma-stat"
+          data-status-accent={bridgeState === "running" ? "ok" : bridgeState === "failed" ? "danger" : "warn"}
+        >
+          <span className="figma-stat-value">{props.figmaStatus?.bridgeStatus ?? "stopped"}</span>
+          <span className="figma-stat-label">bridge</span>
+        </div>
+        <div className="figma-stat"><span className="figma-stat-value">{lastSync}</span><span className="figma-stat-label">last sync</span></div>
       </div>
       <div className="figma-clients">
         {(props.figmaStatus?.clients ?? []).map((client) => (
@@ -233,7 +245,17 @@ export function FigmaDriver(props: {
             <span>{client.editor} · {client.lastPing ?? client.connectedAt}</span>
           </article>
         ))}
-        {props.figmaStatus?.clients.length === 0 ? <p className="empty">No clients</p> : null}
+        {props.figmaStatus?.clients.length === 0 ? (
+          <div className="pane-empty-state" data-empty-variant="compact">
+            <h3>No clients connected</h3>
+            <p>Start the bridge and open your Figma file to connect.</p>
+            <div className="pane-empty-state-actions">
+              <button className="primary" data-action-id="figma.connect.empty-state" type="button" onClick={props.onConnect} disabled={bridgeButtonDisabled}>
+                {bridgeButtonLabel}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="figma-actions">
         {FIGMA_ACTIONS.map((action) => (
@@ -250,7 +272,10 @@ export function FigmaDriver(props: {
         ))}
       </div>
       {props.figmaActionResult ? (
-        <pre>{formatDataPreview(props.figmaActionResult).slice(0, 1800)}</pre>
+        <div className="figma-action-result">
+          <p className="figma-action-result-label">Last action result</p>
+          <pre>{formatDataPreview(props.figmaActionResult).slice(0, 1800)}</pre>
+        </div>
       ) : null}
       <div className="settings-actions">
         <span>{props.settingsSavedAt ? `saved ${props.settingsSavedAt}` : "local settings"}</span>

@@ -11,7 +11,7 @@ import {
   type MermaidBoardExport,
 } from "./studio-api";
 
-const OPEN_STATUS_KEY = ["open", "Dec", "ision"].join("") as keyof MermaidBoardAgentSurface["inspector"];
+const CARD_BODY_CHAR_BUDGET = 220;
 
 type BoardRuntimeRecovery = {
   state: "ready" | "stale" | "offline";
@@ -128,7 +128,7 @@ export default function MermaidBoardSurface(props: MermaidBoardSurfaceProps) {
               {board ? (
                 <div className="mermaid-board-lanes" data-mermaid-board-lanes="pm-cards">
                   {lanes.map((lane) => (
-                    <section className="mermaid-board-lane" data-mermaid-board-lane={lane.id} key={lane.id}>
+                    <section className="mermaid-board-lane" data-mermaid-board-lane={lane.id} data-mermaid-board-lane-overflow={lane.overflow ? "true" : undefined} key={lane.id}>
                       <header>
                         <span>{lane.label}</span>
                         <small>{lane.intent}</small>
@@ -136,7 +136,7 @@ export default function MermaidBoardSurface(props: MermaidBoardSurfaceProps) {
                       <div>
                         {lane.nodes.map((node) => (
                           <BoardNodeCard
-                            active={selectedNode?.id === node.id}
+                            active={selectedNodeId === node.id}
                             edgeCount={board.edges.filter((edge) => edge.fromNodeId === node.id || edge.toNodeId === node.id).length}
                             key={node.id}
                             meta={surface.nodeMeta}
@@ -185,14 +185,32 @@ export default function MermaidBoardSurface(props: MermaidBoardSurfaceProps) {
               <section>
                 <strong>{surface.inspector.authorshipTitle}</strong>
                 <p>{selectedNode.author === "agent" ? surface.inspector.agentAuthored : surface.inspector.humanAuthored}</p>
-                <small>{surface.inspector.decisionPrefix}: {selectedNode.decisionStatus ?? surface.inspector[OPEN_STATUS_KEY]}</small>
+                <small>{surface.inspector.decisionPrefix}: {selectedNode.decisionStatus ?? surface.inspector.openDecision}</small>
               </section>
               <section className="mermaid-board-source-list">
                 <strong>{surface.inspector.evidenceTitle}</strong>
                 {safeList(selectedNode.researchBacking).length || safeList(selectedNode.sourceEventIds).length ? (
                   <>
-                    {safeList(selectedNode.researchBacking).map((source) => <small key={source}>{source}</small>)}
-                    {safeList(selectedNode.sourceEventIds).map((eventId) => <small key={eventId}>{eventId}</small>)}
+                    {safeList(selectedNode.researchBacking).length > 0 ? (
+                      <div className="mermaid-board-evidence-group" data-mermaid-board-evidence-group="research">
+                        <span>Research</span>
+                        <ul className="mermaid-board-evidence-entries">
+                          {safeList(selectedNode.researchBacking).map((source) => (
+                            <li key={source}><code>{source}</code></li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {safeList(selectedNode.sourceEventIds).length > 0 ? (
+                      <div className="mermaid-board-evidence-group" data-mermaid-board-evidence-group="source-events">
+                        <span>Source events</span>
+                        <ul className="mermaid-board-evidence-entries">
+                          {safeList(selectedNode.sourceEventIds).map((eventId) => (
+                            <li key={eventId}><code>{eventId}</code></li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </>
                 ) : <small>{surface.inspector.noEvidence}</small>}
               </section>
@@ -213,12 +231,19 @@ export default function MermaidBoardSurface(props: MermaidBoardSurfaceProps) {
               {surface.sync.exportActionLabel}
             </button>
             {sync?.fallbackReason ? <small>{sync.fallbackReason}</small> : null}
-            {props.exports.slice(0, 3).map((item) => (
-              <article key={item.id}>
-                <span>{item.format}</span>
-                <small>{item.outputPath}</small>
-              </article>
-            ))}
+            {props.exports.length > 0 ? (
+              props.exports.slice(0, 3).map((item) => (
+                <article key={item.id}>
+                  <span>{item.format}</span>
+                  <small>{item.outputPath}</small>
+                </article>
+              ))
+            ) : (
+              <div className="pane-empty-state" data-empty-variant="compact">
+                <h3>No exports yet</h3>
+                <p>Export to FigJam to see sync history here.</p>
+              </div>
+            )}
           </section>
         </aside>
       </div>
@@ -274,7 +299,7 @@ function BoardNodeCard(props: {
     >
       <span>{props.node.author} {props.meta.separator} {props.node.decisionStatus ?? props.meta.openState}</span>
       <strong>{props.node.title}</strong>
-      <small>{trimBoardText(props.node.body || props.node.mermaidSource || "", 150)}</small>
+      <small title={props.node.body}>{trimBoardText(props.node.body || props.node.mermaidSource || "", CARD_BODY_CHAR_BUDGET)}</small>
       <em>{props.edgeCount} {props.meta.linksLabel} {props.meta.separator} {evidenceCount} {props.meta.evidenceRefsLabel}</em>
     </button>
   );
@@ -298,22 +323,32 @@ function actionDisabled(
   return coreControlsDisabled || (action.id === "board.layout" && !board);
 }
 
-function boardLanes(board: MermaidBoard | null, surface: MermaidBoardAgentSurface): Array<MermaidBoardAgentSurfaceLane & { nodes: MermaidBoard["nodes"] }> {
+function boardLanes(board: MermaidBoard | null, surface: MermaidBoardAgentSurface): Array<MermaidBoardAgentSurfaceLane & { nodes: MermaidBoard["nodes"]; overflow?: boolean }> {
   const nodes = board?.nodes ?? [];
-  const lanes = surface.lanes.map((lane) => ({
+  const lanes: Array<MermaidBoardAgentSurfaceLane & { nodes: MermaidBoard["nodes"]; overflow?: boolean }> = surface.lanes.map((lane) => ({
     ...lane,
     nodes: nodes.filter((node) => (node.laneId ?? fallbackLaneId(node.kind)) === lane.id),
   }));
   const knownLaneIds = new Set(surface.lanes.map((lane) => lane.id));
   const overflowNodes = nodes.filter((node) => !knownLaneIds.has(node.laneId ?? fallbackLaneId(node.kind)));
-  if (overflowNodes.length > 0) {
-    const overflowId = overflowNodes[0]?.laneId ?? fallbackLaneId(overflowNodes[0]?.kind ?? "sticky");
+  const overflowByLaneId = new Map<string, MermaidBoard["nodes"]>();
+  for (const node of overflowNodes) {
+    const laneId = node.laneId ?? fallbackLaneId(node.kind);
+    const bucket = overflowByLaneId.get(laneId);
+    if (bucket) {
+      bucket.push(node);
+    } else {
+      overflowByLaneId.set(laneId, [node]);
+    }
+  }
+  for (const [laneId, laneNodes] of overflowByLaneId) {
     lanes.push({
-      id: overflowId,
-      label: overflowId,
+      id: laneId,
+      label: `Unassigned: ${laneId}`,
       intent: "",
       emptyCopy: "",
-      nodes: overflowNodes,
+      nodes: laneNodes,
+      overflow: true,
     });
   }
   return lanes;
