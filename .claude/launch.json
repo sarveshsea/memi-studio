@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "preview-prod", "runtimeExecutable": "npm", "runtimeArgs": ["run", "preview"], "port": 1421 },
+    {
+      "name": "memoire-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "/Volumes/ExtremeSSD/Projects/_archive/Desktop-Projects-20260512/Memoire/memoire-webpage",
+        "--",
+        "--port",
+        "4321"
+      ],
+      "port": 4321
+    }
+  ]
+}
