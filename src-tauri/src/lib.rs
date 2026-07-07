@@ -1246,6 +1246,20 @@ fn runtime_lifecycle_log_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn append_runtime_lifecycle_log(app: &AppHandle, event: &str, payload: Value) {
+    // Every runtime supervisor state transition already funnels through this
+    // one function (spawn, ready, timeout, exit, restart-decision, etc.) —
+    // emitting here gives the frontend a live push feed of every transition
+    // without hand-picking call sites, and automatically covers any future
+    // ones added to the supervisor. The file-append below stays the durable
+    // record; this emit is best-effort UI feedback, same as `studio-runtime-log`.
+    let _ = app.emit(
+        "studio-runtime-state",
+        json!({
+            "event": event,
+            "timestamp": studio::unix_millis().to_string(),
+            "payload": payload.clone()
+        }),
+    );
     let Ok(path) = runtime_lifecycle_log_path(app) else {
         return;
     };

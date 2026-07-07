@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 // Copyright 2026 Humyn LLC
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import {
   forceCenter,
   forceCollide,
@@ -18,6 +18,7 @@ import {
   callComputerAction,
   canRestartStudioRuntime,
   captureAttachment,
+  classifyError,
   captureDesignSystemArtifact,
   captureReviewPacket,
   archiveDesignChangelogEntry,
@@ -135,10 +136,7 @@ import {
   type StudioStatus,
   type StudioToolDefinition,
   type StudioToolCallResult,
-  type StudioTraceSnapshot,
   type StudioUsageSnapshot,
-  type StudioRecentWorkspace,
-  type StudioWorkspacePermissions,
   type StudioAttachment,
   type StudioAttachmentSource,
   type StudioActiveProcess,
@@ -168,9 +166,12 @@ import {
   DesignSystemReviewSurface,
   FigmaDriver,
   MemoireLogoMark,
+  NotificationCenter,
   ProjectSidebar,
+  RuntimeStatusChip,
   SettingsPanel,
   StudioControlIcon,
+  WelcomeSurface,
   WorkPacketPane,
   ActionChip,
   IconButton,
@@ -221,6 +222,27 @@ import {
 } from "./studio-workbench";
 import { IASurfaceSkeleton, MermaidBoardSurfaceSkeleton } from "./surface-skeletons";
 import { useStableCallback } from "./use-stable-callback";
+import { notify } from "./notification-center";
+import {
+  useRuntimeLifecycle,
+  runtimeHealthFromStatus,
+  runtimeLifecycleEventIsFinalFailure,
+  runtimeLifecyclePhaseLabel,
+  runtimeHealthLabel,
+  runtimeHealthDisplayLabel,
+  isWorkspaceAccessBlockedMessage,
+  workspaceRecoveryDisplayMessage,
+  type RuntimeHealth,
+} from "./hooks/use-runtime-lifecycle";
+import {
+  useWorkbenchUiPrefs,
+  clampNumber,
+  DEFAULT_CHAT_RAIL_WIDTH_PERCENT,
+  MIN_CHAT_RAIL_WIDTH_PERCENT,
+  MAX_CHAT_RAIL_WIDTH_PERCENT,
+} from "./hooks/use-workbench-ui-prefs";
+import { useWorkspaceState } from "./hooks/use-workspace-state";
+import { useSessionRecords } from "./hooks/use-session-records";
 
 const MermaidBoardSurface = lazy(() => import("./mermaid-board-surface"));
 const IASurface = lazy(() => import("./ia-surface"));
@@ -240,7 +262,14 @@ const DESIGN_LANE_ACTIONS = new Set<StudioAction>([
 ]);
 
 type RightPaneTab = WorkbenchRightPaneTab;
-type RuntimeHealth = "offline" | "starting" | "ready" | "degraded";
+// Client-side session-start lifecycle: covers the pre-session-id window
+// (queued/starting) where a request can still be aborted locally. Once a
+// session id exists, session/sessionStatus (deriveSessionStatus) take over
+// as the source of truth — this type intentionally does not track
+// "running"/"done" in detail, only the cancellable starting window.
+type SessionLifecycle =
+  | { state: "idle" }
+  | { state: "starting"; abortController: AbortController };
 type TruthStripStatus = "ready" | "warn" | "missing" | "unknown";
 type DesignerReadinessStatus = "ready" | "warn" | "missing";
 type ScenarioLabNodeKind = "agent" | "finding" | "variable" | "outcome";
@@ -403,15 +432,9 @@ const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavaila
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 const LIVE_EVENT_LIMIT = 220;
 const SESSION_EVENT_LIMIT = 120;
+const SESSION_START_TIMEOUT_MS = 30_000;
 const TRACE_REFRESH_DELAY_MS = 350;
 const WORKTREE_TRACE_REFRESH_MS = 12_000;
-const PROJECT_SIDEBAR_COLLAPSED_KEY = "memoire.studio.projectSidebarCollapsed";
-const PROJECT_SIDEBAR_EXPANDED_KEY = "memoire.studio.expandedProjectIds";
-const CHAT_RAIL_WIDTH_KEY = "memoire.studio.chatRailWidthPercent";
-const CHAT_MEMORY_PINS_KEY = "memoire.studio.chatMemoryPins";
-const DEFAULT_CHAT_RAIL_WIDTH_PERCENT = 48;
-const MIN_CHAT_RAIL_WIDTH_PERCENT = 36;
-const MAX_CHAT_RAIL_WIDTH_PERCENT = 68;
 
 interface StudioActionRegistryItem {
   id: string;
@@ -441,10 +464,21 @@ export function App() {
   const traceRefreshTimerRef = useRef<number | null>(null);
   const pendingTraceSessionIdRef = useRef<string | null>(null);
   const harnessReadinessRefreshAttemptsRef = useRef(0);
-  const runtimeStartupRefreshInFlightRef = useRef(false);
+  // Distinguishes a user-initiated cancel from a timeout firing — both abort
+  // the same in-flight request with the same AbortError, but should show
+  // different messages (quiet vs "took too long to start").
+  const cancelledStartRef = useRef(false);
   const runtimeReadyHydrationRef = useRef<string | null>(null);
   const worktreeTraceRefreshInFlightRef = useRef(false);
-  const [status, setStatus] = useState<StudioStatus | null>(null);
+  const {
+    status,
+    setStatus,
+    recentWorkspaces,
+    setRecentWorkspaces,
+    workspacePermissions,
+    setWorkspacePermissions,
+    hasWorkspace,
+  } = useWorkspaceState();
   const [harnesses, setHarnesses] = useState<Harness[]>([]);
   const [selectedHarness, setSelectedHarness] = useState<HarnessId>(DEFAULT_PRIMARY_HARNESS_ID);
   const [selectedAction, setSelectedAction] = useState<StudioAction>(DEFAULT_COMPOSER_STATE.action);
@@ -482,13 +516,20 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [chatSearchQuery, setChatSearchQuery] = useState("");
-  const [chatMemoryPins, setChatMemoryPins] = useState<string[]>(() => readStringArrayPreference(CHAT_MEMORY_PINS_KEY).slice(0, 6));
   const [contextQuery, setContextQuery] = useState("");
   const [contextFilter, setContextFilter] = useState("all");
   const [prompt, setPrompt] = useState("");
   const [slashCommandIndex, setSlashCommandIndex] = useState(0);
-  const [session, setSession] = useState<SessionSummary | null>(null);
-  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
+  const {
+    session,
+    setSession,
+    recentSessions,
+    setRecentSessions,
+    events,
+    setEvents,
+    serverTrace,
+    setServerTrace,
+  } = useSessionRecords();
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversationGoal, setConversationGoal] = useState<string>("");
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
@@ -498,12 +539,17 @@ export function App() {
   const [harnessModelRegistries, setHarnessModelRegistries] = useState<Record<string, HarnessModelRegistry>>({});
   const [selectedModelByHarness, setSelectedModelByHarness] = useState<Record<string, string>>({});
   const [selectedEffort, setSelectedEffort] = useState<StudioEffort | null>(null);
-  const [events, setEvents] = useState<StudioEvent[]>([]);
-  const [serverTrace, setServerTrace] = useState<StudioTraceSnapshot | null>(null);
-  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [sessionLifecycle, setSessionLifecycle] = useState<SessionLifecycle>({ state: "idle" });
+  const isStartingSession = sessionLifecycle.state === "starting";
   const [error, setError] = useState<string | null>(null);
-  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth>("starting");
-  const [runtimeRecoveryMessage, setRuntimeRecoveryMessage] = useState<string | null>(null);
+  const {
+    runtimeHealth,
+    setRuntimeHealth,
+    runtimeRecoveryMessage,
+    setRuntimeRecoveryMessage,
+    runtimeLifecycleEvent,
+    runtimeLogTail,
+  } = useRuntimeLifecycle(refresh);
   const [runtimeMetrics, setRuntimeMetrics] = useState<StudioRuntimeMetrics | null>(null);
   const [usageSnapshot, setUsageSnapshot] = useState<StudioUsageSnapshot | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -547,8 +593,6 @@ export function App() {
   const [figmaError, setFigmaError] = useState<string | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<StudioConfig | null>(null);
   const [settingsSavedAt, setSettingsSavedAt] = useState<string | null>(null);
-  const [recentWorkspaces, setRecentWorkspaces] = useState<StudioRecentWorkspace[]>([]);
-  const [workspacePermissions, setWorkspacePermissions] = useState<StudioWorkspacePermissions | null>(null);
   const [selectedContextItem, setSelectedContextItem] = useState<ProjectMemoryItem | null>(null);
   const [contextItemDetail, setContextItemDetail] = useState<ProjectMemoryItem | null>(null);
   const [selectedKnowledgeItem, setSelectedKnowledgeItem] = useState<StudioKnowledgeItem | null>(null);
@@ -556,13 +600,19 @@ export function App() {
   const [collapsedBlockIds, setCollapsedBlockIds] = useState<Set<string>>(new Set());
   const [userPinnedToBottom, setUserPinnedToBottom] = useState(true);
   const [attachments, setAttachments] = useState<StudioAttachment[]>([]);
-  const [projectSidebarCollapsed, setProjectSidebarCollapsed] = useState(() =>
-    readBooleanPreference(PROJECT_SIDEBAR_COLLAPSED_KEY, typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches),
-  );
-  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>(() => readStringArrayPreference(PROJECT_SIDEBAR_EXPANDED_KEY));
-  const [chatRailWidthPercent, setChatRailWidthPercent] = useState(() =>
-    readNumberPreference(CHAT_RAIL_WIDTH_KEY, DEFAULT_CHAT_RAIL_WIDTH_PERCENT, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT),
-  );
+  const {
+    projectSidebarCollapsed,
+    setProjectSidebarCollapsed,
+    expandedProjectIds,
+    setExpandedProjectIds,
+    toggleProjectFolder,
+    chatRailWidthPercent,
+    setChatRailWidthPercent,
+    handleChatRailPointerDown,
+    handleChatRailResizeKey,
+    chatMemoryPins,
+    setChatMemoryPins,
+  } = useWorkbenchUiPrefs();
 
   useEffect(() => {
     void refresh();
@@ -589,28 +639,14 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem(PROJECT_SIDEBAR_COLLAPSED_KEY, JSON.stringify(projectSidebarCollapsed));
-  }, [projectSidebarCollapsed]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PROJECT_SIDEBAR_EXPANDED_KEY, JSON.stringify(expandedProjectIds));
-  }, [expandedProjectIds]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CHAT_RAIL_WIDTH_KEY, JSON.stringify(chatRailWidthPercent));
-  }, [chatRailWidthPercent]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CHAT_MEMORY_PINS_KEY, JSON.stringify(chatMemoryPins.slice(0, 6)));
-  }, [chatMemoryPins]);
 
   useEffect(() => {
     if (!isFigmaBridgeRunning(figmaStatus)) return;
     const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void getFigmaStatus()
         .then(setFigmaStatus)
-        .catch(() => undefined);
+        .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     }, 2000);
     return () => window.clearInterval(timer);
   }, [figmaStatus?.bridgeStatus, figmaStatus?.running]);
@@ -658,7 +694,7 @@ export function App() {
           return { ...current, [selectedHarness]: registry.defaultModelId };
         });
       })
-      .catch(() => undefined);
+      .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     return () => { cancelled = true; };
   }, [selectedHarness, harnessModelRegistries]);
 
@@ -686,8 +722,8 @@ export function App() {
           }
           if (["artifact", "design_system_artifact", "design_decision", "session_done"].includes(event.type)) {
             window.setTimeout(() => {
-              void listDesignSystemArtifacts().then(updateDesignArtifacts).catch(() => undefined);
-              void listReviewPackets().then(setReviewPackets).catch(() => undefined);
+              void listDesignSystemArtifacts().then(updateDesignArtifacts).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
+              void listReviewPackets().then(setReviewPackets).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
             }, TRACE_REFRESH_DELAY_MS);
           }
         }
@@ -722,7 +758,6 @@ export function App() {
   const isSessionActive = isStartingSession || sessionStatus === "running" || sessionStatus === "queued";
   const harnessStatusCopy = harnessReadinessLabel(currentHarness);
   const effectiveRuntimeMetrics = status?.metrics ?? runtimeMetrics;
-  const hasWorkspace = Boolean((status?.projectRoot ?? workspacePermissions?.currentWorkspace ?? "").trim());
   const canRunSession = Boolean(hasWorkspace && runtimeHealth === "ready" && status && prompt.trim() && !isStartingSession && harnessCanRun(currentHarness, effectiveAction));
   const runDisabledMessage = runDisabledReason(currentHarness, harnessStatusCopy, prompt, runtimeHealth, hasWorkspace, effectiveAction, runtimeRecoveryMessage);
   const canContinueConversation = Boolean(activeConversationId && session && (session.status === "completed" || session.status === "interrupted") && (session.conversationId ?? session.id) === activeConversationId);
@@ -934,7 +969,7 @@ export function App() {
     if (harnessReadinessRefreshAttemptsRef.current >= 3) return undefined;
     harnessReadinessRefreshAttemptsRef.current += 1;
     const timeout = window.setTimeout(() => {
-      void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+      void listHarnesses({ refresh: true }).then(setHarnesses).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
     }, 650);
     return () => window.clearTimeout(timeout);
   }, [claudeHarness, codexHarness, runtimeHealth]);
@@ -1088,21 +1123,6 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (runtimeHealth !== "starting" && runtimeHealth !== "degraded") return undefined;
-    const delay = runtimeHealth === "starting" ? 750 : 2000;
-    const interval = window.setInterval(() => {
-      if (runtimeStartupRefreshInFlightRef.current) return;
-      runtimeStartupRefreshInFlightRef.current = true;
-      void refresh().finally(() => {
-        runtimeStartupRefreshInFlightRef.current = false;
-      });
-    }, delay);
-    return () => {
-      window.clearInterval(interval);
-      runtimeStartupRefreshInFlightRef.current = false;
-    };
-  }, [runtimeHealth]);
 
   useEffect(() => {
     if (runtimeHealth !== "ready") {
@@ -1122,12 +1142,13 @@ export function App() {
     if (runtimeHealth !== "ready" || recentSessions.length > 0 || session || !status?.projectRoot) return undefined;
     let attempts = 0;
     const interval = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       attempts += 1;
       void listSessions()
         .then((nextSessions) => {
           if (nextSessions.length > 0) setRecentSessions(nextSessions);
         })
-        .catch(() => undefined);
+        .catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       if (attempts >= 6) window.clearInterval(interval);
     }, 750);
     return () => window.clearInterval(interval);
@@ -1237,7 +1258,7 @@ export function App() {
       if (nextRuntimeHealth === "ready" && primaryHarnessStatusIncomplete) {
         harnessReadinessRefreshAttemptsRef.current = 0;
         window.setTimeout(() => {
-          void listHarnesses({ refresh: true }).then(setHarnesses).catch(() => undefined);
+          void listHarnesses({ refresh: true }).then(setHarnesses).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth: nextRuntimeHealth }), { severity: "background" }));
         }, 650);
       }
       setError(null);
@@ -1776,7 +1797,7 @@ export function App() {
 
   function openFigmaSurface() {
     chooseRightPane("figma", "Figma bridge opened");
-    void getFigmaStatus().then(setFigmaStatus).catch(() => undefined);
+    void getFigmaStatus().then(setFigmaStatus).catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth })));
   }
 
   function openDesignSystemSurface() {
@@ -1931,12 +1952,6 @@ export function App() {
     } finally {
       setUsageLoading(false);
     }
-  }
-
-  function toggleProjectFolder(projectId: string) {
-    setExpandedProjectIds((current) =>
-      current.includes(projectId) ? current.filter((candidate) => candidate !== projectId) : [projectId, ...current],
-    );
   }
 
   async function openContextItem(item: ProjectMemoryItem) {
@@ -2234,52 +2249,6 @@ export function App() {
     if (event.dataTransfer.files.length) void addFilesToComposer(event.dataTransfer.files, "drop");
   }
 
-  function handleChatRailPointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const container = event.currentTarget.parentElement;
-    const bounds = container?.getBoundingClientRect();
-    const totalWidth = Math.max(bounds?.width ?? window.innerWidth, 1);
-
-    const applyWidth = (clientX: number) => {
-      const left = bounds?.left ?? 0;
-      const nextWidth = ((clientX - left) / totalWidth) * 100;
-      setChatRailWidthPercent(clampNumber(nextWidth, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT));
-    };
-
-    applyWidth(event.clientX);
-
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
-      applyWidth(moveEvent.clientX);
-    };
-    const handlePointerUp = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
-  function handleChatRailResizeKey(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      const direction = event.key === "ArrowLeft" ? -2 : 2;
-      setChatRailWidthPercent((current) => clampNumber(current + direction, MIN_CHAT_RAIL_WIDTH_PERCENT, MAX_CHAT_RAIL_WIDTH_PERCENT));
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      setChatRailWidthPercent(MIN_CHAT_RAIL_WIDTH_PERCENT);
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      setChatRailWidthPercent(MAX_CHAT_RAIL_WIDTH_PERCENT);
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      setChatRailWidthPercent(DEFAULT_CHAT_RAIL_WIDTH_PERCENT);
-    }
-  }
-
   function removeAttachment(id: string) {
     setAttachments((current) => current.filter((attachment) => attachment.id !== id));
   }
@@ -2322,7 +2291,9 @@ export function App() {
     setRunBlockedMessage(null);
     setCollapsedBlockIds(new Set());
     setStartingPrompt(text.trim());
-    setIsStartingSession(true);
+    const abortController = new AbortController();
+    setSessionLifecycle({ state: "starting", abortController });
+    const timeoutId = window.setTimeout(() => abortController.abort(), SESSION_START_TIMEOUT_MS);
     const continuingConversationId = options.conversationIdOverride !== undefined
       ? options.conversationIdOverride
       : canContinueConversation
@@ -2341,7 +2312,7 @@ export function App() {
         ...(conversationGoal.trim() ? { goal: conversationGoal.trim() } : {}),
         ...(activeModelId ? { model: activeModelId } : {}),
         ...(selectedEffort && effortOptions.includes(selectedEffort) ? { effort: selectedEffort } : {}),
-      });
+      }, { signal: abortController.signal });
       setAttachments([]);
       setSession(nextSession);
       setGoalEditorOpen(false);
@@ -2349,17 +2320,41 @@ export function App() {
       setRecentSessions((current) => [nextSession, ...current.filter((candidate) => candidate.id !== nextSession.id)].slice(0, 8));
       await refreshSessionTrace(nextSession.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const wasAborted = err instanceof DOMException && err.name === "AbortError";
+      if (wasAborted) {
+        const timedOut = !cancelledStartRef.current;
+        const message = timedOut
+          ? "Session took too long to start."
+          : "Session start cancelled.";
+        setError(message);
+        if (timedOut) notify(classifyError(new Error(message), { hasWorkspace, runtimeHealth }));
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        notify(classifyError(err, { hasWorkspace, runtimeHealth }));
+      }
       if (options.restorePromptOnFailure) {
         setPrompt((current) => current.trim() ? current : text);
       }
     } finally {
+      window.clearTimeout(timeoutId);
+      cancelledStartRef.current = false;
       setStartingPrompt("");
-      setIsStartingSession(false);
+      setSessionLifecycle((current) => current.state === "starting" ? { state: "idle" } : current);
     }
   }
 
+  function cancelStartingSession() {
+    if (sessionLifecycle.state !== "starting") return;
+    cancelledStartRef.current = true;
+    sessionLifecycle.abortController.abort();
+  }
+
   async function cancel() {
+    if (isStartingSession) {
+      cancelStartingSession();
+      return;
+    }
     if (!session) return;
     await cancelSession(session.id);
     await refreshSessionTrace(session.id);
@@ -2923,7 +2918,7 @@ export function App() {
       }
       setMermaidBoardExports(payload?.exports ?? []);
       const source = payload?.exports?.[0]?.integration;
-      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       chooseRightPane("mermaid-board", "Exported Mermaid Jam source");
       setError(null);
     } catch (nextError) {
@@ -2973,7 +2968,7 @@ export function App() {
       setMermaidBoardExports(payload?.exports ?? []);
       if (payload?.sync?.status !== "synced") {
         const source = payload?.sync?.integration ?? payload?.exports?.[0]?.integration;
-        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       }
       chooseRightPane("mermaid-board", payload?.sync?.status === "synced" ? "Synced board to FigJam" : "Mermaid Jam source ready");
       setError(null);
@@ -3059,7 +3054,7 @@ export function App() {
       if (payload?.board) setIaBoard(hydrateMermaidBoardAgentSurface(payload.board));
       setIaBoardExports(payload?.exports ?? []);
       const source = payload?.exports?.[0]?.integration;
-      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+      await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       chooseRightPane("ia", "IA export ready");
       setError(null);
     } catch (nextError) {
@@ -3107,7 +3102,7 @@ export function App() {
       setIaBoardExports(payload?.exports ?? []);
       if (payload?.sync?.status !== "synced") {
         const source = payload?.sync?.integration ?? payload?.exports?.[0]?.integration;
-        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch(() => undefined);
+        await openMermaidJamIntegration(source === "local-manifest" ? "local-manifest" : "community").catch((err) => notify(classifyError(err, { hasWorkspace, runtimeHealth }), { severity: "background" }));
       }
       chooseRightPane("ia", payload?.sync?.status === "synced" ? "IA synced" : "IA source ready");
       setError(null);
@@ -3394,6 +3389,7 @@ export function App() {
         <header className="panel-head">
           <div>
             <h2>{runPanelTitle}</h2>
+            <RuntimeStatusChip health={runtimeHealth} phaseLabel={runtimeLifecyclePhaseLabel(runtimeLifecycleEvent)} />
           </div>
           <div className="inline-actions">
             <IconButton actionId="right-pane.tab.run" ariaLabel="Run pane" title="Run" icon="details" onClick={() => chooseRightPane("run", "Run pane opened")} />
@@ -3431,6 +3427,9 @@ export function App() {
           <RuntimeRecoveryStrip
             health={runtimeHealth}
             message={runtimeRecoveryMessage}
+            phaseLabel={runtimeLifecyclePhaseLabel(runtimeLifecycleEvent)}
+            isFinalFailure={runtimeLifecycleEventIsFinalFailure(runtimeLifecycleEvent)}
+            logTail={runtimeLogTail}
             canRestart={canRestartStudioRuntime()}
             onRetry={refresh}
             onRestart={() => void handleRestartStudioRuntime()}
@@ -3786,7 +3785,7 @@ export function App() {
                 <StudioControlIcon name="warning" />
                 <span>{usageLimitChipLabel(usageSnapshot, usageWarning)}</span>
               </button>
-              {session && isSessionActive ? (
+              {(session || isStartingSession) && isSessionActive ? (
                 <IconButton
                   {...workbenchAction("stop")}
                   actionId={workbenchAction("stop").id}
@@ -3812,6 +3811,17 @@ export function App() {
               >
                 {isStartingSession ? <span aria-hidden="true">...</span> : null}
               </IconButton>
+              {currentHarness?.authStatus === "needs_login" ? (
+                <button
+                  data-action-id="harness.reauthenticate"
+                  type="button"
+                  className="run-reauth-button"
+                  title={`Open Settings to re-authenticate ${currentHarness.label}`}
+                  onClick={() => openSettingsPanel("Agents")}
+                >
+                  Log in
+                </button>
+              ) : null}
             </div>
             {runBlockedMessage ? (
               <p className="composer-blocked-reason" data-composer-blocked-reason="run">{runBlockedMessage}</p>
@@ -4137,6 +4147,7 @@ export function App() {
                 <StudioControlIcon name="dark" />
               </button>
             </div>
+            <NotificationCenter />
             <button
               aria-label="Settings"
               className="topbar-icon-button"
@@ -4183,6 +4194,7 @@ export function App() {
           />
           <section className="console-content" data-console-content="primary">
             {error ? <div className="error">{error}</div> : null}
+            {hasWorkspace ? (
             <section
               className="agent-workbench-shell"
               data-agent-workbench="design-system"
@@ -4243,6 +4255,14 @@ export function App() {
                 </section>
               </section>
             </section>
+            ) : (
+              <WelcomeSurface
+                recentWorkspaces={recentWorkspaces}
+                onOpenFolder={() => void handleOpenWorkspace()}
+                onOpenRecent={(path) => void handleOpenWorkspace(path)}
+                onCreateWorkspace={() => void handleCreateWorkspace()}
+              />
+            )}
           </section>
         </section>
       </div>
@@ -4810,6 +4830,9 @@ function updateSessionSummaryCollection(
 function RuntimeRecoveryStrip(props: {
   health: RuntimeHealth;
   message: string | null;
+  phaseLabel?: string | null;
+  isFinalFailure?: boolean;
+  logTail?: Array<{ stream: string; message: string; timestamp: string }>;
   canRestart: boolean;
   onRetry: () => void;
   onRestart: () => void;
@@ -4819,14 +4842,26 @@ function RuntimeRecoveryStrip(props: {
   const message = props.message
     ?? (props.health === "starting" ? "Starting local runtime..." : "Runtime unavailable");
   const needsWorkspaceAccess = isWorkspaceAccessBlockedMessage(message);
-  const displayMessage = workspaceRecoveryDisplayMessage(message, props.health);
-  const recoveryLabel = needsWorkspaceAccess ? "Workspace access" : runtimeHealthLabel(props.health);
+  // The live phase label (from the pushed lifecycle event) is more specific
+  // and more current than the polled fallback message — prefer it, unless
+  // the workspace-access-blocked heuristic needs to take over the whole strip.
+  const displayMessage = needsWorkspaceAccess
+    ? workspaceRecoveryDisplayMessage(message, props.health)
+    : props.phaseLabel ?? workspaceRecoveryDisplayMessage(message, props.health);
+  const recoveryLabel = needsWorkspaceAccess
+    ? "Workspace access"
+    : props.isFinalFailure
+      ? "Won't auto-retry"
+      : runtimeHealthLabel(props.health);
+  const [logExpanded, setLogExpanded] = useState(false);
+  const logTail = props.logTail ?? [];
   return (
     <section
       className="runtime-recovery-strip"
       data-runtime-recovery={props.health}
       data-runtime-health={props.health}
       data-runtime-recovery-copy="compact"
+      data-runtime-final-failure={props.isFinalFailure ? "true" : "false"}
       aria-label="Runtime recovery"
     >
       <strong>{recoveryLabel}</strong>
@@ -4838,44 +4873,26 @@ function RuntimeRecoveryStrip(props: {
         <button data-action-id="runtime.restart" type="button" onClick={props.onRestart} disabled={!props.canRestart}>Restart runtime</button>
       )}
       <button data-action-id="settings.open.runtime" type="button" onClick={props.onOpenSettings}>Open Settings</button>
+      {logTail.length > 0 ? (
+        <button
+          data-action-id="runtime.recovery.toggle-log"
+          type="button"
+          className="runtime-recovery-log-toggle"
+          onClick={() => setLogExpanded((current) => !current)}
+        >
+          {logExpanded ? "Hide log" : "View log"}
+        </button>
+      ) : null}
+      {logExpanded && logTail.length > 0 ? (
+        <pre className="runtime-recovery-log-tail" data-runtime-log-tail="expanded">
+          {logTail.map((line) => `[${line.stream}] ${line.message}`).join("\n")}
+        </pre>
+      ) : null}
     </section>
   );
 }
 
-function runtimeHealthFromStatus(status: StudioStatus): RuntimeHealth {
-  const runtimeStatus = status.runtime?.status;
-  if (runtimeStatus === "running") return "ready";
-  if (runtimeStatus === "starting") return "starting";
-  if (runtimeStatus === "stopped" || runtimeStatus === "error") return "degraded";
-  if (status.status === "running" || status.status === "ready") return "ready";
-  return "degraded";
-}
-
-function isWorkspaceAccessBlockedMessage(message: string | null | undefined): boolean {
-  const normalized = (message ?? "").trim();
-  return /\bmacOS blocked access\b/i.test(normalized)
-    && /\b(saved workspace|workspace|removable|network volumes?)\b/i.test(normalized);
-}
-
-function workspaceRecoveryDisplayMessage(message: string, health: RuntimeHealth): string {
-  if (isWorkspaceAccessBlockedMessage(message)) {
-    return "Reopen the project folder to restore macOS access.";
-  }
-  if (health === "starting") return "Starting local runtime...";
-  return trimText(message, 72);
-}
-
-function runtimeHealthLabel(health: RuntimeHealth): string {
-  if (health === "ready") return "Ready";
-  if (health === "starting") return "Starting";
-  if (health === "degraded") return "Degraded";
-  return "Offline";
-}
-
-function runtimeHealthDisplayLabel(health: RuntimeHealth, source?: string | null): string {
-  if (source === "attached-existing-runtime") return "Attached";
-  return runtimeHealthLabel(health);
-}
+// runtime lifecycle classification functions moved to ./hooks/use-runtime-lifecycle
 
 function runtimeTruthTitle(status: StudioStatus | null, recoveryMessage?: string | null): string {
   if (status?.runtime?.runtimeSource === "attached-existing-runtime") {
@@ -6068,35 +6085,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function readBooleanPreference(key: string, fallback: boolean): boolean {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw === null ? fallback : JSON.parse(raw) === true;
-  } catch {
-    return fallback;
-  }
-}
-
-function readStringArrayPreference(key: string): string[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function readNumberPreference(key: string, fallback: number, min: number, max: number): number {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw === null ? fallback : Number(JSON.parse(raw));
-    return Number.isFinite(parsed) ? clampNumber(parsed, min, max) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function permissionModePowerLabel(mode: StudioPermissionMode): string {
   if (mode === "plan") return "Read";
   if (mode === "full_access") return "Full";
@@ -6111,8 +6099,4 @@ function permissionModePowerDetail(mode: StudioPermissionMode): string {
 
 function isNearScrollBottom(element: HTMLElement, threshold = 96): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }

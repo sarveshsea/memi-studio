@@ -64,6 +64,8 @@ import {
 
 import { WORKBENCH_COPY } from "../workbench-copy";
 import { MEMOIRE_PACKAGE_NAME, MEMOIRE_PACKAGE_VERSION, MEMOIRE_STUDIO_VERSION } from "../runtime/package-info";
+import { notify } from "../notification-center";
+import { classifyError } from "../studio-api/errors";
 
 export const OUTPUT_TABS = WORKBENCH_COPY.outputTabs;
 
@@ -492,7 +494,7 @@ export function formatLogPayload(event: StudioEvent): string {
 
 export async function copyText(value: string) {
   if (!value.trim()) return;
-  await navigator.clipboard?.writeText(value).catch(() => undefined);
+  await navigator.clipboard?.writeText(value).catch((err) => notify(classifyError(err), { severity: "background" }));
 }
 
 export type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "research" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
