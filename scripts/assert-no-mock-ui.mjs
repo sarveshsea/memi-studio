@@ -174,21 +174,29 @@ if (!liveE2eSmokeSource.includes("MEMOIRE_PACKAGE_ROOT") || !liveE2eSmokeSource.
 }
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");
-const componentsSource = readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8");
+// workbench-components.tsx became a pure re-export barrel when the panels
+// were decomposed into src/workbench/* (#17) — read the whole module set so
+// these behavior checks follow the code wherever it lives.
+const componentsSource = [
+  readFileSync(join(ROOT, "src/workbench-components.tsx"), "utf8"),
+  ...readdirSync(join(ROOT, "src/workbench"))
+    .filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"))
+    .map((name) => readFileSync(join(ROOT, "src/workbench", name), "utf8")),
+].join("\n");
 if (!componentsSource.includes("data-icon-tooltip")) {
-  failures.push("src/workbench-components.tsx: shared icon controls must emit data-icon-tooltip for visible labels");
+  failures.push("src/workbench/*: shared icon controls must emit data-icon-tooltip for visible labels");
 }
 if (!componentsSource.includes('actionId="chat.branch-current" ariaLabel="Branch conversation"') || !componentsSource.includes('title={`Copy verification: ${verification.summary}`}')) {
-  failures.push("src/workbench-components.tsx: contextual chat icon controls must use shared visible tooltips instead of title-only icons");
+  failures.push("src/workbench/*: contextual chat icon controls must use shared visible tooltips instead of title-only icons");
 }
 if (!componentsSource.includes('data-icon-tooltip={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}')) {
-  failures.push("src/workbench-components.tsx: collapsed sidebar icon control must expose a visible tooltip");
+  failures.push("src/workbench/*: collapsed sidebar icon control must expose a visible tooltip");
 }
 if (!componentsSource.includes("displayableDesignTokens") || !componentsSource.includes("isDisplayableDesignToken")) {
-  failures.push("src/workbench-components.tsx: design-system token evidence must filter raw JSON snippets before rendering");
+  failures.push("src/workbench/*: design-system token evidence must filter raw JSON snippets before rendering");
 }
 if (!componentsSource.includes("formatAgenticContractTerm") || !componentsSource.includes("formatAgenticContractAccess")) {
-  failures.push("src/workbench-components.tsx: agentic design-system contract must humanize raw event and token ids before rendering");
+  failures.push("src/workbench/*: agentic design-system contract must humanize raw event and token ids before rendering");
 }
 if (!studioCssSource.includes("[data-icon-tooltip]::after")) {
   failures.push("src/styles.css: icon controls must render visible hover/focus tooltips from data-icon-tooltip");
