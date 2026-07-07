@@ -2838,3 +2838,19 @@ progress { width: 100%; height: 4px; accent-color: var(--accent); }
 .review-toolbar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 900px) { .automations-backdrop, .settings-backdrop { padding: var(--space-2); } .settings-panel { width: min(100%, calc(100vw - var(--space-4))); height: min(92dvh, 820px); grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); } .settings-panel aside { grid-auto-flow: column; grid-auto-columns: minmax(126px, max-content); overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--line); } .settings-panel aside > button { grid-template-columns: auto minmax(0, 1fr); } .settings-panel aside > button small { display: none; } .settings-panel main { padding: var(--space-2); } .settings-hero-card, .settings-feature-card, .setup-action-row { grid-template-columns: auto minmax(0, 1fr); } .settings-hero-card > .inline-actions, .settings-feature-card > button, .setup-action-row > .inline-actions { grid-column: 1 / -1; justify-self: start; } .automation-template-row, .automations-grid, .automation-detail-grid, .permission-grid, .marketplace-note, .marketplace-layout, .marketplace-stats, .marketplace-detail-grid, .note-fork-layout, .runtime-recovery-strip { grid-template-columns: minmax(0, 1fr); } .automation-list { border-right: 0; border-bottom: 1px solid var(--line); } .automations-header, .automation-scheduler-strip, .automation-detail-head { align-items: stretch; flex-direction: column; } .automation-modal { inset: var(--space-2); width: auto; } }
 @media (max-width: 560px) { .settings-backdrop { padding: var(--space-1); } .settings-panel { width: calc(100vw - var(--space-2)); height: calc(100dvh - var(--space-2)); max-height: none; border-radius: var(--radius-default); } .settings-panel main > header, .settings-actions, .drawer-section-head { align-items: stretch; flex-direction: column; } .settings-panel main > header .inline-actions, .settings-actions { justify-content: flex-start; } .settings-section-grid, .settings-setup-grid, .settings-field-grid { grid-template-columns: minmax(0, 1fr); } .settings-field-grid label, .settings-field-grid article { min-width: 0; } .settings-row-copy > strong, .settings-metric-card > strong { white-space: normal; overflow-wrap: anywhere; } .settings-tag { max-width: 100%; } }
+
+/* Lazy surface loading skeletons (Suspense fallbacks). Structural placeholders
+   only, no text, so assert-no-mock-ui stays green. Colors come from theme
+   tokens; the shimmer sweep is disabled under prefers-reduced-motion. */
+.surface-skeleton { min-width: 0; min-height: 100%; }
+.surface-skeleton[data-skeleton="mermaid-board"] { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: var(--space-2); padding: var(--space-2); }
+.surface-skeleton[data-skeleton="ia"] { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-2); }
+.surface-skeleton .skeleton-block { position: relative; overflow: hidden; border-radius: var(--radius-md); background: var(--surface-muted); border: 1px solid var(--line); }
+.surface-skeleton .skeleton-row { height: 44px; }
+.surface-skeleton .skeleton-bar { height: 18px; }
+.surface-skeleton .skeleton-canvas { min-height: 280px; }
+.surface-skeleton .skeleton-block::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface-soft) 70%, transparent), transparent); animation: surface-skeleton-sweep 1.4s ease-in-out infinite; }
+@keyframes surface-skeleton-sweep { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .surface-skeleton .skeleton-block::after { animation: none; }
+}
