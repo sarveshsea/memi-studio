@@ -23,11 +23,15 @@ import type {
   StudioTraceSnapshot,
 } from "./shared-types";
 
-export async function startSession(input: { harness: HarnessId; cwd: string; prompt: string; action?: StudioAction; mode?: StudioSessionMode; chatMode?: StudioChatMode; permissionMode?: StudioPermissionMode; attachments?: StudioAttachment[]; conversationId?: string; goal?: string; model?: string | null; effort?: StudioEffort }): Promise<SessionSummary> {
+export async function startSession(
+  input: { harness: HarnessId; cwd: string; prompt: string; action?: StudioAction; mode?: StudioSessionMode; chatMode?: StudioChatMode; permissionMode?: StudioPermissionMode; attachments?: StudioAttachment[]; conversationId?: string; goal?: string; model?: string | null; effort?: StudioEffort },
+  options: { signal?: AbortSignal } = {},
+): Promise<SessionSummary> {
   const payload = await fetchJSON<{ session: SessionSummary }>("/api/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
+    signal: options.signal,
   });
   return payload.session;
 }

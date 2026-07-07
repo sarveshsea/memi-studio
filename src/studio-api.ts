@@ -11,6 +11,7 @@
 // it holds private fetch/token/normalization plumbing, not public API.
 
 export * from "./studio-api/shared-types";
+export * from "./studio-api/errors";
 export * from "./studio-api/core-runtime";
 export * from "./studio-api/harness-setup";
 export * from "./studio-api/config";
