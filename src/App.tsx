@@ -49,6 +49,9 @@ import {
   getSessionEvents,
   getSessionTrace,
   getStatus,
+  runDesignAudit,
+  getLatestDesignAudit,
+  acceptDesignAuditBaseline,
   getUsageSnapshot,
   installAutomationScheduler,
   installAgentKit,
@@ -126,6 +129,8 @@ import {
   type StudioComputerStatus,
   type StudioDesignSystemTrace,
   type StudioDesignSystemTraceFile,
+  type StudioDesignAuditResult,
+  type StudioError,
   type StudioEvent,
   type StudioInputMode,
   type StudioKnowledgeIndex,
@@ -187,6 +192,7 @@ import {
   trimText,
   type TerminalBlock,
 } from "./workbench-components";
+import { DesignHealthSurface } from "./design-audit-surface/design-health-surface";
 import { hydrateMermaidBoardAgentSurface } from "./mermaid-board-contract";
 import type { IASurfaceProps } from "./ia-surface";
 import type { MermaidBoardSurfaceProps } from "./mermaid-board-surface";
@@ -428,6 +434,7 @@ const SCENARIO_TOOL_IDS = ["harness.study", "research.patterns.extract", "resear
 const CORE_MERMAID_BOARD_TOOL_IDS = ["board.create", "board.add_node", "board.update_node", "board.connect", "board.layout", "board.capture_ia", "board.export_mermaid_jam"] as const;
 const PM_MERMAID_BOARD_TOOL_IDS = ["board.apply_template", "board.sync_figjam"] as const;
 const MERMAID_SOURCE_TOOL_IDS = ["research.design_package", "mermaid_jam.export"] as const;
+const DESIGN_AUDIT_TIMEOUT_MS = 60_000;
 const MERMAID_BOARD_RUNTIME_UNAVAILABLE = WORKBENCH_COPY.mermaidRuntime.unavailable;
 const MERMAID_BOARD_PM_RUNTIME_STALE = WORKBENCH_COPY.mermaidRuntime.pmRuntimeStale;
 const LIVE_EVENT_LIMIT = 220;
@@ -468,6 +475,7 @@ export function App() {
   // the same in-flight request with the same AbortError, but should show
   // different messages (quiet vs "took too long to start").
   const cancelledStartRef = useRef(false);
+  const designAuditAbortControllerRef = useRef<AbortController | null>(null);
   const runtimeReadyHydrationRef = useRef<string | null>(null);
   const worktreeTraceRefreshInFlightRef = useRef(false);
   const {
@@ -559,6 +567,9 @@ export function App() {
   const [computerStatus, setComputerStatus] = useState<StudioComputerStatus | null>(null);
   const [designTrace, setDesignTrace] = useState<StudioDesignSystemTrace | null>(null);
   const [designArtifacts, setDesignArtifacts] = useState<DesignSystemArtifact[]>([]);
+  const [designAuditResult, setDesignAuditResult] = useState<StudioDesignAuditResult | null>(null);
+  const [designAuditLoading, setDesignAuditLoading] = useState(false);
+  const [designAuditError, setDesignAuditError] = useState<StudioError | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [researchSource, setResearchSource] = useState("research-store");
   const [scenarioHypothesis, setScenarioHypothesis] = useState("Research-backed spec changes reduce product risk.");
@@ -881,6 +892,10 @@ export function App() {
   );
   const shouldShowPacketTab = rightPaneTab === "work-packet" || hasPacketContext;
   const shouldShowDesignSystemTab = rightPaneTab === "design-system" || designLaneState.hasDesignSystem;
+  // Unlike design-system/figma, there's no "this just happened" signal for a
+  // design audit — it's a tab the user navigates to deliberately (via the
+  // command palette), not one that should auto-surface.
+  const shouldShowDesignAuditTab = rightPaneTab === "design-audit";
   const shouldShowBoardTab = rightPaneTab === "mermaid-board" || designLaneState.hasFigJam;
   const shouldShowFigmaTab = rightPaneTab === "figma" || designLaneState.hasFigma || designLaneState.needsFigmaSetup;
   const visibleRightPaneTabs = useMemo(() => {
@@ -888,10 +903,11 @@ export function App() {
     visibleIds.add(rightPaneTab);
     if (shouldShowPacketTab) visibleIds.add("work-packet");
     if (shouldShowDesignSystemTab) visibleIds.add("design-system");
+    if (shouldShowDesignAuditTab) visibleIds.add("design-audit");
     if (shouldShowBoardTab) visibleIds.add("mermaid-board");
     if (shouldShowFigmaTab) visibleIds.add("figma");
     return ALL_RIGHT_PANE_TABS.filter((tab) => visibleIds.has(tab.id));
-  }, [rightPaneTab, shouldShowBoardTab, shouldShowDesignSystemTab, shouldShowFigmaTab, shouldShowPacketTab]);
+  }, [rightPaneTab, shouldShowBoardTab, shouldShowDesignAuditTab, shouldShowDesignSystemTab, shouldShowFigmaTab, shouldShowPacketTab]);
   const designLaneReceipt = useMemo<RunSpineReceiptModel | null>(() => {
     if (contextualDesignArtifact) {
       return {
@@ -1805,6 +1821,58 @@ export function App() {
     void listDesignSystemArtifacts().then(updateDesignArtifacts).catch((err) => {
       setError(err instanceof Error ? err.message : String(err));
     });
+  }
+
+  function openDesignAuditSurface() {
+    chooseRightPane("design-audit", "Design Health opened");
+    // Cheap cached read only — opening the tab must not trigger a full rescan.
+    void getLatestDesignAudit()
+      .then(setDesignAuditResult)
+      .catch((err) => {
+        const classified = classifyError(err, { hasWorkspace, runtimeHealth });
+        setDesignAuditError(classified);
+        notify(classified);
+      });
+  }
+
+  function runDesignAuditNow() {
+    setDesignAuditError(null);
+    setDesignAuditLoading(true);
+    const abortController = new AbortController();
+    designAuditAbortControllerRef.current = abortController;
+    const timeoutId = window.setTimeout(() => abortController.abort(), DESIGN_AUDIT_TIMEOUT_MS);
+    runDesignAudit({}, { signal: abortController.signal })
+      .then((result) => {
+        setDesignAuditResult(result);
+      })
+      .catch((err) => {
+        const wasAborted = err instanceof DOMException && err.name === "AbortError";
+        if (!wasAborted) {
+          const classified = classifyError(err, { hasWorkspace, runtimeHealth });
+          setDesignAuditError(classified);
+          notify(classified);
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        designAuditAbortControllerRef.current = null;
+        setDesignAuditLoading(false);
+      });
+  }
+
+  function cancelDesignAuditNow() {
+    designAuditAbortControllerRef.current?.abort();
+  }
+
+  function acceptDesignAuditBaselineNow() {
+    acceptDesignAuditBaseline()
+      .then(() => getLatestDesignAudit())
+      .then(setDesignAuditResult)
+      .catch((err) => {
+        const classified = classifyError(err, { hasWorkspace, runtimeHealth });
+        setDesignAuditError(classified);
+        notify(classified, { severity: "background" });
+      });
   }
 
   function openFigJamBoardSurface() {
@@ -3535,6 +3603,12 @@ export function App() {
             onSelectFile={(file) => inspectWorkbenchItem({ kind: "file", path: file.path })}
             onSelectEvent={(event) => inspectWorkbenchItem({ kind: "event", id: event.id })}
           />
+          {!session && terminalBlocks.length === 0 ? (
+            <div className="conversation-scroll-placeholder" aria-hidden="true">
+              <span className="conversation-scroll-placeholder-label">Console</span>
+              <p>$ Output will stream here once a run starts.</p>
+            </div>
+          ) : null}
           <div aria-hidden="true" data-latest-anchor ref={bottomAnchorRef} />
         </section>
 
@@ -4073,6 +4147,19 @@ export function App() {
         />
       );
     }
+    if (rightPaneTab === "design-audit") {
+      return (
+        <DesignHealthSurface
+          result={designAuditResult}
+          loading={designAuditLoading}
+          error={designAuditError}
+          onRunAudit={runDesignAuditNow}
+          onCancelRun={cancelDesignAuditNow}
+          onAcceptBaseline={acceptDesignAuditBaselineNow}
+          runInFlight={designAuditLoading}
+        />
+      );
+    }
     if (rightPaneTab === "ia") return renderIAPane();
     if (rightPaneTab === "research-lab") return renderScenarioLab();
     if (rightPaneTab === "mermaid-board") return renderMermaidBoardPane();
@@ -4290,6 +4377,10 @@ export function App() {
         onOpenDesignSystem={() => {
           setCommandPaletteOpen(false);
           openDesignSystemSurface();
+        }}
+        onOpenDesignAudit={() => {
+          setCommandPaletteOpen(false);
+          openDesignAuditSurface();
         }}
         onOpenBoard={() => {
           setCommandPaletteOpen(false);
@@ -5230,7 +5321,7 @@ function ContextualInspectorPane(props: {
       {!hasResolvedSelection ? (
         <section className="inspector-summary-card" data-inspector-empty="runtime-session">
           <dl>
-            <div>
+            <div data-runtime-health={props.runtimeHealth}>
               <dt>Runtime</dt>
               <dd>{runtimeHealthDisplayLabel(props.runtimeHealth, props.status?.runtime?.runtimeSource)}</dd>
             </div>

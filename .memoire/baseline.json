@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "acceptedAt": "2026-07-07T00:32:02.208Z",
+  "policyHash": "ed7c24df38c392fe",
+  "entries": [
+    {
+      "fingerprint": "37cca90d2e98e142a927",
+      "ruleId": "color.raw-hex",
+      "file": "index.html",
+      "note": "accepted by memi init --team"
+    },
+    {
+      "fingerprint": "c7474e9dd93e07636044",
+      "ruleId": "color.raw-hex",
+      "file": "src-tauri/resources/memoire-runtime/preview/templates/gallery-page.css",
+      "note": "accepted by memi init --team"
+    },
+    {
+      "fingerprint": "3db87e01026230812822",
+      "ruleId": "color.raw-hex",
+      "file": "src-tauri/resources/memoire-runtime/preview/templates/research-page.css",
+      "note": "accepted by memi init --team"
+    },
+    {
+      "fingerprint": "9facd77ca65afe7cea62",
+      "ruleId": "color.raw-hex",
+      "file": "src/styles.css",
+      "note": "accepted by memi init --team"
+    },
+    {
+      "fingerprint": "346cc8637183db5652c5",
+      "ruleId": "responsive.coverage-low",
+      "note": "accepted by memi init --team"
+    }
+  ]
+}

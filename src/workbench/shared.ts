@@ -497,7 +497,7 @@ export async function copyText(value: string) {
   await navigator.clipboard?.writeText(value).catch((err) => notify(classifyError(err), { severity: "background" }));
 }
 
-export type CommandPaletteIcon = "settings" | "system" | "board" | "figma" | "research" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
+export type CommandPaletteIcon = "settings" | "system" | "check" | "board" | "figma" | "research" | "plugins" | "automations" | "changelog" | "advanced" | "claude" | "codex" | "hermes" | "session" | "knowledge" | "search" | "close";
 export function formatAutomationDate(value: string | null | undefined): string {
   if (!value) return "never";
   const date = new Date(value);
