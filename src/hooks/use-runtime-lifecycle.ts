@@ -173,17 +173,26 @@ export function useRuntimeLifecycle(refresh: () => Promise<void>): RuntimeLifecy
   }, []);
 
   useEffect(() => {
-    if (runtimeHealth !== "starting" && runtimeHealth !== "degraded") return undefined;
+    // Includes "offline": refresh()'s own catch handler (App.tsx) sets health
+    // straight to "offline" on any failure, including the very first status
+    // check racing against the sidecar still spawning — a transient,
+    // expected failure, not a genuine crash. Excluding "offline" here left
+    // that path with no retry at all once it landed.
+    if (runtimeHealth !== "starting" && runtimeHealth !== "degraded" && runtimeHealth !== "offline") return undefined;
     // Reconciliation fallback only — the lifecycle-event subscription above is
     // now the primary readiness signal, so this no longer needs sub-second
     // latency; it exists to recover if an event was ever missed.
     const delay = runtimeHealth === "starting" ? 2000 : 5000;
     const interval = window.setInterval(() => {
-      // This is the fallback only — the pushed lifecycle event subscription
-      // above is the primary signal and isn't gated by tab visibility, so
-      // pausing this reconciliation poll while hidden doesn't delay real
-      // readiness detection, just stops burning CPU/network unattended.
-      if (document.visibilityState === "hidden") return;
+      // Deliberately NOT gated on document.visibilityState: this poll exists
+      // specifically to recover from a missed pushed lifecycle event (e.g.
+      // the Rust side emits "runtime.ready" before the frontend subscription
+      // mounts, a real race observed in a Tauri WKWebView, whose
+      // visibilityState can also report "hidden" whenever the window isn't
+      // frontmost, not just when minimized). Pausing the one fallback for a
+      // missed event on the same kind of signal that already failed once
+      // would leave the app permanently stuck showing the runtime as
+      // offline even after it's actually healthy.
       if (runtimeStartupRefreshInFlightRef.current) return;
       runtimeStartupRefreshInFlightRef.current = true;
       void refresh().finally(() => {

@@ -161,6 +161,7 @@ export function CommandPalette(props: {
   onOpenSettings: () => void;
   onOpenSettingsSection: (section: string) => void;
   onOpenDesignSystem: () => void;
+  onOpenDesignAudit: () => void;
   onOpenBoard: () => void;
   onOpenResearchLab: () => void;
   onOpenFigma: () => void;
@@ -210,6 +211,7 @@ export function CommandPalette(props: {
   const navigationRows: CommandPaletteRow[] = [
     { id: "settings.open", kind: "navigation" as const, icon: "settings" as const, label: "Settings", detail: "Open Studio settings", run: props.onOpenSettings },
     { id: "command.open.design-system", kind: "navigation" as const, icon: "system" as const, label: "Design System", detail: "Open editable artifact review and design memory", run: props.onOpenDesignSystem },
+    { id: "command.open.design-audit", kind: "navigation" as const, icon: "check" as const, label: "Design Health", detail: "Run memi's own design-quality audit on this workspace", run: props.onOpenDesignAudit },
     { id: "command.open.figjam-board", kind: "navigation" as const, icon: "board" as const, label: "FigJam Board", detail: "Open PM board, source export, and sync status", run: props.onOpenBoard },
     { id: "command.open.research-lab", kind: "navigation" as const, icon: "research" as const, label: "Research Lab", detail: "Open research patterns and scenario simulation", run: props.onOpenResearchLab },
     { id: "command.open.figma", kind: "navigation" as const, icon: "figma" as const, label: "Figma Bridge", detail: "Open bridge status and plugin actions", run: props.onOpenFigma },

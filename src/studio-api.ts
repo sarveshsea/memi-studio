@@ -21,6 +21,7 @@ export * from "./studio-api/tools-compat";
 export * from "./studio-api/mermaid-mcp";
 export * from "./studio-api/browser-computer";
 export * from "./studio-api/design-system-pane";
+export * from "./studio-api/design-audit";
 export * from "./studio-api/usage-cost";
 export * from "./studio-api/memory-marketplace-pane";
 export * from "./studio-api/figma-bridge";

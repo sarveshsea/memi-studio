@@ -56,7 +56,6 @@ Thumbs.db
 *.mobileprovision
 
 # Local Mémoire state
-.memoire/
 .memoire-cache/
 
 # Logs
@@ -69,3 +68,8 @@ coverage/
 
 # Tauri build artifacts staging
 src-tauri/.tauri/
+
+# >>> memi (managed) >>>
+.memoire/*
+!.memoire/baseline.json
+# <<< memi (managed) <<<

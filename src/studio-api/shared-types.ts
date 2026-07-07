@@ -137,7 +137,7 @@ export interface StudioCodexConfig {
 export type StudioAutomationKind = "cron" | "heartbeat";
 export type StudioAutomationStatus = "ACTIVE" | "PAUSED";
 export type StudioAutomationMutationPolicy = "review" | "allow_writes" | "read_only";
-export type StudioRightPaneTab = "run" | "changes" | "design-system" | "ia" | "research-lab" | "mermaid-board" | "design-changelog" | "figma" | "memory";
+export type StudioRightPaneTab = "run" | "work-packet" | "changes" | "design-system" | "design-audit" | "ia" | "research-lab" | "mermaid-board" | "design-changelog" | "figma" | "memory";
 
 export interface StudioPaneIntent {
   tab: StudioRightPaneTab;
@@ -468,6 +468,71 @@ export interface StudioDesignSystemTrace {
   files: StudioDesignSystemTraceFile[];
   designSystemFiles: StudioDesignSystemTraceFile[];
   error: string | null;
+}
+
+export type StudioAppQualitySeverity = "critical" | "high" | "medium" | "low";
+export type StudioAppQualityCategory =
+  | "visual-system"
+  | "typography"
+  | "spacing"
+  | "color"
+  | "components"
+  | "accessibility"
+  | "responsive"
+  | "maintainability";
+
+export interface StudioAppQualityIssue {
+  id: string;
+  category: StudioAppQualityCategory;
+  severity: StudioAppQualitySeverity;
+  title: string;
+  detail: string;
+  evidence: string[];
+  recommendation: string;
+  evidenceLocations?: Array<{ file: string; line?: number; excerpt?: string }>;
+  affectedFiles?: string[];
+  confidence?: number;
+  estimatedEffort?: "small" | "medium" | "large";
+  fixCategory?: "tokens" | "components" | "accessibility" | "responsive" | "code-health";
+}
+
+export interface StudioAppQualityDiagnosis {
+  version: 1;
+  target: string;
+  generatedAt: string;
+  summary: {
+    score: number;
+    verdict: string;
+    scannedFiles: number;
+    routes: number;
+    components: number;
+    styleFiles: number;
+    tailwindClasses: number;
+    shadcnImports: number;
+    cssVariables: number;
+    hexColors: number;
+  };
+  scores: Record<StudioAppQualityCategory, number>;
+  issues: StudioAppQualityIssue[];
+}
+
+export interface StudioDesignAuditHistoryEntry {
+  at: string;
+  sha?: string;
+  branch?: string;
+  scope: "full" | "scoped";
+  policyHash?: string;
+  score: number;
+  categoryScores: Record<string, number>;
+  severityCounts: Record<StudioAppQualitySeverity, number>;
+}
+
+export interface StudioDesignAuditResult {
+  diagnosis: StudioAppQualityDiagnosis;
+  active: StudioAppQualityIssue[];
+  suppressed: StudioAppQualityIssue[];
+  baselineExists: boolean;
+  history: StudioDesignAuditHistoryEntry[];
 }
 
 export type DesignChangelogEntryStatus = "active" | "archived";
