@@ -41,6 +41,7 @@ export interface SlashCommandPatch {
 export const SLASH_COMMANDS: SlashCommand[] = [
   command("plan", "Plan", "Stage a read-only planning run.", ["p"], { action: "research", chatMode: "ideate", permissionMode: "plan" }),
   command("build", "Build", "Stage an app build run.", ["b"], { action: "app-build", chatMode: "build", permissionMode: "guarded" }),
+  command("ios", "iOS + SwiftUI", "Stage an Apple-platform design and build run.", ["swift", "swiftui", "xcode"], { action: "app-build", chatMode: "build", permissionMode: "guarded" }),
   command("review", "Review", "Stage a review/audit run.", ["audit"], { action: "audit", chatMode: "review", permissionMode: "plan" }),
   command("research", "Research", "Stage a research run.", ["r"], { action: "research", chatMode: "research", permissionMode: "plan" }),
   command("simulate", "Simulate", "Stage a Scenario Lab simulation run.", ["sim"], { action: "simulate", chatMode: "research", permissionMode: "plan", pane: "run" }),

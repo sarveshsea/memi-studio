@@ -1,6 +1,6 @@
 {
   "name": "memi-studio",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,11 +14,11 @@
     "url": "git+https://github.com/sarveshsea/memi-studio.git"
   },
   "memoireRuntime": {
-    "version": "0.19.0",
+    "version": "0.20.0",
     "engineRepo": "sarveshsea/memi",
-    "releaseTag": "runtime-v0.19.0",
+    "releaseTag": "runtime-v0.20.0",
     "binaryAssetPattern": "memi-studio-runtime-{arch}-apple-darwin",
-    "resourcesAsset": "memoire-runtime-resources-0.19.0.tar.gz"
+    "resourcesAsset": "memoire-runtime-resources-0.20.0.tar.gz"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -62,7 +62,10 @@
     "@vitejs/plugin-react": "6.0.1",
     "jsdom": "^29.1.1",
     "typescript": "6.0.3",
-    "vite": "8.0.11",
+    "vite": "8.1.5",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "dompurify": "3.4.12"
   }
 }

@@ -14,7 +14,7 @@ use std::{
 // Refresh manually until a sync script lands; the runtime sidecar carries the
 // authoritative copy at runtime, this is just for compile-time defaults.
 const HARNESS_MANIFEST_JSON: &str = include_str!("../resources/harness-manifest.json");
-const MEMOIRE_PACKAGE_REFERENCE: &str = "@memi-design/cli@1.1.0";
+const MEMOIRE_PACKAGE_REFERENCE: &str = "@memi-design/cli@2.6.0";
 const MEMOIRE_PACKAGE_URL: &str = "https://www.npmjs.com/package/@memi-design/cli";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -644,9 +644,21 @@ fn design_agent_envelope(
     } else {
         ""
     };
+    let apple = apple_platform_guidance(prompt);
     format!(
-        "# Mémoire Studio Agent Task\n\n## Design/research lens\n- Start from UX research, information architecture, accessibility, and design-system coherence.\n- Keep component thinking in Atomic design levels: atom -> molecule -> organism -> template -> page.\n- Use project memory, specs, references, and Figma state when available.\n- Report discoveries as research_note, design_decision, tool_call, artifact, and session_result when possible.\n\n## Harness behavior\n- Harness: {harness}\n- Action: {action}\n- Chat mode: {chat_mode}\n- Permission mode: {permission_mode}{codex_settings}\n- Reference package: {MEMOIRE_PACKAGE_REFERENCE} ({MEMOIRE_PACKAGE_URL})\n- In ideate and research modes, produce plans, questions, references, research evidence, and design artifacts before implementation.{plan}\n- In build and terminal modes, keep terminal commands, output, previews, and handoff artifacts traceable.\n- In full_access mode, act without extra confirmation inside configured workspaces; reserve destructive host actions for explicit user requests.\n- Produce a concise final session_result with artifacts, assumptions, and next design/research step.{codex}\n\n## User request\n{prompt}"
+        "# Mémoire Studio Agent Task\n\n## Design/research lens\n- Start from UX research, information architecture, accessibility, and design-system coherence.\n- Keep component thinking in Atomic design levels: atom -> molecule -> organism -> template -> page.\n- Use project memory, specs, references, and Figma state when available.\n- Report discoveries as research_note, design_decision, tool_call, artifact, and session_result when possible.{apple}\n\n## Harness behavior\n- Harness: {harness}\n- Action: {action}\n- Chat mode: {chat_mode}\n- Permission mode: {permission_mode}{codex_settings}\n- Reference package: {MEMOIRE_PACKAGE_REFERENCE} ({MEMOIRE_PACKAGE_URL})\n- In ideate and research modes, produce plans, questions, references, research evidence, and design artifacts before implementation.{plan}\n- In build and terminal modes, keep terminal commands, output, previews, and handoff artifacts traceable.\n- In full_access mode, act without extra confirmation inside configured workspaces; reserve destructive host actions for explicit user requests.\n- Produce a concise final session_result with artifacts, assumptions, and next design/research step.{codex}\n\n## User request\n{prompt}"
     )
+}
+
+fn apple_platform_guidance(prompt: &str) -> &'static str {
+    let normalized = prompt.to_ascii_lowercase();
+    let is_apple_request = ["ios", "swift", "swiftui", "xcode", "app intent"]
+        .iter()
+        .any(|needle| normalized.contains(needle));
+    if !is_apple_request {
+        return "";
+    }
+    "\n\n## Apple platform workflow\n- Load the build-swiftui-interface skill and begin with `memi ios brief --detail compact --json`.\n- Inspect the existing Xcode project, shared schemes, deployment target, SwiftUI conventions, tokens, and accessibility behavior before generating files.\n- Run `memi ios scaffold` as a dry-run first; write only after reviewing the JSON file plan, and never mutate project files silently.\n- Use Swift concurrency safety, Swift Testing for unit coverage, XCTest/XCUITest for UI flows, and App Intents only for high-value system actions.\n- Treat Liquid Glass as an iOS 26+ enhancement with an availability-gated fallback; do not claim unsupported future platform versions.\n- Verify with `xcodebuild -list -json`, a shared-scheme build/test destination, and an available iOS Simulator. Record commands, destination, and artifacts in the session result."
 }
 
 fn codex_command_guidance(
@@ -870,6 +882,26 @@ mod tests {
             .last()
             .expect("prompt")
             .contains("design_decision"));
+    }
+
+    #[test]
+    fn external_agents_receive_apple_platform_workflow() {
+        let command = build_command_for_action_with_context(
+            "codex",
+            "Build a SwiftUI settings screen.",
+            Some("app-build"),
+            Some("build"),
+            Some("guarded"),
+        )
+        .expect("codex command");
+        let prompt = command.args.last().expect("prompt");
+
+        assert!(prompt.contains("memi ios brief"));
+        assert!(prompt.contains("build-swiftui-interface"));
+        assert!(prompt.contains("dry-run"));
+        assert!(prompt.contains("xcodebuild"));
+        assert!(prompt.contains("iOS 26"));
+        assert!(!prompt.contains("iOS 27"));
     }
 
     #[test]
