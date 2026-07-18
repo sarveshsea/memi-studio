@@ -189,6 +189,15 @@ export const WORKBENCH_COPY = {
       icon: "changes",
     },
     {
+      label: "Build SwiftUI",
+      shortLabel: "SwiftUI",
+      template: "Build or refactor the requested SwiftUI interface. Start with `memi ios brief --detail compact --json`, inspect the Xcode project and existing design system, preview generated files with `memi ios scaffold` in dry-run mode, then write only approved files and verify the shared scheme with xcodebuild and an available iOS Simulator.",
+      action: "app-build",
+      chatMode: "build",
+      permissionMode: "guarded",
+      icon: "run",
+    },
+    {
       label: "Extract tokens",
       shortLabel: "Tokens",
       template: "Extract color, type, spacing, radius, state, and component patterns from the current workspace, then report gaps and suggested token names.",

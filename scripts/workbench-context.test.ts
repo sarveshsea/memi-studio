@@ -28,6 +28,7 @@ import {
   sidebarNavigationSessions,
 } from "../src/studio-workbench.js";
 import { buildCritiqueScreenPrompt, buildCritiqueScreenUnavailablePrompt, WORKBENCH_COPY } from "../src/workbench-copy.js";
+import { applySlashCommand, SLASH_COMMANDS } from "../src/slash-commands.js";
 import type { Harness, HarnessId, SessionSummary } from "../src/studio-api.js";
 
 type TestEvent = {
@@ -261,6 +262,30 @@ assert(
     && critiqueStarter.permissionMode === "plan"
     && critiqueStarter.template.includes("UX Tenets and Traps"),
   "keeps Critique screen wired to the Review/Audit UX Tenets flow",
+);
+
+const swiftUIStarter = WORKBENCH_COPY.starterPrompts.find((starter) => starter.label === "Build SwiftUI");
+assert(
+  Boolean(swiftUIStarter)
+    && swiftUIStarter?.action === "app-build"
+    && swiftUIStarter.chatMode === "build"
+    && swiftUIStarter.permissionMode === "guarded"
+    && swiftUIStarter.template.includes("memi ios brief")
+    && swiftUIStarter.template.includes("dry-run"),
+  "routes the SwiftUI starter through the guarded Memi iOS workflow",
+);
+
+const iosSlashCommand = SLASH_COMMANDS.find((command) => command.id === "ios");
+const iosSlashPatch = iosSlashCommand
+  ? applySlashCommand(iosSlashCommand, { prompt: "/ios build a settings screen" })
+  : null;
+assert(
+  Boolean(iosSlashCommand)
+    && iosSlashPatch?.prompt === "build a settings screen"
+    && iosSlashPatch.action === "app-build"
+    && iosSlashPatch.chatMode === "build"
+    && iosSlashPatch.permissionMode === "guarded",
+  "stages /ios requests as guarded SwiftUI build runs",
 );
 
 assert(

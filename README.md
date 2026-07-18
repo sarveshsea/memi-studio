@@ -42,7 +42,22 @@ Direct DMG downloads are attached to [memi-studio releases](https://github.com/s
 - **Explicit setup** — install/auth/model/effort/permission state is visible, with copyable commands and refresh actions.
 - **Project memory** — indexed knowledge corpus per workspace; sessions accumulate design and engineering evidence.
 - **Artifact panel** — diffs, screenshots, plans, transcripts, and work packets stay tied to the run.
+- **Apple-platform workflow** — `/ios` and the Build SwiftUI starter route Codex or Claude through Memi briefs, approval-gated SwiftUI scaffolds, Xcode discovery, tests, and simulator evidence.
 - **Advanced integrations** — Figma, Mermaid Board, IA, Scenario Lab, Automations, Marketplace Notes, and secondary harnesses are available from command palette/settings.
+
+## Release compatibility
+
+| Studio | Runtime | Memi package | Apple workflow |
+| --- | --- | --- | --- |
+| `2.5.0` | `0.20.0` | `@memi-design/cli@2.6.0` | SwiftUI brief, dry-run scaffold, approved writes, Swift typecheck, Xcode/simulator handoff |
+
+Studio does not invent future platform support. Liquid Glass guidance is scoped to iOS 26+ with availability-gated fallbacks, and every build, test, preview, simulator, signing, or App Store claim must match evidence produced in the active workspace.
+
+The packaged Apple workflow can be verified with:
+
+```bash
+npm run test:live-e2e -- --skip-live-agents
+```
 
 ## Architecture
 

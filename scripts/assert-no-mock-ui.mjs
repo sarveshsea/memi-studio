@@ -169,8 +169,11 @@ if (!appSource.includes("workspaceRecoveryDisplayMessage") || appSource.includes
 if (!liveAgentSmokeSource.includes("request-timeout-ms") || !liveAgentSmokeSource.includes("AbortController") || !liveAgentSmokeSource.includes("clearTimeout(timer)")) {
   failures.push("scripts/studio-live-agent-smoke.mjs: live Codex/Claude smoke requests must be bounded with AbortController and --request-timeout-ms");
 }
-if (!liveE2eSmokeSource.includes("MEMOIRE_PACKAGE_ROOT") || !liveE2eSmokeSource.includes("studio-e2e-surface-smoke.mjs") || !liveE2eSmokeSource.includes("studio-live-agent-smoke.mjs")) {
-  failures.push("scripts/studio-live-e2e.mjs: live release proof must start packaged runtime resources, run surface smoke, and run live Codex/Claude smoke");
+if (!liveE2eSmokeSource.includes("MEMOIRE_PACKAGE_ROOT") || !liveE2eSmokeSource.includes("studio-e2e-surface-smoke.mjs") || !liveE2eSmokeSource.includes("studio-live-agent-smoke.mjs") || !liveE2eSmokeSource.includes("studio-ios-runtime-smoke.mjs")) {
+  failures.push("scripts/studio-live-e2e.mjs: live release proof must start packaged runtime resources, run surface smoke, run SwiftUI package smoke, and run live Codex/Claude smoke");
+}
+if (!liveE2eSmokeSource.includes("--harnesses=${harnesses}")) {
+  failures.push("scripts/studio-live-e2e.mjs: live release proof must forward an explicit harness filter for provider-specific diagnostics");
 }
 
 const studioCssSource = readFileSync(join(ROOT, "src/styles.css"), "utf8");

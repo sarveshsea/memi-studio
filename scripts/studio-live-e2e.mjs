@@ -21,8 +21,10 @@ const requestedPort = Number(args.get("port") ?? "0");
 const timeoutMs = Number(args.get("timeout-ms") ?? DEFAULT_TIMEOUT_MS);
 const liveTimeoutMs = Number(args.get("live-timeout-ms") ?? DEFAULT_LIVE_TIMEOUT_MS);
 const requestTimeoutMs = Number(args.get("request-timeout-ms") ?? 30_000);
+const harnesses = args.get("harnesses") ?? args.get("harness");
 const json = args.has("json");
 const skipSurfaces = args.has("skip-surfaces");
+const skipIosRuntime = args.has("skip-ios-runtime");
 const skipLiveAgents = args.has("skip-live-agents");
 const runtimeBinary = resolve(ROOT, String(args.get("runtime-binary") ?? defaultRuntimeBinary()));
 const packageRoot = resolve(ROOT, String(args.get("package-root") ?? "src-tauri/resources/memoire-runtime"));
@@ -172,6 +174,14 @@ async function main() {
   const results = {};
   try {
     runtimeStatus = await waitForRuntime(base);
+    if (!skipIosRuntime) {
+      const iosRuntime = await runNodeScript("studio-ios-runtime-smoke.mjs", [
+        `--runtime-binary=${runtimeBinary}`,
+        `--package-root=${packageRoot}`,
+        "--json",
+      ]);
+      results.iosRuntime = parseJsonResult(iosRuntime);
+    }
     if (!skipSurfaces) {
       const surface = await runNodeScript("studio-e2e-surface-smoke.mjs", [`--base=${base}`, "--json"]);
       results.surfaces = parseJsonResult(surface);
@@ -182,6 +192,7 @@ async function main() {
         "--json",
         `--timeout-ms=${liveTimeoutMs}`,
         `--request-timeout-ms=${requestTimeoutMs}`,
+        ...(harnesses ? [`--harnesses=${harnesses}`] : []),
       ]);
       results.liveAgents = parseJsonResult(liveAgents);
     }
@@ -209,6 +220,13 @@ async function main() {
           changelogEntryId: results.surfaces.changelogEntryId,
           externalFigJamWrites: results.surfaces.externalFigJamWrites,
           trackedStatusUnchanged: results.surfaces.trackedStatusUnchanged,
+        }
+      : null,
+    iosRuntime: results.iosRuntime
+      ? {
+          packageVersion: results.iosRuntime.packageVersion,
+          generatedFiles: results.iosRuntime.generatedFiles,
+          swiftTypecheck: results.iosRuntime.swiftTypecheck,
         }
       : null,
     liveAgents: results.liveAgents?.results?.map((item) => ({
