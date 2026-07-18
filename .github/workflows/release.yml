@@ -205,12 +205,24 @@ jobs:
       - name: Compute checksums + stage updater bundles
         run: |
           set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
           mkdir -p release
           find dist -name "*.dmg" -exec mv {} release/ \;
           find dist -name "*.app.tar.gz" -exec mv {} release/ \;
           find dist -name "*.app.tar.gz.sig" -exec mv {} release/ \;
+
+          ARM_DMG=$(find release -maxdepth 1 -name "*aarch64.dmg" -print -quit)
+          X64_DMG=$(find release -maxdepth 1 -name "*x64.dmg" -print -quit)
+          if [ -z "$ARM_DMG" ] || [ -z "$X64_DMG" ]; then
+            echo "missing architecture-specific DMG artifact"
+            exit 1
+          fi
+          mv "$ARM_DMG" "release/Memoire.Studio_${VERSION}_aarch64.dmg"
+          mv "$X64_DMG" "release/Memoire.Studio_${VERSION}_x64.dmg"
+
           cd release
-          shasum -a 256 *.dmg > SHA256SUMS
+          shasum -a 256 Memoire.Studio_*.dmg > SHA256SUMS
           ls -la
 
       - name: Generate latest.json updater manifest
